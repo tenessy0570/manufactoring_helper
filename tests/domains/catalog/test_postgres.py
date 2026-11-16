@@ -1,5 +1,6 @@
 import os
 import runpy
+from datetime import timedelta
 from pathlib import Path
 
 import pytest
@@ -14,6 +15,8 @@ from testcontainers.core.wait_strategies import LogMessageWaitStrategy
 from app.domains.catalog.repository import SQLItemTypeRepository
 from app.domains.history.models import LiquidityQuery
 from app.domains.history.repository import SQLHistoryRepository
+from app.domains.invention.models import PlanState
+from app.domains.invention.repository import SQLInventionRepository
 from app.domains.manufacturing.models import ManufacturingQuery
 from app.domains.manufacturing.repository import SQLManufacturingRepository
 from app.domains.manufacturing.service import ManufacturingService
@@ -22,6 +25,7 @@ from app.domains.market.repository import SQLMarketRepository
 from tests.domains.catalog.test_catalog import NOW, item
 from tests.domains.history.test_history import day
 from tests.domains.history.test_history import state as history_state
+from tests.domains.invention.test_invention import plan, request, settings
 from tests.domains.manufacturing.test_manufacturing import recipe_state
 from tests.domains.market.test_market import price, state
 
@@ -33,6 +37,7 @@ async def test_migration_and_upsert_on_postgres() -> None:
     history_migration = runpy.run_path("alembic/versions/0003_history.py")
     manufacturing_migration = runpy.run_path("alembic/versions/0004_manufacturing.py")
     counts_migration = runpy.run_path("alembic/versions/0005_order_counts.py")
+    invention_migration = runpy.run_path("alembic/versions/0006_invention.py")
 
     def upgrade(connection: Connection) -> None:
         with Operations.context(MigrationContext.configure(connection)):
@@ -41,10 +46,12 @@ async def test_migration_and_upsert_on_postgres() -> None:
             history_migration["upgrade"]()
             manufacturing_migration["upgrade"]()
             counts_migration["upgrade"]()
+            invention_migration["upgrade"]()
         assert "item_types" in inspect(connection).get_table_names()
 
     def downgrade(connection: Connection) -> None:
         with Operations.context(MigrationContext.configure(connection)):
+            invention_migration["downgrade"]()
             counts_migration["downgrade"]()
             manufacturing_migration["downgrade"]()
             history_migration["downgrade"]()
@@ -120,6 +127,20 @@ async def test_migration_and_upsert_on_postgres() -> None:
                 await manufacturing.save(recipe_state(recipe=None))
                 await session.rollback()
                 assert (await manufacturing.recipes([10]))[10].recipe is not None
+                invention = SQLInventionRepository(session)
+                plans = PlanState(
+                    key=settings().plan_key,
+                    plans=[plan()],
+                    synced_at=NOW,
+                    expires_at=NOW + timedelta(days=7),
+                )
+                await invention.save_plan(plans)
+                await invention.ensure_request(request(status="pending", result=None))
+                await invention.save_request(request())
+                await invention.ensure_request(request(status="pending", result=None))
+                await session.commit()
+                assert await invention.plan(settings().plan_key) == plans
+                assert (await invention.requests([settings().key]))[settings().key] == request()
                 assert await market.count(PriceQuery(hub_id="amarr"), NOW) == 1
                 stored_price = (await market.find(PriceQuery(type_ids=[10]), NOW))[0]
                 assert stored_price.buy_price == price().buy_price

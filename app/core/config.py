@@ -45,6 +45,7 @@ class Settings(BaseSettings):
     industry_base_url: str = "https://api.everef.net"
     industry_max_concurrency: int = Field(default=3, ge=1, le=20)
     manufacturing_cache_seconds: int = Field(default=86400, ge=3600, le=604800)
+    invention_plan_ttl_seconds: int = Field(default=604800, ge=3600, le=2592000)
 
     basic_auth_username: str = ""
     basic_auth_password: SecretStr = SecretStr("")

@@ -5,6 +5,8 @@ from decimal import Decimal
 from app.core.repository import UnitOfWork
 from app.domains.history.models import LiquidityItem, LiquidityQuery
 from app.domains.history.repository import HistoryRepository
+from app.domains.invention.models import InventionSettings
+from app.domains.invention.repository import InventionRepository
 from app.domains.manufacturing.calculation import calculate
 from app.domains.manufacturing.gateway import IndustryGateway
 from app.domains.manufacturing.models import (
@@ -56,8 +58,10 @@ class ManufacturingService:
         repository: ManufacturingRepository,
         history: HistoryRepository,
         clock: Callable[[], datetime] = lambda: datetime.now(UTC),
+        invention: InventionRepository | None = None,
     ) -> None:
         self._repository, self._history, self._clock = repository, history, clock
+        self._invention = invention
 
     async def opportunities(self, query: ManufacturingQuery) -> OpportunityPage:
         now = self._clock()
@@ -86,8 +90,27 @@ class ManufacturingService:
         products = await self._repository.quotes(
             query.hub_id, [candidate.type_id for candidate in candidates]
         )
+        invention_settings = {
+            candidate.type_id: InventionSettings(
+                type_id=candidate.type_id,
+                hub_id=material_hub,
+                order_type=query.material_order_type,
+                broker_fee=query.broker_fee,
+                science_level=query.invention_science_level,
+                encryption_level=query.invention_encryption_level,
+            )
+            for candidate in candidates
+            if candidate.meta_group_id == 2
+        }
+        invention_results = (
+            await self._invention.requests([value.key for value in invention_settings.values()])
+            if query.include_invention_cost and self._invention is not None
+            else {}
+        )
         results: list[Opportunity] = []
         missing_recipes = non_manufacturable = missing_prices = 0
+        missing_invention = 0
+        invention_unavailable: dict[int, str] = {}
         for candidate in candidates:
             state = recipes.get(candidate.type_id)
             if state is None:
@@ -100,14 +123,49 @@ class ManufacturingService:
             if product is None:
                 missing_prices += 1
                 continue
+            invention_cost = Decimal(0)
+            invention_status = "not_requested" if candidate.meta_group_id == 2 else "not_required"
+            invention_option = None
+            invention_complete = None
+            invention_stale = False
+            if query.include_invention_cost and candidate.meta_group_id is None:
+                missing_invention += 1
+                invention_unavailable[candidate.type_id] = "unknown_meta_group"
+                continue
+            if query.include_invention_cost and candidate.meta_group_id == 2:
+                cached = invention_results.get(invention_settings[candidate.type_id].key)
+                if (
+                    cached is None
+                    or cached.status != "ready"
+                    or cached.result is None
+                    or cached.result.best is None
+                    or cached.result.best.expected_cost_per_unit is None
+                ):
+                    missing_invention += 1
+                    invention_unavailable[candidate.type_id] = (
+                        "not_requested" if cached is None else cached.status
+                    )
+                    continue
+                invention_cost = cached.result.best.expected_cost_per_unit
+                invention_option = cached.result.best.plan.decryptor_name
+                invention_complete = cached.result.complete_pricing
+                invention_stale = cached.expires_at <= now
+                invention_status = "stale" if invention_stale else "ready"
             calculated = calculate(
-                CalculationInput(recipe=state.recipe, quotes=quotes, product_quote=product), query
+                CalculationInput(
+                    recipe=state.recipe,
+                    quotes=quotes,
+                    product_quote=product,
+                    invention_cost_per_unit=invention_cost,
+                ),
+                query,
             )
             if calculated is None:
                 missing_prices += 1
                 continue
             stale = (
                 state.expires_at <= now
+                or invention_stale
                 or product.expires_at <= now
                 or any(
                     quotes[material.type_id].expires_at <= now
@@ -174,6 +232,11 @@ class ManufacturingService:
                     name=candidate.name,
                     blueprint_id=state.recipe.blueprint_id,
                     meta_group_id=candidate.meta_group_id,
+                    invention_included=query.include_invention_cost
+                    and candidate.meta_group_id == 2,
+                    invention_status=invention_status,
+                    invention_decryptor=invention_option,
+                    invention_pricing_complete=invention_complete,
                     invention_required=None
                     if candidate.meta_group_id is None
                     else candidate.meta_group_id == 2,
@@ -210,6 +273,8 @@ class ManufacturingService:
             missing_recipes=missing_recipes,
             non_manufacturable=non_manufacturable,
             missing_prices=missing_prices,
+            missing_invention=missing_invention,
+            invention_unavailable=invention_unavailable,
             limit=query.limit,
             offset=query.offset,
         )

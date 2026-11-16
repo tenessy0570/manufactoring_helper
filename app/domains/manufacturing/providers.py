@@ -7,6 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.config import Settings
 from app.core.repository import UnitOfWork
 from app.domains.history.repository import HistoryRepository
+from app.domains.invention.repository import InventionRepository
 from app.domains.manufacturing.gateway import EverefIndustryGateway, IndustryClient, IndustryGateway
 from app.domains.manufacturing.repository import ManufacturingRepository, SQLManufacturingRepository
 from app.domains.manufacturing.service import ManufacturingService, ManufacturingSyncService
@@ -32,9 +33,12 @@ class ManufacturingProvider(Provider):
 
     @provide(scope=Scope.REQUEST)
     def service(
-        self, repository: ManufacturingRepository, history: HistoryRepository
+        self,
+        repository: ManufacturingRepository,
+        history: HistoryRepository,
+        invention: InventionRepository,
     ) -> ManufacturingService:
-        return ManufacturingService(repository, history)
+        return ManufacturingService(repository, history, invention=invention)
 
     @provide(scope=Scope.REQUEST)
     def sync_service(

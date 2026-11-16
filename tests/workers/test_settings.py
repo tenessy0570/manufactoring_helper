@@ -14,6 +14,10 @@ from app.domains.catalog.service import CatalogService, CatalogSyncService
 from app.domains.history.gateway import EsiHistoryGateway, HistoryGateway
 from app.domains.history.repository import HistoryRepository, SQLHistoryRepository
 from app.domains.history.service import HistoryService, HistorySyncService
+from app.domains.invention.gateway import EverefInventionGateway, InventionGateway
+from app.domains.invention.queue import InventionQueue, RedisInventionQueue
+from app.domains.invention.repository import InventionRepository, SQLInventionRepository
+from app.domains.invention.service import InventionService, InventionSyncService
 from app.domains.manufacturing.gateway import EverefIndustryGateway, IndustryClient, IndustryGateway
 from app.domains.manufacturing.repository import ManufacturingRepository, SQLManufacturingRepository
 from app.domains.manufacturing.service import ManufacturingService, ManufacturingSyncService
@@ -45,6 +49,11 @@ async def test_catalog_provider_wiring_and_clients_close() -> None:
         assert isinstance(await scope.get(ManufacturingRepository), SQLManufacturingRepository)
         assert isinstance(await scope.get(ManufacturingService), ManufacturingService)
         assert isinstance(await scope.get(ManufacturingSyncService), ManufacturingSyncService)
+        assert isinstance(await scope.get(InventionGateway), EverefInventionGateway)
+        assert isinstance(await scope.get(InventionRepository), SQLInventionRepository)
+        assert isinstance(await scope.get(InventionService), InventionService)
+        assert isinstance(await scope.get(InventionSyncService), InventionSyncService)
+        assert isinstance(await scope.get(InventionQueue), RedisInventionQueue)
         industry = await scope.get(IndustryClient)
         esi = await scope.get(EsiClient)
         assert esi._http.headers["User-Agent"] == "eve-manufacturing"

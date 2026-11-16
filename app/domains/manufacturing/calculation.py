@@ -50,7 +50,7 @@ def calculate(data: CalculationInput, query: ManufacturingQuery) -> ProfitCalcul
         revenue * query.broker_fee / 100 if query.product_order_type == "sell" else Decimal(0)
     )
     sales_tax = revenue * query.sales_tax / 100
-    total_cost = material_cost + job_cost + procurement_fee
+    total_cost = material_cost + job_cost + procurement_fee + data.invention_cost_per_unit
     profit = revenue - sales_tax - sales_fee - total_cost
     seconds = recipe.seconds
     return ProfitCalculation(
@@ -59,6 +59,7 @@ def calculate(data: CalculationInput, query: ManufacturingQuery) -> ProfitCalcul
         materials=costs,
         material_cost_per_unit=material_cost,
         job_cost_per_unit=job_cost,
+        invention_cost_per_unit=data.invention_cost_per_unit,
         procurement_broker_fee_per_unit=procurement_fee,
         sales_tax_per_unit=sales_tax,
         sales_broker_fee_per_unit=sales_fee,

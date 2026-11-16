@@ -151,7 +151,7 @@ All liquidity/catalog filters are available alongside `min_profit`, `max_profit`
 `min_margin`, `max_margin`, `min_profit_per_day` and `rank_by=profit_per_day|margin|profit`.
 Ranking and filtering process all candidates before `limit`/`offset`. Missing prices or recipes
 are excluded and counted, never treated as free inputs. `fresh_only` requires fresh history,
-recipes and prices. T2 output explicitly marks invention as required but not yet included.
+recipes and prices. T2 output explicitly marks invention as required and whether it was included.
 Blueprint purchase/copy costs, hauling and custom facility bonuses are also not included.
 
 Buy-side demand is reported separately from profit:
@@ -181,3 +181,55 @@ requests and up to three attempts. Confirmed non-manufacturable products are cac
 failures preserve previous recipes. `MANUFACTURING_CACHE_SECONDS` defaults to 86400.
 `python scripts/manufacturing_smoke.py` captures one public response for reproducible tests.
 Saved settings profiles and the user interface remain future stages.
+
+## Invention cache
+
+Invention runs in a separate `invention-worker` queue. PostgreSQL permanently stores the
+source plans and requested price valuations; Redis and process memory accelerate cached reads.
+Clearing Redis does not erase plans/results: the scheduler can recover work from PostgreSQL.
+Page reads never call EVE Ref or perform the expensive invention lookup.
+
+The public Industry Cost API resolves the source/invented blueprint for a T2 product, so no
+full-network crawl of every blueprint is needed. Nine options (no decryptor plus eight types)
+are cached together by product and assumed science/encryption levels. A failed or incomplete
+download preserves the previous plan. `INVENTION_PLAN_TTL_SECONDS` defaults to seven days.
+Redis locks share source work across hub/side requests; stable ARQ job IDs deduplicate requests.
+Source calls use the shared bounded industry client (three concurrent requests by default).
+
+Valuations are separate by hub, material buy/sell side, broker fee and skills. Price updates
+reuse saved plans, without downloading the blueprints/options again. Their expiry is capped
+by both source and market-price expiry; requested valuations refresh through the scheduler
+every five minutes. Default backfill prepares Jita/sell with science 5 and encryption 4;
+other settings are prepared on request. The initial backfill can take time.
+
+API examples:
+
+- `POST /api/v1/invention/2456/prepare?hub_id=amarr&order_type=buy&science_level=4`
+  persists and queues one requested valuation; HTTP 202 does not mean the result is ready.
+- `POST /api/v1/invention/prepare?hub_id=amarr&order_type=buy` schedules all active T2 catalog
+  products for those settings, without doing the heavy calculations in the HTTP request.
+- `GET /api/v1/invention/2456?hub_id=amarr&order_type=buy&science_level=4` reads cached status
+  and alternatives. All settings must match the prepare request; broker fee defaults to 0.
+
+States are `pending`, `ready`, `missing_prices`, `unsupported`, and `error`, with an independent
+`stale` flag. An unrequested combination returns `request=null`. Failures retain old results
+for inspection, expose only the error type, and retry up to three times. Partial price coverage
+is marked `complete_pricing=false`; the best option is only the cheapest among priced options.
+Unknown datacore/decryptor prices are never interpreted as free inputs.
+
+Expected cost per manufactured unit is:
+`(attempt materials + applicable buy-order broker fee + job estimate) / (success probability * runs per copy * units per manufacturing run)`.
+Scaled upstream material/job quantities are normalized to one attempt before calculating.
+This handles ammo/drone output quantities correctly. Skills are manual assumed common science
+and encryption levels (0–5); no SSO or character access is used. Decryptor ME/TE is shown as
+metadata, but does not modify manufacturing quantities, margin or throughput. Blueprint copy/
+purchase costs and the player's actual facility/system bonuses remain outside this estimate.
+
+Set `include_invention_cost=true` on `/api/v1/manufacturing/opportunities` to deduct a prepared
+cost before profit/margin/demand-limited ranking. `invention_science_level` and
+`invention_encryption_level` default to 5/4. The valuation follows `material_hub_id` (or `hub_id`),
+`material_order_type` and `broker_fee`. Missing/failed T2 results are excluded and reported in
+`missing_invention` and `invention_unavailable`, never charged zero. Stale cached results are
+marked; `fresh_only=true` excludes them. Cost inclusion defaults to false.
+
+`python scripts/invention_smoke.py` captures a public T2 response and validates all nine options.

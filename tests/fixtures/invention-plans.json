@@ -1,0 +1,232 @@
+[
+  {
+    "decryptor_id": null,
+    "decryptor_name": "None",
+    "source_blueprint_id": 2455,
+    "invented_blueprint_id": 2457,
+    "probability": "0.4873333333333334",
+    "runs_per_copy": 10,
+    "units_per_run": 1,
+    "materials": [
+      {
+        "type_id": 20419,
+        "quantity": "1"
+      },
+      {
+        "type_id": 20418,
+        "quantity": "1"
+      }
+    ],
+    "job_cost_per_attempt": "75.58540000000001286967410667",
+    "me": 2,
+    "te": 4
+  },
+  {
+    "decryptor_id": 34201,
+    "decryptor_name": "Accelerant",
+    "source_blueprint_id": 2455,
+    "invented_blueprint_id": 2457,
+    "probability": "0.5848000000000001",
+    "runs_per_copy": 11,
+    "units_per_run": 1,
+    "materials": [
+      {
+        "type_id": 20419,
+        "quantity": "1"
+      },
+      {
+        "type_id": 20418,
+        "quantity": "1"
+      },
+      {
+        "type_id": 34201,
+        "quantity": "1"
+      }
+    ],
+    "job_cost_per_attempt": "75.58539999999999975631267040",
+    "me": 4,
+    "te": 14
+  },
+  {
+    "decryptor_id": 34202,
+    "decryptor_name": "Attainment",
+    "source_blueprint_id": 2455,
+    "invented_blueprint_id": 2457,
+    "probability": "0.8772000000000001",
+    "runs_per_copy": 14,
+    "units_per_run": 1,
+    "materials": [
+      {
+        "type_id": 20419,
+        "quantity": "1"
+      },
+      {
+        "type_id": 20418,
+        "quantity": "1"
+      },
+      {
+        "type_id": 34202,
+        "quantity": "1"
+      }
+    ],
+    "job_cost_per_attempt": "75.64972800000001568249121331",
+    "me": 1,
+    "te": 8
+  },
+  {
+    "decryptor_id": 34203,
+    "decryptor_name": "Augmentation",
+    "source_blueprint_id": 2455,
+    "invented_blueprint_id": 2457,
+    "probability": "0.29240000000000005",
+    "runs_per_copy": 19,
+    "units_per_run": 1,
+    "materials": [
+      {
+        "type_id": 20419,
+        "quantity": "1"
+      },
+      {
+        "type_id": 20418,
+        "quantity": "1"
+      },
+      {
+        "type_id": 34203,
+        "quantity": "1"
+      }
+    ],
+    "job_cost_per_attempt": "75.61171600000000329364634896",
+    "me": 0,
+    "te": 6
+  },
+  {
+    "decryptor_id": 34207,
+    "decryptor_name": "Optimized Attainment",
+    "source_blueprint_id": 2455,
+    "invented_blueprint_id": 2457,
+    "probability": "0.9259333333333334",
+    "runs_per_copy": 12,
+    "units_per_run": 1,
+    "materials": [
+      {
+        "type_id": 20419,
+        "quantity": "1"
+      },
+      {
+        "type_id": 20418,
+        "quantity": "1"
+      },
+      {
+        "type_id": 34207,
+        "quantity": "1"
+      }
+    ],
+    "job_cost_per_attempt": "75.55616000000000329122632960",
+    "me": 3,
+    "te": 2
+  },
+  {
+    "decryptor_id": 34208,
+    "decryptor_name": "Optimized Augmentation",
+    "source_blueprint_id": 2455,
+    "invented_blueprint_id": 2457,
+    "probability": "0.43860000000000005",
+    "runs_per_copy": 17,
+    "units_per_run": 1,
+    "materials": [
+      {
+        "type_id": 20419,
+        "quantity": "1"
+      },
+      {
+        "type_id": 20418,
+        "quantity": "1"
+      },
+      {
+        "type_id": 34208,
+        "quantity": "1"
+      }
+    ],
+    "job_cost_per_attempt": "75.60586800000000539357141138",
+    "me": 4,
+    "te": 4
+  },
+  {
+    "decryptor_id": 34204,
+    "decryptor_name": "Parity",
+    "source_blueprint_id": 2455,
+    "invented_blueprint_id": 2457,
+    "probability": "0.7310000000000001",
+    "runs_per_copy": 13,
+    "units_per_run": 1,
+    "materials": [
+      {
+        "type_id": 20419,
+        "quantity": "1"
+      },
+      {
+        "type_id": 20418,
+        "quantity": "1"
+      },
+      {
+        "type_id": 34204,
+        "quantity": "1"
+      }
+    ],
+    "job_cost_per_attempt": "75.64387999999999997730683600",
+    "me": 3,
+    "te": 2
+  },
+  {
+    "decryptor_id": 34205,
+    "decryptor_name": "Process",
+    "source_blueprint_id": 2455,
+    "invented_blueprint_id": 2457,
+    "probability": "0.5360666666666668",
+    "runs_per_copy": 10,
+    "units_per_run": 1,
+    "materials": [
+      {
+        "type_id": 20419,
+        "quantity": "1"
+      },
+      {
+        "type_id": 20418,
+        "quantity": "1"
+      },
+      {
+        "type_id": 34205,
+        "quantity": "1"
+      }
+    ],
+    "job_cost_per_attempt": "75.58540000000001434308550400",
+    "me": 5,
+    "te": 10
+  },
+  {
+    "decryptor_id": 34206,
+    "decryptor_name": "Symmetry",
+    "source_blueprint_id": 2455,
+    "invented_blueprint_id": 2457,
+    "probability": "0.4873333333333334",
+    "runs_per_copy": 12,
+    "units_per_run": 1,
+    "materials": [
+      {
+        "type_id": 20419,
+        "quantity": "1"
+      },
+      {
+        "type_id": 20418,
+        "quantity": "1"
+      },
+      {
+        "type_id": 34206,
+        "quantity": "1"
+      }
+    ],
+    "job_cost_per_attempt": "75.61464000000000550474579200",
+    "me": 3,
+    "te": 12
+  }
+]

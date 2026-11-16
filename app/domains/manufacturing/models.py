@@ -30,6 +30,9 @@ class RecipeState(BaseModel):
 
 
 class ManufacturingQuery(LiquidityQuery):
+    include_invention_cost: bool = False
+    invention_science_level: int = Field(default=5, ge=0, le=5)
+    invention_encryption_level: int = Field(default=4, ge=0, le=5)
     material_order_type: Literal["buy", "sell"] = "sell"
     product_order_type: Literal["buy", "sell"] = "sell"
     material_hub_id: HubId | None = None
@@ -72,6 +75,7 @@ class ProfitCalculation(BaseModel):
     materials: list[MaterialCost]
     material_cost_per_unit: Decimal
     job_cost_per_unit: Decimal
+    invention_cost_per_unit: Decimal
     procurement_broker_fee_per_unit: Decimal
     sales_tax_per_unit: Decimal
     sales_broker_fee_per_unit: Decimal
@@ -89,6 +93,9 @@ class Opportunity(ProfitCalculation):
     meta_group_id: int | None
     invention_included: bool = False
     invention_required: bool | None
+    invention_status: str = "not_requested"
+    invention_decryptor: str | None = None
+    invention_pricing_complete: bool | None = None
     recipe_synced_at: datetime
     daily_isk_volume: Decimal | None
     daily_units: Decimal | None
@@ -119,6 +126,8 @@ class OpportunityPage(BaseModel):
     missing_recipes: int
     non_manufacturable: int
     missing_prices: int
+    missing_invention: int = 0
+    invention_unavailable: dict[int, str] = Field(default_factory=dict)
     limit: int
     offset: int
 
@@ -127,3 +136,4 @@ class CalculationInput(BaseModel):
     recipe: Recipe
     quotes: dict[int, MarketPrice]
     product_quote: MarketPrice
+    invention_cost_per_unit: Decimal = Field(default=Decimal(0), ge=0, allow_inf_nan=False)
