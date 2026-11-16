@@ -234,3 +234,27 @@ async def test_api_combines_filters_pagination_and_validates(session: AsyncSessi
         assert response.json()["items"][0]["type_id"] == 20
         assert (await client.get("/api/v1/catalog/items?limit=0")).status_code == 422
     await container.close()
+
+
+def test_rigs_under_separate_modifications_root_are_included_without_other_branches() -> None:
+    tree = [group for group in groups() if group.market_group_id not in (4, 5, 6)]
+    tree.extend(
+        [
+            MarketGroup(market_group_id=955, name="Ship and Module Modifications"),
+            MarketGroup(market_group_id=1111, name="Rigs", parent_group_id=955),
+            MarketGroup(market_group_id=965, name="Shield Rigs", parent_group_id=1111),
+            MarketGroup(
+                market_group_id=1235, name="Medium Shield Rigs", parent_group_id=965, types=[31796]
+            ),
+            MarketGroup(
+                market_group_id=1236, name="Capital Shield Rigs", parent_group_id=965, types=[999]
+            ),
+            MarketGroup(market_group_id=1237, name="Subsystems", parent_group_id=955, types=[888]),
+        ]
+    )
+    selected = MarketTreeSelector().select(tree)
+    assert [item.type_id for item in selected] == [10, 30, 31796]
+    rig = selected[-1]
+    assert rig.is_rig
+    assert rig.category == "Ship and Module Modifications"
+    assert rig.group_path == [955, 1111, 965, 1235]

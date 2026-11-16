@@ -3,6 +3,7 @@ from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 
 from app.core.repository import UnitOfWork
+from app.domains.catalog.models import MASS_PRODUCTION_META_GROUP_IDS
 from app.domains.history.models import LiquidityItem, LiquidityQuery
 from app.domains.history.repository import HistoryRepository
 from app.domains.invention.models import InventionSettings
@@ -68,6 +69,11 @@ class ManufacturingService:
         filters = LiquidityQuery.model_validate(
             query.model_dump(include=set(LiquidityQuery.model_fields))
         )
+        filters.meta_group_ids = [
+            value
+            for value in MASS_PRODUCTION_META_GROUP_IDS
+            if query.meta_group_ids is None or value in query.meta_group_ids
+        ]
         filters.limit, filters.offset = 500, 0
         candidates: list[LiquidityItem] = []
         while True:

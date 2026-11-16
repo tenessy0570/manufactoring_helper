@@ -9,8 +9,9 @@ Only public ESI and EVE Ref endpoints are used; no API keys, SSO or app registra
 
 Implemented: catalog sync, hub prices and demand, regional history/liquidity, manufacturing
 profitability, persistent invention caching and saved calculation profiles. Migrations 0001-0007
-create the required tables and an initial profile. The web interface is not implemented yet;
-use the JSON API and interactive documentation at `/docs`. The root `/` has no application page.
+create the required tables and an initial profile. The English web interface is available at `/`,
+with a unified filter panel, browser profiles and item details. Interactive API documentation
+is available at `/docs`.
 
 Latest validation on Windows/Python 3.12: 253 tests passed, 1 optional PostgreSQL test skipped
 in the default suite, 98.71% combined coverage. The PostgreSQL test passed separately, including
@@ -331,3 +332,31 @@ calculations: matching invention valuations can be prepared through the existing
 ## Synchronization recovery (2026-11-17)
 
 Market pages are fetched in batches of five. A changing page count restarts the whole snapshot up to three times; exhausted attempts preserve the previous snapshot. Only ESI history 404 with the exact `Type not found!` response is cached as empty history; other errors still fail. Products with multiple source blueprints are skipped with a warning rather than marked non-manufacturable or assigned an arbitrary recipe. Explicit blueprint selection remains unsupported. Validation: 265 passed, 1 skipped; coverage 98.52%; Ruff and mypy passed.
+
+
+## Mass production candidates
+
+Manufacturing opportunities are restricted to meta groups 1 (Tech I, including named/meta variants) and 2 (Tech II), matching the original scanner. User filters and saved profiles can narrow this selection but cannot expand it. Other groups and unknown metadata are excluded even when a cached recipe exists. A valid manufacturing recipe is still required; not every named/meta module is buildable. History and recipe scheduling use the same group restriction. The catalog remains available for metadata inspection.
+
+
+## UI settings and rigs correction (2026-11-17)
+
+Browser filters, hub/order sides, taxes, profile snapshot and expanded filters persist in localStorage (versioned, separate live/demo keys); reload starts at page one. Corrupt or disabled storage does not block filtering. The market selector now includes Rigs branches under the separate Ship and Module Modifications root, retaining full paths and excluding capital rigs and unrelated branches. Confirmed public ESI path for type 31796: 955 -> 1111 -> 965 -> 1235. Existing Docker catalog had no rigs at all. Deployment must be followed by forced catalog sync and history/recipe/invention scheduling; a restart alone may skip the fresh catalog for 20 hours. Python checks: 275 passed, 1 skipped, coverage 98.41%; Ruff/format/mypy passed. Hidden Edge JS smoke check passed for filter restore, malformed storage and demo separation. Not committed or deployed.
+
+
+## Browser profiles and unified categories (2026-11-17)
+
+The UI has one item-category selector: All categories, Rigs, Ammo, Drones, Modules. Rigs maps to is_rig=true without a category restriction; Modules maps to Ship Equipment and is_rig=false. Existing browser settings with separate category/rig controls are migrated on restore. Save as profile stores a named snapshot of current visible and hidden settings in localStorage, independent of server profiles; duplicate browser names are rejected. Browser profiles appear with a browser label and survive reloads on the same origin/browser; clearing site storage removes them. Settings restore before profile loading, and default server profiles do not overwrite restored settings. Applying filters and pagehide explicitly save current state. Reactive server profile copying no longer uses structuredClone. Real browser reload/profile apply/category mapping checks passed. Forced catalog sync completed in Docker: 237 T1 rigs, 237 T2 rigs and 474 rig recipes; 415 history batches and 83 recipe batches queued.
+
+
+## Interface workflow
+
+All controls live in one filter form, grouped into items, market prices, profit/demand, calculation assumptions and result ordering. Apply filters updates the results; unsaved filter edits are shown explicitly and do not relabel existing results. Reload results reads the last applied query from saved market data; source refresh remains a background task. Pagination is disabled until edited filters are applied. Browser profiles can be created, updated and deleted with confirmation; deleting a profile keeps the current filters. The item dialog supports Escape, keyboard focus containment and focus restoration. Mobile layouts keep horizontal scrolling inside the table.
+
+Frontend regression checks (isolated Edge/Chromium, no live database):
+
+```powershell
+.venv\Scripts\python.exe scripts/check_frontend.py
+```
+
+Pass `--browser` to specify another Chromium executable. The runner starts and stops its own preview and browser, uses a temporary browser profile, checks the main workflow and saves desktop/mobile screenshots in the temporary directory.

@@ -4,6 +4,8 @@ from pydantic import BaseModel, Field
 
 from app.core.repository import FilterClause
 
+MASS_PRODUCTION_META_GROUP_IDS = (1, 2)
+
 
 class MarketGroup(BaseModel):
     market_group_id: int

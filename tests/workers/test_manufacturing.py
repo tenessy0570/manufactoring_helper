@@ -21,6 +21,8 @@ async def test_queue_batches_and_deduplication() -> None:
     redis = AsyncMock()
     ctx = {"container": container, "redis": redis}
     assert await worker.enqueue_manufacturing(ctx) == 2
+    assert repository.find.await_args is not None
+    assert repository.find.await_args.args[0].meta_group_ids == [1, 2]
     ids = [call.kwargs["_job_id"] for call in redis.enqueue_job.await_args_list]
     assert len(set(ids)) == 2
     assert all(

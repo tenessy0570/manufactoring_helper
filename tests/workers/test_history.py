@@ -22,6 +22,8 @@ async def test_enqueue_batches_are_unique_and_use_separate_queue() -> None:
     redis.enqueue_job.return_value = object()
     ctx = {"container": container, "redis": redis}
     assert await worker.enqueue_history(ctx) == 10
+    assert repository.find.await_args is not None
+    assert repository.find.await_args.args[0].meta_group_ids == [1, 2]
     first_ids = [call.kwargs["_job_id"] for call in redis.enqueue_job.await_args_list]
     assert len(set(first_ids)) == 10
     assert all(

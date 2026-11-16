@@ -47,4 +47,24 @@ class MarketTreeSelector:
 
         for root in sorted(roots, key=lambda item: item.market_group_id):
             visit(root, root.name, [], False)
+        for group in groups:
+            if group.name.strip().lower() != "rigs":
+                continue
+            ancestors: list[MarketGroup] = []
+            current = group
+            seen = {group.market_group_id}
+            while current.parent_group_id is not None:
+                current = indexed[current.parent_group_id]
+                if current.market_group_id in seen:
+                    raise ValueError("Cycle in market group tree")
+                seen.add(current.market_group_id)
+                ancestors.append(current)
+            if any("capital" in ancestor.name.lower() for ancestor in ancestors):
+                continue
+            visit(
+                group,
+                ancestors[-1].name if ancestors else group.name,
+                [ancestor.market_group_id for ancestor in reversed(ancestors)],
+                True,
+            )
         return [selected[type_id] for type_id in sorted(selected)]

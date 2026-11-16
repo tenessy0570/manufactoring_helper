@@ -531,3 +531,24 @@ async def test_multiple_blueprints_are_not_marked_non_manufacturable() -> None:
             )
             with pytest.raises(AmbiguousRecipeError):
                 await gateway.fetch(21527)
+
+
+@pytest.mark.parametrize("meta_group", [1, 2, 3, 4, 5, 6, 14, 15, None])
+async def test_mass_production_group_limit_cannot_be_overridden(
+    session: AsyncSession, meta_group: int | None
+) -> None:
+    await SQLItemTypeRepository(session).upsert_many([item(10, meta_group_id=meta_group)])
+    repository = SQLManufacturingRepository(session)
+    await repository.save(recipe_state())
+    await SQLMarketRepository(session).replace(
+        market_state(), [price(10, sell_price="30"), price(34, sell_price="3")]
+    )
+    service = ManufacturingService(repository, SQLHistoryRepository(session), lambda: NOW)
+    for selected in (None, [meta_group] if meta_group is not None else [], [1, 2, 3, 4, 5, 6]):
+        page = await service.opportunities(ManufacturingQuery(meta_group_ids=selected))
+        assert [value.type_id for value in page.items] == ([10] if meta_group in (1, 2) else [])
+    if meta_group in (1, 2):
+        await repository.save(recipe_state(recipe=None))
+        page = await service.opportunities(ManufacturingQuery())
+        assert page.items == []
+        assert page.non_manufacturable == 1
