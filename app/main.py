@@ -1,6 +1,7 @@
 from dishka import AsyncContainer
 from dishka.integrations.fastapi import setup_dishka
 from fastapi import FastAPI
+from fastapi.staticfiles import StaticFiles
 
 from app.core.config import Settings, get_settings
 from app.core.di import create_container
@@ -13,6 +14,8 @@ from app.domains.invention.router import router as invention_router
 from app.domains.manufacturing.router import router as manufacturing_router
 from app.domains.market.router import router as market_router
 from app.domains.profiles.router import router as profile_router
+from app.web.router import WEB_ROOT
+from app.web.router import router as web_router
 
 
 def create_app(
@@ -30,6 +33,8 @@ def create_app(
     app.include_router(manufacturing_router)
     app.include_router(invention_router)
     app.include_router(profile_router)
+    app.include_router(web_router)
+    app.mount("/static", StaticFiles(directory=str(WEB_ROOT / "static")), name="static")
     if settings.basic_auth_enabled:
         app.add_middleware(
             BasicAuthMiddleware,

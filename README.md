@@ -275,6 +275,30 @@ marked; `fresh_only=true` excludes them. Cost inclusion defaults to false.
 
 ## Saved profiles
 
+The first English interface is available at `/` on the application server. It includes an
+opportunities table, filters, hub and buy/sell controls, saved profile selection, pagination,
+material details, demand limits and cached invention preparation. Profile editing and regional
+history charts are not yet exposed in the interface.
+
+To preview the layout without running PostgreSQL, Redis or workers:
+
+```powershell
+.venv\Scripts\python.exe scripts/preview_ui.py
+```
+
+Open `http://127.0.0.1:8765/?demo=1`. This mode uses labeled sample data; it is intended for
+layout inspection, not validation of live prices or every server-side filter. Live data requires
+the regular application server and populated database. The standalone preview has no market API.
+
+Frontend assets are bundled locally. To rebuild the stylesheet with Tailwind CSS 3.4.17:
+
+```text
+tailwindcss -i frontend/input.css -o app/web/static/app.css --minify
+```
+
+The standalone Tailwind executable can be used without Node.js. HTMX 2.0.4 and Alpine.js 3.14.9
+are pinned in `app/web/static/vendor/`; item icons use the public EVE image service.
+
 Profiles persist every manufacturing query setting: product/procurement hubs, independent
 buy/sell choices, optional taxes/fees, assumed invention skills and inclusion, liquidity and
 profit/demand filters, sorting and page size. ME/TE fields are not accepted. Saved pagination

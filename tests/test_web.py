@@ -1,0 +1,34 @@
+import pytest
+from httpx import ASGITransport, AsyncClient
+
+from app.main import create_app
+from tests.helpers import make_settings
+
+
+@pytest.mark.parametrize(
+    "path",
+    [
+        "/",
+        "/static/app.css",
+        "/static/app.js",
+        "/static/vendor/alpine.min.js",
+        "/static/vendor/htmx.min.js",
+    ],
+)
+async def test_interface_and_bundled_assets_are_available(path: str) -> None:
+    app = create_app(settings=make_settings())
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        response = await client.get(path)
+    assert response.status_code == 200
+    if path == "/":
+        assert '<html lang="en">' in response.text
+        assert "Find your next build" in response.text
+
+
+async def test_interface_requires_configured_authentication() -> None:
+    app = create_app(
+        settings=make_settings(basic_auth_username="admin", basic_auth_password="secret")
+    )
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        response = await client.get("/")
+    assert response.status_code == 401
