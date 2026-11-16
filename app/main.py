@@ -8,6 +8,7 @@ from app.core.logging import configure_logging
 from app.core.security import BasicAuthMiddleware
 from app.domains.catalog.router import router as catalog_router
 from app.domains.health.router import router as health_router
+from app.domains.history.router import router as history_router
 from app.domains.market.router import router as market_router
 
 
@@ -22,6 +23,7 @@ def create_app(
     app.include_router(health_router)
     app.include_router(catalog_router)
     app.include_router(market_router)
+    app.include_router(history_router)
     if settings.basic_auth_enabled:
         app.add_middleware(
             BasicAuthMiddleware,

@@ -29,6 +29,11 @@ async def main() -> None:
             response.raise_for_status()
             pages = int(response.headers["X-Pages"])
             print(f"{response.status_code} region={region_id} pages={pages}")
+            response = await http.get(
+                f"https://esi.evetech.net/markets/{region_id}/history/", params={"type_id": 34}
+            )
+            response.raise_for_status()
+            print(f"{response.status_code} history region={region_id} days={len(response.json())}")
 
 
 if __name__ == "__main__":

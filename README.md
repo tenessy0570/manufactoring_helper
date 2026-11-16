@@ -97,3 +97,36 @@ Responses contain hub details, sync state, a `stale` flag, `items`, `total`, `li
 Prices remain visible when stale unless `fresh_only=true` is requested. An unsynced hub returns
 an empty page with `state=null` and `stale=true`. The catalog filters remain available separately
 at `/api/v1/catalog/items`; catalog metadata and market history are not part of this endpoint.
+
+## Regional history and liquidity
+
+`GET /api/v1/market/history/34?hub_id=amarr&days=30` returns daily history for the hub's
+**region**, not its station. Responses include `scope=region`, region/hub information,
+refresh state and a stale flag. Current-day data is excluded.
+
+`GET /api/v1/market/liquidity?hub_id=jita&days=30&min_daily_isk_volume=500000000`
+lists active catalog items with liquidity metrics. The period is 1–365 completed UTC days,
+ending yesterday. Daily units are `sum(volume) / days`; estimated daily ISK turnover is
+`sum(average price * volume) / days`. The divisor is the full calendar period, so gaps do
+not inflate averages. `data_days` reports how many daily records are available. No records
+in the period means null metrics, not zero; known zero-volume records produce zero.
+This is an estimate from ESI daily statistics, not an exact station trading ledger.
+
+Combined filters include `type_ids`, `exclude_type_ids`, `search`, `categories`,
+`meta_group_ids`, `is_rig`, `has_history`, `fresh_only`, `min_daily_isk_volume`,
+`max_daily_isk_volume`, `min_daily_units`, `max_daily_units`, `limit` and `offset`.
+List parameters can be repeated. Responses include the date range, total count and metrics.
+Minimum filters exclude unknown metrics even when the threshold is zero.
+
+History downloads run in a separate `history-worker` service and Redis queue so the initial
+backfill does not delay current-price jobs. The main worker schedules active catalog items
+for all five regions at startup and hourly; daily deterministic job IDs prevent duplicate
+batches. The history worker uses at most ten concurrent item requests, skips fresh items,
+and retries failed batches up to three times. Each item is committed independently, so
+failures preserve previous history and successful items do not need downloading again.
+Successful empty responses are cached too. `HISTORY_CACHE_SECONDS` defaults to 86400 and
+caps/falls back for the ESI expiration header. The first full backfill can take time.
+
+The next profitability stage will support independent material/product buy/sell choices,
+both defaulting to **sell**. Sales tax and broker fees will default to **0%** with optional
+user-entered percentages. These calculation/profile controls are not implemented yet.

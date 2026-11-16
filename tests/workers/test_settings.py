@@ -11,6 +11,9 @@ from app.domains.catalog.gateway import CatalogGateway, EsiEverefCatalogGateway
 from app.domains.catalog.models import CatalogSyncReport
 from app.domains.catalog.repository import ItemTypeRepository, SQLItemTypeRepository
 from app.domains.catalog.service import CatalogService, CatalogSyncService
+from app.domains.history.gateway import EsiHistoryGateway, HistoryGateway
+from app.domains.history.repository import HistoryRepository, SQLHistoryRepository
+from app.domains.history.service import HistoryService, HistorySyncService
 from app.domains.market.gateway import EsiMarketGateway, MarketGateway
 from app.domains.market.models import MarketSyncReport
 from app.domains.market.repository import MarketRepository, SQLMarketRepository
@@ -31,6 +34,10 @@ async def test_catalog_provider_wiring_and_clients_close() -> None:
         assert isinstance(await scope.get(MarketRepository), SQLMarketRepository)
         assert isinstance(await scope.get(MarketService), MarketService)
         assert isinstance(await scope.get(MarketSyncService), MarketSyncService)
+        assert isinstance(await scope.get(HistoryGateway), EsiHistoryGateway)
+        assert isinstance(await scope.get(HistoryRepository), SQLHistoryRepository)
+        assert isinstance(await scope.get(HistoryService), HistoryService)
+        assert isinstance(await scope.get(HistorySyncService), HistorySyncService)
         esi = await scope.get(EsiClient)
         assert esi._http.headers["User-Agent"] == "eve-manufacturing"
     await container.close()

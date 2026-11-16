@@ -13,6 +13,7 @@ from app.core.logging import configure_logging
 from app.domains.catalog.service import CatalogSyncService
 from app.domains.market.models import HUBS
 from app.domains.market.service import MarketSyncService
+from app.workers.history import enqueue_history
 
 logger = logging.getLogger(__name__)
 
@@ -53,10 +54,11 @@ async def sync_markets(ctx: dict[str, Any]) -> list[dict[str, Any]]:
 
 
 class WorkerSettings:
-    functions = (sync_catalog, sync_markets)
+    functions = (sync_catalog, sync_markets, enqueue_history)
     cron_jobs = (
         cron(sync_catalog, hour=4, minute=0, run_at_startup=True),
         cron(sync_markets, minute=set(range(0, 60, 5)), run_at_startup=True),
+        cron(enqueue_history, minute=15, run_at_startup=True),
     )
     on_startup = startup
     on_shutdown = shutdown
