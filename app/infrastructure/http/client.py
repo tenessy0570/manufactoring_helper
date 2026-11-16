@@ -8,10 +8,11 @@ Sleep = Callable[[float], Awaitable[None]]
 
 
 class HttpStatusError(Exception):
-    def __init__(self, status_code: int, url: str) -> None:
+    def __init__(self, status_code: int, url: str, response: httpx.Response | None = None) -> None:
         super().__init__(f"HTTP {status_code} for {url}")
         self.status_code = status_code
         self.url = url
+        self.response = response
 
 
 class ResilientHttpClient:
@@ -71,7 +72,7 @@ class ResilientHttpClient:
             if response.status_code in self.RETRY_STATUSES and not is_last_attempt:
                 await self._sleep(self._retry_delay(response, attempt))
                 continue
-            raise HttpStatusError(response.status_code, str(response.url))
+            raise HttpStatusError(response.status_code, str(response.url), response)
         raise AssertionError("unreachable: the last attempt always returns or raises")
 
     def _extra_headers(self) -> Mapping[str, str]:

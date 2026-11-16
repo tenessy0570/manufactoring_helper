@@ -14,6 +14,9 @@ from app.domains.catalog.service import CatalogService, CatalogSyncService
 from app.domains.history.gateway import EsiHistoryGateway, HistoryGateway
 from app.domains.history.repository import HistoryRepository, SQLHistoryRepository
 from app.domains.history.service import HistoryService, HistorySyncService
+from app.domains.manufacturing.gateway import EverefIndustryGateway, IndustryClient, IndustryGateway
+from app.domains.manufacturing.repository import ManufacturingRepository, SQLManufacturingRepository
+from app.domains.manufacturing.service import ManufacturingService, ManufacturingSyncService
 from app.domains.market.gateway import EsiMarketGateway, MarketGateway
 from app.domains.market.models import MarketSyncReport
 from app.domains.market.repository import MarketRepository, SQLMarketRepository
@@ -38,10 +41,16 @@ async def test_catalog_provider_wiring_and_clients_close() -> None:
         assert isinstance(await scope.get(HistoryRepository), SQLHistoryRepository)
         assert isinstance(await scope.get(HistoryService), HistoryService)
         assert isinstance(await scope.get(HistorySyncService), HistorySyncService)
+        assert isinstance(await scope.get(IndustryGateway), EverefIndustryGateway)
+        assert isinstance(await scope.get(ManufacturingRepository), SQLManufacturingRepository)
+        assert isinstance(await scope.get(ManufacturingService), ManufacturingService)
+        assert isinstance(await scope.get(ManufacturingSyncService), ManufacturingSyncService)
+        industry = await scope.get(IndustryClient)
         esi = await scope.get(EsiClient)
         assert esi._http.headers["User-Agent"] == "eve-manufacturing"
     await container.close()
     assert esi._http.is_closed
+    assert industry._http.is_closed
 
 
 async def test_worker_job_scope_and_shutdown(monkeypatch: pytest.MonkeyPatch) -> None:

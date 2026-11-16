@@ -1,0 +1,129 @@
+from datetime import datetime
+from decimal import Decimal
+from typing import Literal
+
+from pydantic import BaseModel, Field, model_validator
+
+from app.domains.history.models import LiquidityQuery
+from app.domains.market.models import HubId, MarketPrice
+
+
+class Material(BaseModel):
+    type_id: int = Field(gt=0)
+    quantity: int = Field(gt=0)
+
+
+class Recipe(BaseModel):
+    type_id: int
+    blueprint_id: int
+    units: int = Field(gt=0)
+    seconds: Decimal = Field(gt=0, allow_inf_nan=False)
+    job_cost: Decimal = Field(ge=0, allow_inf_nan=False)
+    materials: list[Material] = Field(min_length=1)
+
+
+class RecipeState(BaseModel):
+    type_id: int
+    recipe: Recipe | None
+    synced_at: datetime
+    expires_at: datetime
+
+
+class ManufacturingQuery(LiquidityQuery):
+    material_order_type: Literal["buy", "sell"] = "sell"
+    product_order_type: Literal["buy", "sell"] = "sell"
+    material_hub_id: HubId | None = None
+    sales_tax: Decimal = Field(default=Decimal(0), ge=0, le=100, allow_inf_nan=False)
+    broker_fee: Decimal = Field(default=Decimal(0), ge=0, le=100, allow_inf_nan=False)
+    job_cost_per_run: Decimal | None = Field(default=None, ge=0, allow_inf_nan=False)
+    min_profit: Decimal | None = Field(default=None, allow_inf_nan=False)
+    max_profit: Decimal | None = Field(default=None, allow_inf_nan=False)
+    min_margin: Decimal | None = Field(default=None, allow_inf_nan=False)
+    max_margin: Decimal | None = Field(default=None, allow_inf_nan=False)
+    min_profit_per_day: Decimal | None = Field(default=None, allow_inf_nan=False)
+    min_product_orders: int | None = Field(default=None, ge=0)
+    min_orders_at_price: int | None = Field(default=None, ge=0)
+    min_product_volume: int | None = Field(default=None, ge=0)
+    require_full_run_demand: bool = False
+    exclude_fragile_buy_demand: bool = False
+    rank_by: Literal["profit_per_day", "margin", "profit"] = "profit_per_day"
+
+    @model_validator(mode="after")
+    def profit_ranges(self) -> "ManufacturingQuery":
+        for low, high in ((self.min_profit, self.max_profit), (self.min_margin, self.max_margin)):
+            if low is not None and high is not None and low > high:
+                raise ValueError("Minimum must not exceed maximum")
+        if self.sales_tax + self.broker_fee > 100:
+            raise ValueError("Combined sales tax and broker fee must not exceed 100%")
+        return self
+
+
+class MaterialCost(BaseModel):
+    type_id: int
+    quantity: int
+    price: Decimal
+    cost: Decimal
+    volume_at_price: int
+
+
+class ProfitCalculation(BaseModel):
+    units: int
+    seconds: Decimal
+    materials: list[MaterialCost]
+    material_cost_per_unit: Decimal
+    job_cost_per_unit: Decimal
+    procurement_broker_fee_per_unit: Decimal
+    sales_tax_per_unit: Decimal
+    sales_broker_fee_per_unit: Decimal
+    total_cost_per_unit: Decimal
+    revenue_per_unit: Decimal
+    profit_per_unit: Decimal
+    margin_pct: Decimal
+    profit_per_day: Decimal
+
+
+class Opportunity(ProfitCalculation):
+    type_id: int
+    name: str
+    blueprint_id: int
+    meta_group_id: int | None
+    invention_included: bool = False
+    invention_required: bool | None
+    recipe_synced_at: datetime
+    daily_isk_volume: Decimal | None
+    daily_units: Decimal | None
+    product_volume_at_price: int
+    product_order_count: int | None
+    orders_at_price: int | None
+    full_runs_at_buy_price: int | None
+    production_limit_units: int | None
+    profit_at_current_buy_price: Decimal | None
+    demand_limited_profit_per_day: Decimal | None
+    rank_profit_per_day: Decimal
+    demand_warnings: list[str] = Field(default_factory=list)
+    stale: bool
+
+
+class OpportunityPage(BaseModel):
+    hub_id: HubId
+    material_hub_id: HubId
+    material_order_type: Literal["buy", "sell"]
+    product_order_type: Literal["buy", "sell"]
+    efficiency_basis: str = "base materials and production time; no ME/TE bonuses"
+    sales_tax: Decimal
+    broker_fee: Decimal
+    margin_basis: str = "material_cost"
+    job_cost_basis: str = "EVE Ref NPC station estimate; optional per-run override"
+    items: list[Opportunity]
+    total: int
+    missing_recipes: int
+    non_manufacturable: int
+    missing_prices: int
+    limit: int
+    offset: int
+
+
+class CalculationInput(BaseModel):
+    recipe: Recipe
+    quotes: dict[int, MarketPrice]
+    product_quote: MarketPrice

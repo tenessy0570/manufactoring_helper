@@ -127,6 +127,57 @@ failures preserve previous history and successful items do not need downloading 
 Successful empty responses are cached too. `HISTORY_CACHE_SECONDS` defaults to 86400 and
 caps/falls back for the ESI expiration header. The first full backfill can take time.
 
-The next profitability stage will support independent material/product buy/sell choices,
-both defaulting to **sell**. Sales tax and broker fees will default to **0%** with optional
-user-entered percentages. These calculation/profile controls are not implemented yet.
+## Manufacturing opportunities
+
+`GET /api/v1/manufacturing/opportunities` combines catalog items, manufacturing recipes,
+station prices and regional liquidity. Material procurement and product sales independently
+use `material_order_type=buy|sell` and `product_order_type=buy|sell`; both default to sell.
+`hub_id` selects the product market; optional `material_hub_id` selects another procurement
+hub. No external requests run during an opportunities query.
+
+Calculations use base material quantities and base production time, **without ME/TE bonuses**.
+Costs are divided by the real number of units produced in one run. Output includes materials,
+costs per unit, profit per unit, margin and theoretical profit/day from one production slot.
+For parity with the original script, margin is profit divided by material cost, multiplied
+by 100; it is not profit divided by revenue. Slot/day profit does not guarantee daily sales.
+
+`sales_tax` and `broker_fee` are percentages, both zero by default. Sales tax applies to product
+revenue. Broker fees apply to material buy orders and product sell orders, not instant fills
+against someone else's orders. Relisting is not modeled. `job_cost_per_run` optionally overrides
+the cached EVE Ref installation estimate (which includes its SCC charge). That estimate uses
+the source's NPC/default skill assumptions, not your actual system/structure/character.
+
+All liquidity/catalog filters are available alongside `min_profit`, `max_profit`,
+`min_margin`, `max_margin`, `min_profit_per_day` and `rank_by=profit_per_day|margin|profit`.
+Ranking and filtering process all candidates before `limit`/`offset`. Missing prices or recipes
+are excluded and counted, never treated as free inputs. `fresh_only` requires fresh history,
+recipes and prices. T2 output explicitly marks invention as required but not yet included.
+Blueprint purchase/copy costs, hauling and custom facility bonuses are also not included.
+
+Buy-side demand is reported separately from profit:
+
+- `product_order_count`: all orders on the chosen side at the station.
+- `orders_at_price`: orders at the quoted best price.
+- `product_volume_at_price`: remaining units at that price.
+- `full_runs_at_buy_price`: complete production runs that current best buy volume can absorb.
+- `production_limit_units` and `profit_at_current_buy_price`: output and estimated profit
+  from those complete runs, without assuming that demand replenishes.
+- `demand_limited_profit_per_day`: per-slot daily production capped by that snapshot's volume.
+- `demand_warnings`: a single buy order, a single order at the best price, insufficient volume
+  for one run, or unknown counts on an older snapshot. Counts are orders, not unique players.
+
+By default these rows remain visible with warnings. Optional `min_product_orders`,
+`min_orders_at_price`, `min_product_volume`, `require_full_run_demand=true` and
+`exclude_fragile_buy_demand=true` filter them. The latter two apply only to product buy-mode.
+These are current quotes, not fill guarantees: orders may disappear before production ends.
+In product buy-mode, the default daily-profit ranking and `min_profit_per_day` use the
+demand-limited figure (`rank_profit_per_day`), so a high unit margin with tiny demand does not
+dominate the ranking. `profit_per_day` remains the explicitly theoretical slot throughput.
+Only best-price volume is covered, not lower-priced buy orders; no future replenishment is assumed.
+Counts on pre-migration snapshots are null until the next price refresh, not a fabricated zero.
+
+A separate `manufacturing-worker` fetches public EVE Ref recipes daily with three concurrent
+requests and up to three attempts. Confirmed non-manufacturable products are cached; other
+failures preserve previous recipes. `MANUFACTURING_CACHE_SECONDS` defaults to 86400.
+`python scripts/manufacturing_smoke.py` captures one public response for reproducible tests.
+Saved settings profiles and the user interface remain future stages.

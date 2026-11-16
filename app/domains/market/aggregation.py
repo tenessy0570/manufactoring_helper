@@ -23,17 +23,28 @@ class PriceAggregator:
                 type_id=order.type_id,
                 synced_at=self._synced_at,
                 expires_at=self._expires_at,
+                buy_order_count=0,
+                sell_order_count=0,
+                buy_orders_at_best=0,
+                sell_orders_at_best=0,
             ),
         )
         if order.is_buy_order:
+            price.buy_order_count = (price.buy_order_count or 0) + 1
             if price.buy_price is None or order.price > price.buy_price:
                 price.buy_price, price.buy_volume = order.price, order.volume_remain
+                price.buy_orders_at_best = 1
             elif order.price == price.buy_price:
                 price.buy_volume += order.volume_remain
-        elif price.sell_price is None or order.price < price.sell_price:
-            price.sell_price, price.sell_volume = order.price, order.volume_remain
-        elif order.price == price.sell_price:
-            price.sell_volume += order.volume_remain
+                price.buy_orders_at_best = (price.buy_orders_at_best or 0) + 1
+        else:
+            price.sell_order_count = (price.sell_order_count or 0) + 1
+            if price.sell_price is None or order.price < price.sell_price:
+                price.sell_price, price.sell_volume = order.price, order.volume_remain
+                price.sell_orders_at_best = 1
+            elif order.price == price.sell_price:
+                price.sell_volume += order.volume_remain
+                price.sell_orders_at_best = (price.sell_orders_at_best or 0) + 1
 
     def finish(self, expires_at: datetime) -> list[MarketPrice]:
         for price in self._prices.values():

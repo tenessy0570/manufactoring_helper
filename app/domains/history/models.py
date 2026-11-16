@@ -59,6 +59,7 @@ class LiquidityQuery(BaseModel):
 class LiquidityItem(BaseModel):
     type_id: int
     name: str
+    meta_group_id: int | None = None
     data_days: int
     daily_isk_volume: Decimal | None
     daily_units: Decimal | None

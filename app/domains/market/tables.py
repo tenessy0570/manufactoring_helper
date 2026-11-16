@@ -16,6 +16,10 @@ class MarketPriceTable(Base):
     sell_price: Mapped[Decimal | None] = mapped_column(Numeric(24, 2))
     buy_volume: Mapped[int] = mapped_column(BigInteger)
     sell_volume: Mapped[int] = mapped_column(BigInteger)
+    buy_order_count: Mapped[int | None]
+    sell_order_count: Mapped[int | None]
+    buy_orders_at_best: Mapped[int | None]
+    sell_orders_at_best: Mapped[int | None]
     spread: Mapped[Decimal | None] = mapped_column(Numeric(24, 2))
     synced_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
     expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), index=True)

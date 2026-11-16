@@ -14,11 +14,15 @@ from testcontainers.core.wait_strategies import LogMessageWaitStrategy
 from app.domains.catalog.repository import SQLItemTypeRepository
 from app.domains.history.models import LiquidityQuery
 from app.domains.history.repository import SQLHistoryRepository
+from app.domains.manufacturing.models import ManufacturingQuery
+from app.domains.manufacturing.repository import SQLManufacturingRepository
+from app.domains.manufacturing.service import ManufacturingService
 from app.domains.market.models import PriceQuery
 from app.domains.market.repository import SQLMarketRepository
 from tests.domains.catalog.test_catalog import NOW, item
 from tests.domains.history.test_history import day
 from tests.domains.history.test_history import state as history_state
+from tests.domains.manufacturing.test_manufacturing import recipe_state
 from tests.domains.market.test_market import price, state
 
 
@@ -27,16 +31,22 @@ async def test_migration_and_upsert_on_postgres() -> None:
     migration = runpy.run_path(str(Path("alembic/versions/0001_catalog.py")))
     market_migration = runpy.run_path("alembic/versions/0002_market.py")
     history_migration = runpy.run_path("alembic/versions/0003_history.py")
+    manufacturing_migration = runpy.run_path("alembic/versions/0004_manufacturing.py")
+    counts_migration = runpy.run_path("alembic/versions/0005_order_counts.py")
 
     def upgrade(connection: Connection) -> None:
         with Operations.context(MigrationContext.configure(connection)):
             migration["upgrade"]()
             market_migration["upgrade"]()
             history_migration["upgrade"]()
+            manufacturing_migration["upgrade"]()
+            counts_migration["upgrade"]()
         assert "item_types" in inspect(connection).get_table_names()
 
     def downgrade(connection: Connection) -> None:
         with Operations.context(MigrationContext.configure(connection)):
+            counts_migration["downgrade"]()
+            manufacturing_migration["downgrade"]()
             history_migration["downgrade"]()
             market_migration["downgrade"]()
             migration["downgrade"]()
@@ -99,6 +109,17 @@ async def test_migration_and_upsert_on_postgres() -> None:
                 await session.rollback()
                 values, _ = await history.liquidity(LiquidityQuery(days=2, type_ids=[10]), NOW)
                 assert values[0].data_days == 2
+                manufacturing = SQLManufacturingRepository(session)
+                await manufacturing.save(recipe_state())
+                await session.commit()
+                assert (await manufacturing.recipes([10]))[10] == recipe_state()
+                service = ManufacturingService(manufacturing, history, lambda: NOW)
+                page = await service.opportunities(ManufacturingQuery(type_ids=[10]))
+                assert page.total == 1
+                assert str(page.items[0].profit_per_unit) == "-42.40"
+                await manufacturing.save(recipe_state(recipe=None))
+                await session.rollback()
+                assert (await manufacturing.recipes([10]))[10].recipe is not None
                 assert await market.count(PriceQuery(hub_id="amarr"), NOW) == 1
                 stored_price = (await market.find(PriceQuery(type_ids=[10]), NOW))[0]
                 assert stored_price.buy_price == price().buy_price

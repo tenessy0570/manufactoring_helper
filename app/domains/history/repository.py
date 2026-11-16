@@ -103,6 +103,7 @@ class SQLHistoryRepository(HistoryRepository):
             select(
                 items.type_id,
                 items.name,
+                items.meta_group_id,
                 func.coalesce(totals.c.data_days, 0).label("data_days"),
                 totals.c.daily_isk_volume,
                 totals.c.daily_units,

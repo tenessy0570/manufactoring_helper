@@ -52,6 +52,10 @@ class MarketPrice(BaseModel):
     sell_price: Decimal | None = None
     buy_volume: int = 0
     sell_volume: int = 0
+    buy_order_count: int | None = None
+    sell_order_count: int | None = None
+    buy_orders_at_best: int | None = None
+    sell_orders_at_best: int | None = None
     spread: Decimal | None = None
     synced_at: datetime
     expires_at: datetime

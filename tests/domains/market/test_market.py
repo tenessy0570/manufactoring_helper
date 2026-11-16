@@ -125,6 +125,10 @@ def test_best_price_aggregation_and_exact_decimal_volume() -> None:
     assert prices[0].sell_price == Decimal("10.10")
     assert prices[0].buy_volume == 8
     assert prices[0].sell_volume == 12
+    assert prices[0].buy_order_count == 4
+    assert prices[0].buy_orders_at_best == 2
+    assert prices[0].sell_order_count == 4
+    assert prices[0].sell_orders_at_best == 2
     assert prices[0].spread == Decimal("1.00")
     assert prices[1].buy_price is None
     assert prices[1].spread is None

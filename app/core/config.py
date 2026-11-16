@@ -42,6 +42,9 @@ class Settings(BaseSettings):
     catalog_max_age_hours: int = 20
     market_cache_seconds: int = Field(default=300, ge=1, le=3600)
     history_cache_seconds: int = Field(default=86400, ge=3600, le=86400)
+    industry_base_url: str = "https://api.everef.net"
+    industry_max_concurrency: int = Field(default=3, ge=1, le=20)
+    manufacturing_cache_seconds: int = Field(default=86400, ge=3600, le=604800)
 
     basic_auth_username: str = ""
     basic_auth_password: SecretStr = SecretStr("")
