@@ -1,3 +1,4 @@
+import asyncio
 from collections.abc import Callable
 from datetime import UTC, datetime
 
@@ -13,6 +14,10 @@ from app.domains.market.models import (
     get_hub,
 )
 from app.domains.market.repository import MarketRepository
+
+
+class MarketPaginationChangedError(ValueError):
+    pass
 
 
 class MarketService:
@@ -53,6 +58,16 @@ class MarketSyncService:
         return await self.sync(hub_id)
 
     async def sync(self, hub_id: HubId) -> MarketSyncReport:
+        for attempt in range(3):
+            try:
+                return await self._sync_snapshot(hub_id)
+            except MarketPaginationChangedError:
+                if attempt == 2:
+                    raise
+                await asyncio.sleep(1)
+        raise AssertionError("Unreachable")
+
+    async def _sync_snapshot(self, hub_id: HubId) -> MarketSyncReport:
         hub = get_hub(hub_id)
         synced_at = self._clock()
         first = await self._gateway.get_orders(hub.region_id, 1)
@@ -61,15 +76,22 @@ class MarketSyncService:
         for order in first.orders:
             aggregator.add(order)
         del first
-        for page in range(2, pages + 1):
-            batch = await self._gateway.get_orders(hub.region_id, page)
-            if batch.pages != pages or batch.page != page:
-                raise ValueError(
-                    "Market pagination changed during sync; previous snapshot preserved"
-                )
-            expires_at = min(expires_at, batch.expires_at)
-            for order in batch.orders:
-                aggregator.add(order)
+        for start in range(2, pages + 1, 5):
+            page_numbers = range(start, min(start + 5, pages + 1))
+            results = await asyncio.gather(
+                *(self._gateway.get_orders(hub.region_id, page) for page in page_numbers),
+                return_exceptions=True,
+            )
+            for page, batch in zip(page_numbers, results, strict=True):
+                if isinstance(batch, BaseException):
+                    raise batch
+                if batch.pages != pages or batch.page != page:
+                    raise MarketPaginationChangedError(
+                        "Market pagination changed during sync; previous snapshot preserved"
+                    )
+                expires_at = min(expires_at, batch.expires_at)
+                for order in batch.orders:
+                    aggregator.add(order)
         prices = aggregator.finish(expires_at)
         state = MarketState(
             hub_id=hub_id, synced_at=synced_at, expires_at=expires_at, items=len(prices)

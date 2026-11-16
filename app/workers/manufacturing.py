@@ -1,5 +1,6 @@
 import asyncio
 import hashlib
+import logging
 from datetime import UTC, datetime
 from typing import Any
 
@@ -13,7 +14,10 @@ from app.core.di import create_container
 from app.core.logging import configure_logging
 from app.domains.catalog.models import ItemTypeClause
 from app.domains.catalog.repository import ItemTypeRepository
+from app.domains.manufacturing.gateway import AmbiguousRecipeError
 from app.domains.manufacturing.service import ManufacturingSyncService
+
+logger = logging.getLogger(__name__)
 
 QUEUE = "arq:manufacturing"
 
@@ -42,7 +46,11 @@ async def sync_recipes(ctx: dict[str, Any], type_ids: list[int]) -> int:
     async def sync(type_id: int) -> bool:
         async with semaphore, container() as scope:
             service = await scope.get(ManufacturingSyncService)
-            return await service.sync_if_stale(type_id)
+            try:
+                return await service.sync_if_stale(type_id)
+            except AmbiguousRecipeError:
+                logger.warning("Recipe skipped for product %s: multiple source blueprints", type_id)
+                return False
 
     results = await asyncio.gather(*(sync(type_id) for type_id in type_ids), return_exceptions=True)
     errors = [result for result in results if isinstance(result, BaseException)]

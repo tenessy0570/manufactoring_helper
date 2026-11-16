@@ -75,3 +75,17 @@ async def test_worker_lifecycle_and_launcher(monkeypatch: pytest.MonkeyPatch) ->
     worker.main()
     assert calls[0]["queue_name"] == worker.QUEUE
     assert calls[0]["redis_settings"].host == settings.redis_host
+
+
+async def test_ambiguous_recipe_does_not_fail_other_products() -> None:
+    from app.domains.manufacturing.gateway import AmbiguousRecipeError
+
+    service = AsyncMock(spec=ManufacturingSyncService)
+    service.sync_if_stale.side_effect = [AmbiguousRecipeError("multiple blueprints"), True]
+    provider = Provider(scope=Scope.REQUEST)
+    provider.provide(lambda: service, provides=ManufacturingSyncService)
+    container = make_async_container(provider)
+    try:
+        assert await worker.sync_recipes({"container": container}, [21527, 10]) == 1
+    finally:
+        await container.close()

@@ -512,3 +512,22 @@ async def test_unknown_order_counts_and_healthy_buy_demand(session: AsyncSession
     assert page.total == 1
     assert page.items[0].full_runs_at_buy_price == 10
     assert page.items[0].demand_warnings == []
+
+
+async def test_multiple_blueprints_are_not_marked_non_manufacturable() -> None:
+    from app.domains.manufacturing.gateway import AmbiguousRecipeError
+
+    async with httpx.AsyncClient(base_url="https://test") as http:
+        gateway = EverefIndustryGateway(IndustryClient(http, 1, 0))
+        with respx.mock:
+            respx.get("https://test/v1/industry/cost").respond(
+                400,
+                json={
+                    "message": (
+                        "ClientException: Product type ID 21527 "
+                        "can be source from more than one blueprint"
+                    )
+                },
+            )
+            with pytest.raises(AmbiguousRecipeError):
+                await gateway.fetch(21527)

@@ -7,6 +7,11 @@ from pydantic import BaseModel, Field, TypeAdapter
 from app.domains.manufacturing.models import Material, Recipe
 from app.infrastructure.http import HttpStatusError, ResilientHttpClient
 
+
+class AmbiguousRecipeError(ValueError):
+    """The source requires an explicit blueprint selection for this product."""
+
+
 DURATION = re.compile(
     r"P(?:(\d+)D)?(?:T(?:(\d+(?:\.\d+)?)H)?(?:(\d+(?:\.\d+)?)M)?(?:(\d+(?:\.\d+)?)S)?)?"
 )
@@ -78,6 +83,13 @@ class EverefIndustryGateway(IndustryGateway):
                 expected = (
                     f"ClientException: Product type ID {type_id} is not produced from a blueprint"
                 )
+                if message == (
+                    f"ClientException: Product type ID {type_id} "
+                    "can be source from more than one blueprint"
+                ):
+                    raise AmbiguousRecipeError(
+                        f"Multiple blueprints for product {type_id}"
+                    ) from error
                 if message == expected:
                     return None
             raise

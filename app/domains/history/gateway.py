@@ -8,6 +8,7 @@ from pydantic import TypeAdapter
 
 from app.domains.history.models import HistoryDay, HistoryDownload
 from app.infrastructure.esi import EsiClient
+from app.infrastructure.http import HttpStatusError
 
 
 class HistoryGateway(ABC):
@@ -25,9 +26,21 @@ class EsiHistoryGateway(HistoryGateway):
         self._esi, self._ttl, self._clock = esi, ttl_seconds, clock
 
     async def fetch(self, region_id: int, type_id: int) -> HistoryDownload:
-        response = await self._esi.request(
-            "GET", f"/markets/{region_id}/history/", params={"type_id": type_id}
-        )
+        try:
+            response = await self._esi.request(
+                "GET", f"/markets/{region_id}/history/", params={"type_id": type_id}
+            )
+        except HttpStatusError as error:
+            if error.status_code == 404 and error.response is not None:
+                try:
+                    payload = error.response.json()
+                except ValueError:
+                    payload = None
+                if payload == {"error": "Type not found!"}:
+                    return HistoryDownload(
+                        days=[], expires_at=self._clock() + timedelta(seconds=self._ttl)
+                    )
+            raise
         expires_at = self._clock() + timedelta(seconds=self._ttl)
         if value := response.headers.get("Expires"):
             try:

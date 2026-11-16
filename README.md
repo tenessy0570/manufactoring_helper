@@ -326,3 +326,8 @@ Create example: `{"name":"Amarr buys","settings":{"hub_id":"amarr","product_orde
 Profiles are identified by UUID; names may repeat. The existing `/manufacturing/opportunities`
 endpoint remains a direct stateless query. Saving/applying a profile does not run remote source
 calculations: matching invention valuations can be prepared through the existing invention API.
+
+
+## Synchronization recovery (2026-11-17)
+
+Market pages are fetched in batches of five. A changing page count restarts the whole snapshot up to three times; exhausted attempts preserve the previous snapshot. Only ESI history 404 with the exact `Type not found!` response is cached as empty history; other errors still fail. Products with multiple source blueprints are skipped with a warning rather than marked non-manufacturable or assigned an arbitrary recipe. Explicit blueprint selection remains unsupported. Validation: 265 passed, 1 skipped; coverage 98.52%; Ruff and mypy passed.

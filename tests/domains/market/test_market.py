@@ -322,3 +322,26 @@ async def test_gateway_pagination_expiry_and_decimal(expires: str | None) -> Non
             assert batch.expires_at == (
                 NOW + timedelta(minutes=1) if expires and expires != "invalid" else EXPIRES
             )
+
+
+async def test_pagination_drift_restarts_without_mixing_snapshots() -> None:
+    gateway = FakeGateway()
+    original = gateway.get_orders
+    calls = 0
+
+    async def changing(region_id: int, page: int) -> OrderPage:
+        nonlocal calls
+        calls += 1
+        batch = await original(region_id, page)
+        if calls == 2:
+            batch.pages = 3
+        return batch
+
+    gateway.get_orders = changing  # type: ignore[method-assign]
+    repository = FakeRepository()
+    uow = AsyncMock(spec=SQLAlchemyUnitOfWork)
+    report = await MarketSyncService(repository, gateway, uow, lambda: NOW).sync("jita")
+    assert calls == 4
+    assert report.pages == 2
+    assert repository.prices["jita"][0].sell_volume == 5
+    uow.commit.assert_awaited_once()
