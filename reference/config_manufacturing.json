@@ -1,0 +1,23 @@
+{
+  "me": 0,
+  "sales_tax": 4.2,
+  "broker_fee": 2.1,
+  "min_profit": 1,
+  "min_margin": 0.0,
+  "top": 1000,
+  "workers": 30,
+  "cache_ttl_hours": 24,
+  "orders_cache_ttl_hours": 3,
+  "t2_only": false,
+  "rigs_only": true,
+  "sell_order_type": "buy",
+  "rank_by": "profit_per_day",
+  "min_daily_isk_volume": "500_000_000",
+  "volume_history_days": 7,
+  "include_invention_cost": true,
+  "invention_token": "",
+  "invention_assumed_science_skill_level": 1,
+  "invention_assumed_encryption_skill_level": 1,
+  "invention_index_workers": 1500,
+  "invention_pricing_workers": 2
+}

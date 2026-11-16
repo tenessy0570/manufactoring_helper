@@ -26,6 +26,21 @@ class Settings(BaseSettings):
     memory_cache_max_items: int = 10_000
     memory_cache_ttl_seconds: int = 60
 
+    esi_base_url: str = "https://esi.evetech.net"
+    # CCP asks for a User-Agent that identifies the app and a way to contact its owner.
+    esi_user_agent: str = "eve-manufacturing"
+    # Empty means "today's ESI date", derived from the clock (the ESI day rolls over at 11:00 UTC).
+    esi_compatibility_date: str = ""
+    esi_max_concurrency: int = 20
+
+    everef_base_url: str = "https://ref-data.everef.net"
+    everef_max_concurrency: int = 20
+
+    http_timeout_seconds: float = 30.0
+    http_max_retries: int = 4
+
+    catalog_max_age_hours: int = 20
+
     basic_auth_username: str = ""
     basic_auth_password: SecretStr = SecretStr("")
 

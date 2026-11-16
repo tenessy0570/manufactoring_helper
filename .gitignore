@@ -11,3 +11,6 @@ htmlcov/
 build/
 dist/
 .idea/
+AGENTS.md
+HANDOFF.md
+eve-manufacturing-handoff.zip

@@ -51,6 +51,7 @@ source = ["app"]
 exclude_also = ["if TYPE_CHECKING:", "@abstractmethod"]
 
 [tool.ruff]
+extend-exclude = ["reference"]
 line-length = 100
 target-version = "py312"
 
