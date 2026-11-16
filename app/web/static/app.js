@@ -10,7 +10,7 @@ document.addEventListener('alpine:init', () => {
     form: {}, page: {items:[],total:0,offset:0,limit:25},
     defaults() {return {search:'',hub_id:'jita',material_hub_id:'',tech:'',category:'',
       material_order_type:'sell',product_order_type:'sell',min_profit:'',min_margin:'',min_daily_isk_volume:'',
-      days:'30',sales_tax:'0',broker_fee:'0',invention_science_level:'5',invention_encryption_level:'4',
+      days:'30',sales_tax:'0',broker_fee:'0',
       min_product_volume:'',include_invention_cost:false,fresh_only:false,require_full_run_demand:false,
       rank_by:'profit_per_day',limit:'25'};},
     async init() {
@@ -92,6 +92,7 @@ document.addEventListener('alpine:init', () => {
     params(form=this.form, settings=this.profileSettings, offset=this.page.offset) {
       const params = new URLSearchParams();
       const values={...settings,...form};
+      delete values.invention_science_level; delete values.invention_encryption_level;
       delete values.tech; delete values.category; delete values.rigs;
       delete values.meta_group_ids; delete values.categories; delete values.is_rig;
       if (form.tech === '__profile__') values.meta_group_ids=settings.meta_group_ids;
@@ -109,7 +110,7 @@ document.addEventListener('alpine:init', () => {
       return params;
     },
     setProfile(profile) {
-      if(profile.browser){this.form={...this.defaults(),...JSON.parse(JSON.stringify(profile.form))};this.profileSettings=JSON.parse(JSON.stringify(profile.settings||{}));return;}
+      if(profile.browser){this.form=Object.fromEntries(Object.entries(this.defaults()).map(([key,value])=>[key,profile.form[key]??value]));this.profileSettings=JSON.parse(JSON.stringify(profile.settings||{}));return;}
       const s=profile.settings; this.profileSettings=JSON.parse(JSON.stringify(s));
       this.form={...this.defaults()};
       for (const key of Object.keys(this.form)) if (s[key]!==null && s[key]!==undefined) this.form[key]=s[key];
@@ -172,7 +173,7 @@ document.addEventListener('alpine:init', () => {
       else if(!event.shiftKey&&(document.activeElement===last||document.activeElement===this.$refs.dialog)){event.preventDefault();first.focus();}
     },
     async openItem(item){this.returnFocus=document.activeElement;document.body.style.overflow='hidden';this.selected=item;this.invention=null;this.inventionMessage='';this.detailSequence++;await this.$nextTick();await new Promise(resolve=>requestAnimationFrame(resolve));if(this.selected?.type_id!==item.type_id)return;(this.$refs.dialog.querySelector('button:not([disabled])')||this.$refs.dialog).focus();if(item.invention_required&&!this.demo) await this.loadInvention();},
-    inventionParams(){return new URLSearchParams({hub_id:this.resultForm.material_hub_id||this.resultForm.hub_id,order_type:this.resultForm.material_order_type,science_level:this.resultForm.invention_science_level,encryption_level:this.resultForm.invention_encryption_level,broker_fee:this.resultForm.broker_fee});},
+    inventionParams(){return new URLSearchParams({hub_id:this.resultForm.material_hub_id||this.resultForm.hub_id,order_type:this.resultForm.material_order_type,broker_fee:this.resultForm.broker_fee});},
     async loadInvention(){const id=this.selected?.type_id, seq=this.detailSequence;try{const data=await this.api(`/api/v1/invention/${id}?${this.inventionParams()}`);if(seq!==this.detailSequence||this.selected?.type_id!==id)return;this.invention=data;this.inventionMessage=!data.request?'Not prepared for these settings yet. Prepare a cached calculation to compare decryptors.':`${data.request.status.replaceAll('_',' ')}${data.stale?' · stale':''}${data.request.result&&!data.request.result.complete_pricing?' · some price options are missing':''}`;}catch(e){if(seq===this.detailSequence&&this.selected?.type_id===id)this.inventionMessage=e.message;}},
     async prepareInvention(){if(!this.selected||this.demo)return;const id=this.selected.type_id;this.inventionLoading=true;try{await this.api(`/api/v1/invention/${id}/prepare?${this.inventionParams()}`,{method:'POST'});if(this.selected?.type_id===id){await this.loadInvention();this.inventionMessage='Preparation requested. The worker will calculate and cache this result. Reopen these details or refresh to check progress.';}}catch(e){this.inventionMessage=e.message;}finally{this.inventionLoading=false;}},
     demoPage(form=this.form,offset=this.page.offset){

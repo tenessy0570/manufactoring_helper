@@ -6,6 +6,8 @@ from pydantic import BaseModel, Field, TypeAdapter
 from app.core.concurrency import gather_all
 from app.domains.invention.models import (
     DECRYPTORS,
+    ENCRYPTION_LEVEL,
+    SCIENCE_LEVEL,
     InventionMaterial,
     InventionPlan,
     InventionSettings,
@@ -80,8 +82,8 @@ class EverefInventionGateway(InventionGateway):
 
     async def fetch(self, settings: InventionSettings) -> list[InventionPlan]:
         async def option(decryptor_id: int | None, name: str) -> InventionPlan | None:
-            params: dict[str, int] = {skill: settings.science_level for skill in SCIENCE_SKILLS}
-            params.update({skill: settings.encryption_level for skill in ENCRYPTION_SKILLS})
+            params: dict[str, int] = {skill: SCIENCE_LEVEL for skill in SCIENCE_SKILLS}
+            params.update({skill: ENCRYPTION_LEVEL for skill in ENCRYPTION_SKILLS})
             params.update({"product_id": settings.type_id, "runs": 1, "me": 0, "te": 0})
             if decryptor_id is not None:
                 params["decryptor_id"] = decryptor_id

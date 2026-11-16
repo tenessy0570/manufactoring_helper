@@ -85,18 +85,19 @@ def request(**kwargs: Any) -> InventionRequest:
     )
 
 
-def test_keys_separate_skill_hub_side_and_fee_but_share_source_plans() -> None:
+def test_keys_ignore_legacy_skills_but_separate_hub_side_and_fee() -> None:
     assert settings(broker_fee="0.00").key == settings().key
     for kwargs in (
-        {"science_level": 4},
-        {"encryption_level": 3},
         {"hub_id": "amarr"},
         {"order_type": "buy"},
         {"broker_fee": "2"},
     ):
         assert settings(**kwargs).key != settings().key
     assert settings(hub_id="amarr", order_type="buy").plan_key == settings().plan_key
-    assert settings(science_level=4).plan_key != settings().plan_key
+    assert settings(science_level=4, encryption_level=0).plan_key == settings().plan_key
+    assert settings(science_level=4, encryption_level=0).key == settings().key
+    assert "science_level" not in settings(science_level=4).model_dump()
+    assert "encryption_level" not in settings(encryption_level=0).model_dump()
 
 
 def test_expected_cost_uses_attempts_probability_runs_and_output_quantity() -> None:
@@ -268,7 +269,7 @@ async def test_empty_and_missing_price_states(session: AsyncSession) -> None:
     )
     assert (await service.sync(settings())).status == "unsupported"
     gateway.fetch.return_value = [plan()]
-    assert (await service.sync(settings(science_level=4))).status == "missing_prices"
+    assert (await service.sync(settings(type_id=20))).status == "missing_prices"
 
 
 async def test_failed_source_refresh_keeps_durable_plan(session: AsyncSession) -> None:
@@ -445,5 +446,16 @@ async def test_api_reads_and_schedules_cached_work(session: AsyncSession) -> Non
         assert (await client.get("/api/v1/invention/10")).json()["request"] is None
         assert (await client.post("/api/v1/invention/10/prepare")).status_code == 202
         assert (await client.post("/api/v1/invention/prepare?hub_id=amarr")).status_code == 202
-        assert (await client.get("/api/v1/invention/10?science_level=6")).status_code == 422
+        assert (await client.get("/api/v1/invention/10?science_level=6")).status_code == 200
     await container.close()
+
+
+def test_default_valuation_key_keeps_existing_prepared_cache() -> None:
+    import hashlib
+
+    previous = settings().model_dump(mode="json")
+    previous.update(science_level=5, encryption_level=4)
+    previous["broker_fee"] = "0"
+    expected = hashlib.sha256(json.dumps(previous, sort_keys=True).encode()).hexdigest()
+    assert settings().key == expected
+    assert settings().plan_key == f"v1:{settings().type_id}:5:4"

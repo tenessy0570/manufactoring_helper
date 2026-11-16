@@ -102,8 +102,6 @@ class ManufacturingService:
                 hub_id=material_hub,
                 order_type=query.material_order_type,
                 broker_fee=query.broker_fee,
-                science_level=query.invention_science_level,
-                encryption_level=query.invention_encryption_level,
             )
             for candidate in candidates
             if candidate.meta_group_id == 2

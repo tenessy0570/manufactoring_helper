@@ -231,12 +231,12 @@ Page reads never call EVE Ref or perform the expensive invention lookup.
 
 The public Industry Cost API resolves the source/invented blueprint for a T2 product, so no
 full-network crawl of every blueprint is needed. Nine options (no decryptor plus eight types)
-are cached together by product and assumed science/encryption levels. A failed or incomplete
+are cached together by product with fixed science 5/encryption 4 assumptions. A failed or incomplete
 download preserves the previous plan. `INVENTION_PLAN_TTL_SECONDS` defaults to seven days.
 Redis locks share source work across hub/side requests; stable ARQ job IDs deduplicate requests.
 Source calls use the shared bounded industry client (three concurrent requests by default).
 
-Valuations are separate by hub, material buy/sell side, broker fee and skills. Price updates
+Valuations are separate by hub, material buy/sell side and broker fee. Price updates
 reuse saved plans, without downloading the blueprints/options again. Their expiry is capped
 by both source and market-price expiry; requested valuations refresh through the scheduler
 every five minutes. Default backfill prepares Jita/sell with science 5 and encryption 4;
@@ -244,11 +244,11 @@ other settings are prepared on request. The initial backfill can take time.
 
 API examples:
 
-- `POST /api/v1/invention/2456/prepare?hub_id=amarr&order_type=buy&science_level=4`
+- `POST /api/v1/invention/2456/prepare?hub_id=amarr&order_type=buy`
   persists and queues one requested valuation; HTTP 202 does not mean the result is ready.
 - `POST /api/v1/invention/prepare?hub_id=amarr&order_type=buy` schedules all active T2 catalog
   products for those settings, without doing the heavy calculations in the HTTP request.
-- `GET /api/v1/invention/2456?hub_id=amarr&order_type=buy&science_level=4` reads cached status
+- `GET /api/v1/invention/2456?hub_id=amarr&order_type=buy` reads cached status
   and alternatives. All settings must match the prepare request; broker fee defaults to 0.
 
 States are `pending`, `ready`, `missing_prices`, `unsupported`, and `error`, with an independent
@@ -260,14 +260,13 @@ Unknown datacore/decryptor prices are never interpreted as free inputs.
 Expected cost per manufactured unit is:
 `(attempt materials + applicable buy-order broker fee + job estimate) / (success probability * runs per copy * units per manufacturing run)`.
 Scaled upstream material/job quantities are normalized to one attempt before calculating.
-This handles ammo/drone output quantities correctly. Skills are manual assumed common science
-and encryption levels (0–5); no SSO or character access is used. Decryptor ME/TE is shown as
+This handles ammo/drone output quantities correctly. Skills are fixed to science 5/encryption 4;
+no user skill variants, SSO or character access are used. Decryptor ME/TE is shown as
 metadata, but does not modify manufacturing quantities, margin or throughput. Blueprint copy/
 purchase costs and the player's actual facility/system bonuses remain outside this estimate.
 
 Set `include_invention_cost=true` on `/api/v1/manufacturing/opportunities` to deduct a prepared
-cost before profit/margin/demand-limited ranking. `invention_science_level` and
-`invention_encryption_level` default to 5/4. The valuation follows `material_hub_id` (or `hub_id`),
+cost before profit/margin/demand-limited ranking. Legacy skill settings are ignored. The valuation follows `material_hub_id` (or `hub_id`),
 `material_order_type` and `broker_fee`. Missing/failed T2 results are excluded and reported in
 `missing_invention` and `invention_unavailable`, never charged zero. Stale cached results are
 marked; `fresh_only=true` excludes them. Cost inclusion defaults to false.
@@ -301,7 +300,7 @@ The standalone Tailwind executable can be used without Node.js. HTMX 2.0.4 and A
 are pinned in `app/web/static/vendor/`; item icons use the public EVE image service.
 
 Profiles persist every manufacturing query setting: product/procurement hubs, independent
-buy/sell choices, optional taxes/fees, assumed invention skills and inclusion, liquidity and
+buy/sell choices, optional taxes/fees, invention inclusion, liquidity and
 profit/demand filters, sorting and page size. ME/TE fields are not accepted. Saved pagination
 always starts at offset 0; browsing another page does not change the profile.
 
@@ -360,3 +359,5 @@ Frontend regression checks (isolated Edge/Chromium, no live database):
 ```
 
 Pass `--browser` to specify another Chromium executable. The runner starts and stops its own preview and browser, uses a temporary browser profile, checks the main workflow and saves desktop/mobile screenshots in the temporary directory.
+
+Legacy science/encryption values in API requests, queued jobs and saved profiles are ignored; they no longer create separate source plans or valuation keys. Existing default 5/4 cache keys are preserved.

@@ -283,3 +283,20 @@ async def test_api_profile_lifecycle_and_errors() -> None:
             await client.post("/api/v1/profiles", json={"name": "x", "settings": {"me": 10}})
         ).status_code == 422
     await container.close()
+
+
+def test_legacy_profile_skills_are_ignored_without_losing_other_settings() -> None:
+    profile = ProfileSettings.model_validate(
+        {
+            "invention_science_level": 1,
+            "invention_encryption_level": 0,
+            "hub_id": "amarr",
+            "include_invention_cost": True,
+        }
+    )
+    assert profile.hub_id == "amarr"
+    assert profile.include_invention_cost
+    assert "invention_science_level" not in profile.model_dump()
+    assert "invention_encryption_level" not in profile.model_dump()
+    with pytest.raises(ValidationError):
+        ProfileSettings.model_validate({"unknown_setting": 1})

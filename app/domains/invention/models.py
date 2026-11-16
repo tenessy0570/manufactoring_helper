@@ -20,6 +20,8 @@ DECRYPTORS: tuple[tuple[int | None, str], ...] = (
     (34206, "Symmetry"),
 )
 QUEUE = "arq:invention"
+SCIENCE_LEVEL = 5
+ENCRYPTION_LEVEL = 4
 
 
 class InventionQuery(BaseModel):
@@ -27,8 +29,6 @@ class InventionQuery(BaseModel):
 
     hub_id: HubId = "jita"
     order_type: Literal["buy", "sell"] = "sell"
-    science_level: int = Field(default=5, ge=0, le=5)
-    encryption_level: int = Field(default=4, ge=0, le=5)
     broker_fee: Decimal = Field(default=Decimal(0), ge=0, le=100, allow_inf_nan=False)
 
 
@@ -37,11 +37,13 @@ class InventionSettings(InventionQuery):
 
     @property
     def plan_key(self) -> str:
-        return f"v1:{self.type_id}:{self.science_level}:{self.encryption_level}"
+        return f"v1:{self.type_id}:{SCIENCE_LEVEL}:{ENCRYPTION_LEVEL}"
 
     @property
     def key(self) -> str:
         data = self.model_dump(mode="json")
+        # Preserve the existing default cache while ignoring legacy skill overrides.
+        data.update(science_level=SCIENCE_LEVEL, encryption_level=ENCRYPTION_LEVEL)
         data["broker_fee"] = format(self.broker_fee.normalize(), "f")
         return hashlib.sha256(json.dumps(data, sort_keys=True).encode()).hexdigest()
 

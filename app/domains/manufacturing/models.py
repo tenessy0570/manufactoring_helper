@@ -1,6 +1,6 @@
 from datetime import datetime
 from decimal import Decimal
-from typing import Literal
+from typing import Any, Literal
 
 from pydantic import BaseModel, Field, model_validator
 
@@ -30,9 +30,18 @@ class RecipeState(BaseModel):
 
 
 class ManufacturingQuery(LiquidityQuery):
+    @model_validator(mode="before")
+    @classmethod
+    def discard_legacy_skill_settings(cls, value: Any) -> Any:
+        if isinstance(value, dict):
+            return {
+                key: item
+                for key, item in value.items()
+                if key not in ("invention_science_level", "invention_encryption_level")
+            }
+        return value
+
     include_invention_cost: bool = False
-    invention_science_level: int = Field(default=5, ge=0, le=5)
-    invention_encryption_level: int = Field(default=4, ge=0, le=5)
     material_order_type: Literal["buy", "sell"] = "sell"
     product_order_type: Literal["buy", "sell"] = "sell"
     material_hub_id: HubId | None = None
