@@ -25,6 +25,8 @@ from app.domains.market.gateway import EsiMarketGateway, MarketGateway
 from app.domains.market.models import MarketSyncReport
 from app.domains.market.repository import MarketRepository, SQLMarketRepository
 from app.domains.market.service import MarketService, MarketSyncService
+from app.domains.profiles.repository import ProfileRepository, SQLProfileRepository
+from app.domains.profiles.service import ProfileCalculationService, ProfileService
 from app.infrastructure.esi import EsiClient
 from app.workers import settings as worker
 from tests.helpers import make_settings
@@ -54,6 +56,9 @@ async def test_catalog_provider_wiring_and_clients_close() -> None:
         assert isinstance(await scope.get(InventionService), InventionService)
         assert isinstance(await scope.get(InventionSyncService), InventionSyncService)
         assert isinstance(await scope.get(InventionQueue), RedisInventionQueue)
+        assert isinstance(await scope.get(ProfileRepository), SQLProfileRepository)
+        assert isinstance(await scope.get(ProfileService), ProfileService)
+        assert isinstance(await scope.get(ProfileCalculationService), ProfileCalculationService)
         industry = await scope.get(IndustryClient)
         esi = await scope.get(EsiClient)
         assert esi._http.headers["User-Agent"] == "eve-manufacturing"

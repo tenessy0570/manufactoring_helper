@@ -1,9 +1,22 @@
 # EVE Manufacturing
 
-Web service that finds the most profitable things to manufacture in EVE Online (Jita prices).
-Replaces the standalone `eve_manufacturing_scan.py` script.
+EVE Online manufacturing profitability backend for Jita, Amarr, Dodixie, Rens and Hek.
+Replaces the standalone script in `reference/eve_manufacturing_scan.py`.
 
-Only public ESI endpoints are used, so no SSO or app registration is needed.
+Only public ESI and EVE Ref endpoints are used; no API keys, SSO or app registration are needed.
+
+## Current state
+
+Implemented: catalog sync, hub prices and demand, regional history/liquidity, manufacturing
+profitability, persistent invention caching and saved calculation profiles. Migrations 0001-0007
+create the required tables and an initial profile. The web interface is not implemented yet;
+use the JSON API and interactive documentation at `/docs`. The root `/` has no application page.
+
+Latest validation on Windows/Python 3.12: 253 tests passed, 1 optional PostgreSQL test skipped
+in the default suite, 98.71% combined coverage. The PostgreSQL test passed separately, including
+migrations, cache persistence and concurrent profile selection. Ruff, formatting and strict
+mypy passed. Public ESI/EVE Ref smoke probes passed; a complete production Compose deployment
+has not been validated end to end. These are recorded results, not checks run on every startup.
 
 ## Run
 
@@ -16,12 +29,33 @@ cp .env.example .env   # fill in passwords
 The site listens on `APP_PORT` (default 8000). Set `BASIC_AUTH_USERNAME` and
 `BASIC_AUTH_PASSWORD` to protect it; `/health/*` stays open for healthchecks.
 
+On Windows, the equivalent initial commands are:
+
+```powershell
+Copy-Item .env.example .env
+# Fill in credentials, then:
+docker compose up -d --build --wait
+```
+
+Compose starts PostgreSQL 17, Redis 7, the API and four workers (main scheduler/prices,
+history, manufacturing and invention). API startup applies migrations before workers start.
+Initial data downloads are asynchronous; a healthy API can still return empty or pending data.
+`/health/live` checks liveness; `/health/ready` checks database/Redis connectivity, not backfill progress.
+
+Persistent data lives in named Docker volumes: `postgres_data` mounts at
+`/var/lib/postgresql/data`, and `redis_data` at `/data` with AOF enabled. Container recreation
+keeps both volumes; these are Docker-managed volumes, not folders in the repository.
+
+Optional settings include `CATALOG_MAX_AGE_HOURS=20`, `MARKET_CACHE_SECONDS=300`,
+`HISTORY_CACHE_SECONDS=86400`, `MANUFACTURING_CACHE_SECONDS=86400`,
+`INVENTION_PLAN_TTL_SECONDS=604800`, and `INDUSTRY_MAX_CONCURRENCY=3`.
+
 ## Develop
 
 ```bash
 python -m venv .venv && . .venv/bin/activate
 pip install -e ".[dev]"
-ruff check . && ruff format --check . && mypy && pytest
+ruff check . && ruff format --check . && mypy && pytest --cov-fail-under=90
 ```
 
 ## Layout
@@ -29,8 +63,13 @@ ruff check . && ruff format --check . && mypy && pytest
 ```
 app/core/      infrastructure: config, db, cache (memory + Redis), DI, repository base
 app/domains/   one package per domain: models, tables, repository, service, router, providers
+app/infrastructure/  public HTTP clients
+app/workers/   ARQ schedulers and separate background queues
 alembic/       migrations (run automatically on api start)
 tests/         mirrors app/
+tests/fixtures/  captured public data for reproducible calculations
+reference/     original script/config; preserved as reference, excluded from Ruff
+scripts/       optional public endpoint probes
 ```
 
 A new domain adds its provider to `app/core/di/container.py` and its tables to
@@ -43,7 +82,7 @@ It uses public ESI and EVE Ref endpoints; no API keys or SSO are needed.
 `CATALOG_MAX_AGE_HOURS` defaults to 20. Failed tree/name downloads preserve the previous
 catalog; missing metadata is retried on the next sync. Removed candidates become inactive.
 The catalog contains candidate equipment, ammunition and drones, excluding capital branches;
-manufacturability will be confirmed by the later blueprint/cost stages.
+manufacturability is checked by the manufacturing recipe stage.
 
 `GET /api/v1/catalog/items` supports combined filters:
 
@@ -147,7 +186,7 @@ against someone else's orders. Relisting is not modeled. `job_cost_per_run` opti
 the cached EVE Ref installation estimate (which includes its SCC charge). That estimate uses
 the source's NPC/default skill assumptions, not your actual system/structure/character.
 
-All liquidity/catalog filters are available alongside `min_profit`, `max_profit`,
+The liquidity endpoint's catalog filters are available alongside `min_profit`, `max_profit`,
 `min_margin`, `max_margin`, `min_profit_per_day` and `rank_by=profit_per_day|margin|profit`.
 Ranking and filtering process all candidates before `limit`/`offset`. Missing prices or recipes
 are excluded and counted, never treated as free inputs. `fresh_only` requires fresh history,
@@ -180,7 +219,7 @@ A separate `manufacturing-worker` fetches public EVE Ref recipes daily with thre
 requests and up to three attempts. Confirmed non-manufacturable products are cached; other
 failures preserve previous recipes. `MANUFACTURING_CACHE_SECONDS` defaults to 86400.
 `python scripts/manufacturing_smoke.py` captures one public response for reproducible tests.
-Saved settings profiles and the user interface remain future stages.
+The user interface remains a future stage.
 
 ## Invention cache
 
@@ -233,3 +272,33 @@ cost before profit/margin/demand-limited ranking. `invention_science_level` and
 marked; `fresh_only=true` excludes them. Cost inclusion defaults to false.
 
 `python scripts/invention_smoke.py` captures a public T2 response and validates all nine options.
+
+## Saved profiles
+
+Profiles persist every manufacturing query setting: product/procurement hubs, independent
+buy/sell choices, optional taxes/fees, assumed invention skills and inclusion, liquidity and
+profit/demand filters, sorting and page size. ME/TE fields are not accepted. Saved pagination
+always starts at offset 0; browsing another page does not change the profile.
+
+Migration 0007 creates a `Default` profile with sell/sell, zero trade taxes/fees and the same
+defaults as a normal manufacturing query. The default selection is stored separately in one
+singleton row. Writes lock that row on PostgreSQL so concurrent changes preserve one selection.
+Creating or copying a profile does not change the default. Deleting the selected profile picks
+the oldest remaining profile; deleting the final profile returns HTTP 409.
+
+API:
+
+- `GET /api/v1/profiles`, `POST /api/v1/profiles`.
+- `GET /api/v1/profiles/default`, `GET /api/v1/profiles/{id}`.
+- `PATCH /api/v1/profiles/{id}` changes `name` and/or `settings`. Omitted fields stay unchanged;
+  a supplied `settings` object replaces the complete settings object, filling omitted settings
+  with standard defaults. Null settings and unknown settings are rejected.
+- `POST /api/v1/profiles/{id}/copy` with `{"name":"Another profile"}` copies settings independently.
+- `PUT /api/v1/profiles/{id}/default`, `DELETE /api/v1/profiles/{id}`.
+- `GET /api/v1/profiles/{id}/opportunities` or `/api/v1/profiles/default/opportunities` applies
+  saved settings. Optional `limit`/`offset` override pagination for that response only.
+
+Create example: `{"name":"Amarr buys","settings":{"hub_id":"amarr","product_order_type":"buy","require_full_run_demand":true}}`.
+Profiles are identified by UUID; names may repeat. The existing `/manufacturing/opportunities`
+endpoint remains a direct stateless query. Saving/applying a profile does not run remote source
+calculations: matching invention valuations can be prepared through the existing invention API.

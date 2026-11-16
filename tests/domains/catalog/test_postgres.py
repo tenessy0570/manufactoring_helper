@@ -1,7 +1,9 @@
+import asyncio
 import os
 import runpy
 from datetime import timedelta
 from pathlib import Path
+from uuid import UUID
 
 import pytest
 from alembic.migration import MigrationContext
@@ -12,6 +14,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
 from testcontainers.core.container import DockerContainer
 from testcontainers.core.wait_strategies import LogMessageWaitStrategy
 
+from app.core.repository import SQLAlchemyUnitOfWork
 from app.domains.catalog.repository import SQLItemTypeRepository
 from app.domains.history.models import LiquidityQuery
 from app.domains.history.repository import SQLHistoryRepository
@@ -22,6 +25,9 @@ from app.domains.manufacturing.repository import SQLManufacturingRepository
 from app.domains.manufacturing.service import ManufacturingService
 from app.domains.market.models import PriceQuery
 from app.domains.market.repository import SQLMarketRepository
+from app.domains.profiles.models import ProfileCreate, ProfileSettings
+from app.domains.profiles.repository import SQLProfileRepository
+from app.domains.profiles.service import ProfileService
 from tests.domains.catalog.test_catalog import NOW, item
 from tests.domains.history.test_history import day
 from tests.domains.history.test_history import state as history_state
@@ -38,6 +44,7 @@ async def test_migration_and_upsert_on_postgres() -> None:
     manufacturing_migration = runpy.run_path("alembic/versions/0004_manufacturing.py")
     counts_migration = runpy.run_path("alembic/versions/0005_order_counts.py")
     invention_migration = runpy.run_path("alembic/versions/0006_invention.py")
+    profile_migration = runpy.run_path("alembic/versions/0007_profiles.py")
 
     def upgrade(connection: Connection) -> None:
         with Operations.context(MigrationContext.configure(connection)):
@@ -47,10 +54,12 @@ async def test_migration_and_upsert_on_postgres() -> None:
             manufacturing_migration["upgrade"]()
             counts_migration["upgrade"]()
             invention_migration["upgrade"]()
+            profile_migration["upgrade"]()
         assert "item_types" in inspect(connection).get_table_names()
 
     def downgrade(connection: Connection) -> None:
         with Operations.context(MigrationContext.configure(connection)):
+            profile_migration["downgrade"]()
             invention_migration["downgrade"]()
             counts_migration["downgrade"]()
             manufacturing_migration["downgrade"]()
@@ -141,6 +150,32 @@ async def test_migration_and_upsert_on_postgres() -> None:
                 await session.commit()
                 assert await invention.plan(settings().plan_key) == plans
                 assert (await invention.requests([settings().key]))[settings().key] == request()
+                profiles = ProfileService(
+                    SQLProfileRepository(session), SQLAlchemyUnitOfWork(session)
+                )
+                default_profile = await profiles.get()
+                assert default_profile.settings == ProfileSettings()
+                first_profile = await profiles.create(ProfileCreate(name="First"))
+                second_profile = await profiles.create(
+                    ProfileCreate(name="Second", settings=ProfileSettings(hub_id="amarr"))
+                )
+
+                async def select_profile(profile_id: UUID) -> None:
+                    async with AsyncSession(engine) as other:
+                        service = ProfileService(
+                            SQLProfileRepository(other), SQLAlchemyUnitOfWork(other)
+                        )
+                        await service.set_default(profile_id)
+
+                await asyncio.gather(
+                    select_profile(first_profile.id), select_profile(second_profile.id)
+                )
+                profile_page = await profiles.find()
+                assert sum(profile.is_default for profile in profile_page.items) == 1
+                assert profile_page.default_profile_id in (first_profile.id, second_profile.id)
+                await session.rollback()
+                await profiles.delete(profile_page.default_profile_id)
+                assert (await profiles.get()).id == default_profile.id
                 assert await market.count(PriceQuery(hub_id="amarr"), NOW) == 1
                 stored_price = (await market.find(PriceQuery(type_ids=[10]), NOW))[0]
                 assert stored_price.buy_price == price().buy_price

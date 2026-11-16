@@ -8,6 +8,7 @@ from app.domains.history.providers import HistoryProvider
 from app.domains.invention.providers import InventionProvider
 from app.domains.manufacturing.providers import ManufacturingProvider
 from app.domains.market.providers import MarketProvider
+from app.domains.profiles.providers import ProfileProvider
 
 
 def create_container(settings: Settings, *extra_providers: Provider) -> AsyncContainer:
@@ -19,6 +20,7 @@ def create_container(settings: Settings, *extra_providers: Provider) -> AsyncCon
         HistoryProvider(),
         ManufacturingProvider(),
         InventionProvider(),
+        ProfileProvider(),
         HealthProvider(),
         *extra_providers,
         context={Settings: settings},

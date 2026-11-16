@@ -8,3 +8,5 @@ from app.domains.invention.tables import InventionRequestTable as InventionReque
 from app.domains.manufacturing.tables import RecipeTable as RecipeTable
 from app.domains.market.tables import MarketPriceTable as MarketPriceTable
 from app.domains.market.tables import MarketStateTable as MarketStateTable
+from app.domains.profiles.tables import ProfileDefaultTable as ProfileDefaultTable
+from app.domains.profiles.tables import ProfileTable as ProfileTable
