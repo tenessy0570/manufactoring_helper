@@ -11,6 +11,10 @@ from app.domains.catalog.gateway import CatalogGateway, EsiEverefCatalogGateway
 from app.domains.catalog.models import CatalogSyncReport
 from app.domains.catalog.repository import ItemTypeRepository, SQLItemTypeRepository
 from app.domains.catalog.service import CatalogService, CatalogSyncService
+from app.domains.market.gateway import EsiMarketGateway, MarketGateway
+from app.domains.market.models import MarketSyncReport
+from app.domains.market.repository import MarketRepository, SQLMarketRepository
+from app.domains.market.service import MarketService, MarketSyncService
 from app.infrastructure.esi import EsiClient
 from app.workers import settings as worker
 from tests.helpers import make_settings
@@ -23,6 +27,10 @@ async def test_catalog_provider_wiring_and_clients_close() -> None:
         assert isinstance(await scope.get(ItemTypeRepository), SQLItemTypeRepository)
         assert isinstance(await scope.get(CatalogService), CatalogService)
         assert isinstance(await scope.get(CatalogSyncService), CatalogSyncService)
+        assert isinstance(await scope.get(MarketGateway), EsiMarketGateway)
+        assert isinstance(await scope.get(MarketRepository), SQLMarketRepository)
+        assert isinstance(await scope.get(MarketService), MarketService)
+        assert isinstance(await scope.get(MarketSyncService), MarketSyncService)
         esi = await scope.get(EsiClient)
         assert esi._http.headers["User-Agent"] == "eve-manufacturing"
     await container.close()
@@ -65,3 +73,33 @@ def test_worker_launch_uses_configured_redis(monkeypatch: pytest.MonkeyPatch) ->
     assert calls[0]["redis_settings"].port == 6380
     assert calls[0]["max_jobs"] == 1
     assert calls[0]["cron_jobs"][0].run_at_startup
+
+
+@pytest.mark.parametrize("fail_jita", [False, True])
+async def test_market_worker_isolates_hubs_and_continues_on_failure(fail_jita: bool) -> None:
+    service = AsyncMock(spec=MarketSyncService)
+
+    async def sync(hub_id: str) -> MarketSyncReport:
+        if fail_jita and hub_id == "jita":
+            raise ConnectionError("offline")
+        return MarketSyncReport(hub_id=hub_id, items=3)
+
+    service.sync_if_stale.side_effect = sync
+    provider = Provider(scope=Scope.REQUEST)
+    provider.provide(lambda: service, provides=MarketSyncService)
+    container = make_async_container(provider)
+    try:
+        if fail_jita:
+            with pytest.raises(RuntimeError, match="jita"):
+                await worker.sync_markets({"container": container})
+        else:
+            assert len(await worker.sync_markets({"container": container})) == 5
+        assert [call.args[0] for call in service.sync_if_stale.await_args_list] == [
+            "jita",
+            "amarr",
+            "dodixie",
+            "rens",
+            "hek",
+        ]
+    finally:
+        await container.close()

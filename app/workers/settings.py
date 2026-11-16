@@ -1,3 +1,4 @@
+import logging
 from datetime import UTC, timedelta
 from typing import Any
 
@@ -10,6 +11,10 @@ from app.core.config import get_settings
 from app.core.di import create_container
 from app.core.logging import configure_logging
 from app.domains.catalog.service import CatalogSyncService
+from app.domains.market.models import HUBS
+from app.domains.market.service import MarketSyncService
+
+logger = logging.getLogger(__name__)
 
 
 async def startup(ctx: dict[str, Any]) -> None:
@@ -30,9 +35,29 @@ async def sync_catalog(ctx: dict[str, Any]) -> dict[str, Any]:
         return (await service.sync_if_stale(ctx["catalog_max_age"])).model_dump()
 
 
+async def sync_markets(ctx: dict[str, Any]) -> list[dict[str, Any]]:
+    container: AsyncContainer = ctx["container"]
+    reports: list[dict[str, Any]] = []
+    failures: list[str] = []
+    for hub in HUBS:
+        try:
+            async with container() as scope:
+                service = await scope.get(MarketSyncService)
+                reports.append((await service.sync_if_stale(hub.hub_id)).model_dump())
+        except Exception:
+            failures.append(hub.hub_id)
+            logger.exception("Market sync failed for %s", hub.hub_id)
+    if failures:
+        raise RuntimeError(f"Market sync failed for hubs: {', '.join(failures)}")
+    return reports
+
+
 class WorkerSettings:
-    functions = (sync_catalog,)
-    cron_jobs = (cron(sync_catalog, hour=4, minute=0, run_at_startup=True),)
+    functions = (sync_catalog, sync_markets)
+    cron_jobs = (
+        cron(sync_catalog, hour=4, minute=0, run_at_startup=True),
+        cron(sync_markets, minute=set(range(0, 60, 5)), run_at_startup=True),
+    )
     on_startup = startup
     on_shutdown = shutdown
     timezone = UTC

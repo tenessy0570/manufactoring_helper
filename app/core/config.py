@@ -1,7 +1,7 @@
 from functools import lru_cache
 from typing import Literal
 
-from pydantic import SecretStr
+from pydantic import Field, SecretStr
 from pydantic_settings import BaseSettings, SettingsConfigDict
 from sqlalchemy.engine import URL
 
@@ -40,6 +40,7 @@ class Settings(BaseSettings):
     http_max_retries: int = 4
 
     catalog_max_age_hours: int = 20
+    market_cache_seconds: int = Field(default=300, ge=1, le=3600)
 
     basic_auth_username: str = ""
     basic_auth_password: SecretStr = SecretStr("")

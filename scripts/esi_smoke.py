@@ -21,6 +21,14 @@ async def main() -> None:
         response = await http.post("https://esi.evetech.net/universe/names/", json=[587])
         print(f"{response.status_code} /universe/names/")
         response.raise_for_status()
+        for region_id in (10000002, 10000043, 10000032, 10000030, 10000042):
+            response = await http.get(
+                f"https://esi.evetech.net/markets/{region_id}/orders/",
+                params={"type_id": 34, "order_type": "all", "page": 1},
+            )
+            response.raise_for_status()
+            pages = int(response.headers["X-Pages"])
+            print(f"{response.status_code} region={region_id} pages={pages}")
 
 
 if __name__ == "__main__":

@@ -8,6 +8,7 @@ from app.core.logging import configure_logging
 from app.core.security import BasicAuthMiddleware
 from app.domains.catalog.router import router as catalog_router
 from app.domains.health.router import router as health_router
+from app.domains.market.router import router as market_router
 
 
 def create_app(
@@ -20,6 +21,7 @@ def create_app(
     app = FastAPI(title="EVE Manufacturing")
     app.include_router(health_router)
     app.include_router(catalog_router)
+    app.include_router(market_router)
     if settings.basic_auth_enabled:
         app.add_middleware(
             BasicAuthMiddleware,

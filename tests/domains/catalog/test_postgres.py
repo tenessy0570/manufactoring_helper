@@ -12,20 +12,26 @@ from testcontainers.core.container import DockerContainer
 from testcontainers.core.wait_strategies import LogMessageWaitStrategy
 
 from app.domains.catalog.repository import SQLItemTypeRepository
+from app.domains.market.models import PriceQuery
+from app.domains.market.repository import SQLMarketRepository
 from tests.domains.catalog.test_catalog import NOW, item
+from tests.domains.market.test_market import price, state
 
 
 @pytest.mark.skipif(os.environ.get("RUN_POSTGRES_TESTS") != "1", reason="Requires Docker")
 async def test_migration_and_upsert_on_postgres() -> None:
     migration = runpy.run_path(str(Path("alembic/versions/0001_catalog.py")))
+    market_migration = runpy.run_path("alembic/versions/0002_market.py")
 
     def upgrade(connection: Connection) -> None:
         with Operations.context(MigrationContext.configure(connection)):
             migration["upgrade"]()
+            market_migration["upgrade"]()
         assert "item_types" in inspect(connection).get_table_names()
 
     def downgrade(connection: Connection) -> None:
         with Operations.context(MigrationContext.configure(connection)):
+            market_migration["downgrade"]()
             migration["downgrade"]()
         assert "item_types" not in inspect(connection).get_table_names()
 
@@ -62,6 +68,20 @@ async def test_migration_and_upsert_on_postgres() -> None:
                 assert stored is not None
                 assert stored.name == "Updated"
                 assert await repository.latest_synced_at() == NOW
+                market = SQLMarketRepository(session)
+                await market.replace(state(), [price()])
+                await market.replace(state("amarr"), [price(hub_id="amarr")])
+                await session.commit()
+                assert await market.state("jita") == state()
+                await market.replace(state(items=205), [price(number) for number in range(205)])
+                await session.commit()
+                assert await market.count(PriceQuery(), NOW) == 205
+                assert await market.count(PriceQuery(hub_id="amarr"), NOW) == 1
+                stored_price = (await market.find(PriceQuery(type_ids=[10]), NOW))[0]
+                assert stored_price.buy_price == price().buy_price
+                await market.replace(state(items=0), [])
+                await session.rollback()
+                assert await market.count(PriceQuery(), NOW) == 205
             async with engine.begin() as connection:
                 await connection.run_sync(downgrade)
         finally:

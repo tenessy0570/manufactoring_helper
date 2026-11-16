@@ -7,15 +7,20 @@ from sqlalchemy import create_engine, inspect
 
 def test_catalog_migration_upgrades_and_downgrades() -> None:
     migration = runpy.run_path("alembic/versions/0001_catalog.py")
+    market = runpy.run_path("alembic/versions/0002_market.py")
     engine = create_engine("sqlite:///:memory:")
     with (
         engine.begin() as connection,
         Operations.context(MigrationContext.configure(connection)),
     ):
         migration["upgrade"]()
+        market["upgrade"]()
         columns = {column["name"] for column in inspect(connection).get_columns("item_types")}
         assert {"type_id", "group_path", "meta_group_id", "is_active"} <= columns
         assert len(inspect(connection).get_indexes("item_types")) == 7
+        assert "market_prices" in inspect(connection).get_table_names()
+        market["downgrade"]()
+        assert "market_prices" not in inspect(connection).get_table_names()
         migration["downgrade"]()
         assert "item_types" not in inspect(connection).get_table_names()
     engine.dispose()
