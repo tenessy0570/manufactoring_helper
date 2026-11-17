@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, PositiveInt
 
 from app.core.repository import FilterClause
 
@@ -58,3 +58,12 @@ class CatalogSyncReport(BaseModel):
     skipped: bool = False
     items: int = 0
     missing_metadata: int = 0
+
+
+class ItemNamesQuery(BaseModel):
+    type_ids: list[PositiveInt] = Field(min_length=1, max_length=1000)
+
+
+class ItemNamesResult(BaseModel):
+    names: dict[int, str]
+    missing_type_ids: list[int]

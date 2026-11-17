@@ -3,8 +3,9 @@ document.addEventListener('alpine:init', () => {
   Alpine.data('manufacturingApp', () => ({
     demo: new URLSearchParams(location.search).get('demo') === '1', loading: false,
     filtersOpen: true, error: '', profileId: '', profiles: [], profileSettings: {},
+    materialNames:{},materialNamesLoading:false,materialNamesMessage:'',preparingMarket:false,preparationMessage:'',
     profileSaveOpen:false,profileName:'',profileError:'',profileWarning:'',storageWarning:'',
-    selected: null, invention: null, inventionMessage: '', inventionLoading: false,
+    selected: null, invention: null, inventionMessage: '', inventionLoading: false, inventionChecking:false, lastInventionCheck:null,
     requestSequence: 0, detailSequence: 0, appliedForm:null, appliedSettings:{}, returnFocus:null, profileNotice:'',
     hubs: [{id:'jita',name:'Jita'},{id:'amarr',name:'Amarr'},{id:'dodixie',name:'Dodixie'},{id:'rens',name:'Rens'},{id:'hek',name:'Hek'}],
     form: {}, page: {items:[],total:0,offset:0,limit:25},
@@ -79,13 +80,17 @@ document.addEventListener('alpine:init', () => {
       catch(_){this.profileError='Could not save this profile. Allow browser storage and try again.';return;}
       this.profiles=[profile,...this.profiles];this.profileId=profile.id;this.profileSaveOpen=false;this.profileName='';this.profileNotice='Profile saved in this browser.';this.saveSettings();
     },
+    fieldLabel(field){
+      const labels={min_profit:'Minimum profit per unit',min_margin:'Minimum margin',min_daily_isk_volume:'Minimum regional turnover',min_product_volume:'Minimum volume at the selected price',days:'History period',sales_tax:'Sales tax',broker_fee:'Broker fee',limit:'Rows per page',hub_id:'Product hub',material_hub_id:'Material purchase hub'};
+      return labels[field]||String(field).replaceAll('_',' ').replace(/^./,v=>v.toUpperCase());
+    },
     async api(url, options={}) {
       const response = await fetch(url, {credentials:'same-origin',...options});
       let data; try {data=await response.json();} catch (_) {data=null;}
       if (!response.ok) {
-        if (response.status===422 && Array.isArray(data?.detail)) throw new Error(data.detail.map(e => e.loc.slice(1).join('.')+': '+e.msg).join(' · '));
+        if (response.status===422 && Array.isArray(data?.detail)) throw new Error(data.detail.map(e => this.fieldLabel(e.loc.at(-1))+': '+e.msg.replace(/^Value error, /,'')).join(' · '));
         if (response.status===401) throw new Error('Authentication required. Sign in and retry.');
-        throw new Error(typeof data?.detail==='string' ? data.detail : 'Could not load market data. Check that the database and workers are running, then retry.');
+        throw new Error(typeof data?.detail==='string' ? data.detail : 'Could not load data from the service. Please try again.');
       }
       return data;
     },
@@ -172,10 +177,64 @@ document.addEventListener('alpine:init', () => {
       if(event.shiftKey&&(document.activeElement===first||document.activeElement===this.$refs.dialog)){event.preventDefault();last.focus();}
       else if(!event.shiftKey&&(document.activeElement===last||document.activeElement===this.$refs.dialog)){event.preventDefault();first.focus();}
     },
-    async openItem(item){this.returnFocus=document.activeElement;document.body.style.overflow='hidden';this.selected=item;this.invention=null;this.inventionMessage='';this.detailSequence++;await this.$nextTick();await new Promise(resolve=>requestAnimationFrame(resolve));if(this.selected?.type_id!==item.type_id)return;(this.$refs.dialog.querySelector('button:not([disabled])')||this.$refs.dialog).focus();if(item.invention_required&&!this.demo) await this.loadInvention();},
+    async openItem(item){this.returnFocus=document.activeElement;document.body.style.overflow='hidden';this.selected=item;this.invention=null;this.inventionMessage='';this.inventionChecking=false;this.inventionLoading=false;this.lastInventionCheck=null;this.detailSequence++;await this.$nextTick();await new Promise(resolve=>requestAnimationFrame(resolve));if(this.selected?.type_id!==item.type_id)return;(this.$refs.dialog.querySelector('button:not([disabled])')||this.$refs.dialog).focus();await Promise.allSettled([this.loadMaterialNames(),item.invention_required&&!this.demo?this.loadInvention():Promise.resolve()]);},
+    fullMoney(value){if(value===null||value===undefined||!Number.isFinite(Number(value)))return 'Not available';return new Intl.NumberFormat('en-US',{maximumFractionDigits:2}).format(Number(value));},
+    materialName(id){return this.materialNames[id]||(this.materialNamesLoading?'Loading name...':'Name unavailable');},
+    async loadMaterialNames(){
+      const seq=this.detailSequence;
+      const ids=[...new Set((this.selected?.materials||[]).map(m=>m.type_id))].filter(id=>!this.materialNames[id]);
+      this.materialNamesMessage='';
+      if(this.demo){this.materialNames={...this.materialNames,34:'Tritanium'};return;}
+      if(!ids.length)return;
+      this.materialNamesLoading=true;
+      try{
+        const params=new URLSearchParams();ids.forEach(id=>params.append('type_ids',id));
+        const result=await this.api('/api/v1/catalog/names?'+params);
+        this.materialNames={...this.materialNames,...result.names};
+        if(seq===this.detailSequence&&result.missing_type_ids.length)this.materialNamesMessage='Some material names are unavailable. Quantities and prices are still shown.';
+      }catch(_){if(seq===this.detailSequence)this.materialNamesMessage='Material names could not be loaded. Quantities and prices are still shown. Try again.';}
+      finally{if(seq===this.detailSequence)this.materialNamesLoading=false;}
+    },
+    demandWarning(code){return {single_buy_order:'Only one buy order is available. Its removal could eliminate this selling opportunity.',single_buy_order_at_best:'Only one order offers the best buy price. The displayed profit may disappear when it fills.',buy_order_count_unknown:'The number of buy orders is unknown. Check available demand before building.',insufficient_buy_volume_for_one_run:'Buy orders at this price cannot absorb one full production run.'}[code]||'Check the available buy demand before building.';},
+    duration(seconds){const n=Number(seconds);if(!Number.isFinite(n)||n<=0)return 'Not available';const h=Math.floor(n/3600),m=Math.floor(n%3600/60);return h?(h+'h '+m+'m'):m?(m+'m '+Math.round(n%60)+'s'):Math.round(n)+'s';},
+    inventionStatus(view){
+      if(!view?.request)return 'No calculation is prepared for this market and pricing choice. Select Prepare calculation to queue it.';
+      const messages={pending:'Queued for background calculation. Select Check status to see when it is ready.',ready:'Calculation ready. Compare the estimated cost per manufactured unit below.',missing_prices:'Some datacore or decryptor prices are missing. Only fully priced alternatives can be compared.',unsupported:'No supported invention route was found for this item.',error:'The last calculation failed. Select Prepare calculation to retry.'};
+      return (messages[view.request.status]||'Calculation status is unavailable.')+(view.stale?' This saved valuation is due for its daily update.':'')+(view.request.result&&!view.request.result.complete_pricing?' Some alternatives have missing prices.':'');
+    },
+    async prepareMarketInvention(){
+      if(this.demo||this.preparingMarket)return;
+      this.preparingMarket=true;this.preparationMessage='';
+      try{await this.api('/api/v1/invention/prepare?'+this.inventionParams(),{method:'POST'});this.preparationMessage='Invention preparation queued for this material market and pricing choice. Select Show results after the background calculation finishes.';}
+      catch(_){this.preparationMessage='Could not request invention preparation. Please try again.';}
+      finally{this.preparingMarket=false;}
+    },
     inventionParams(){return new URLSearchParams({hub_id:this.resultForm.material_hub_id||this.resultForm.hub_id,order_type:this.resultForm.material_order_type,broker_fee:this.resultForm.broker_fee});},
-    async loadInvention(){const id=this.selected?.type_id, seq=this.detailSequence;try{const data=await this.api(`/api/v1/invention/${id}?${this.inventionParams()}`);if(seq!==this.detailSequence||this.selected?.type_id!==id)return;this.invention=data;this.inventionMessage=!data.request?'Not prepared for these settings yet. Prepare a cached calculation to compare decryptors.':`${data.request.status.replaceAll('_',' ')}${data.stale?' · stale':''}${data.request.result&&!data.request.result.complete_pricing?' · some price options are missing':''}`;}catch(e){if(seq===this.detailSequence&&this.selected?.type_id===id)this.inventionMessage=e.message;}},
-    async prepareInvention(){if(!this.selected||this.demo)return;const id=this.selected.type_id;this.inventionLoading=true;try{await this.api(`/api/v1/invention/${id}/prepare?${this.inventionParams()}`,{method:'POST'});if(this.selected?.type_id===id){await this.loadInvention();this.inventionMessage='Preparation requested. The worker will calculate and cache this result. Reopen these details or refresh to check progress.';}}catch(e){this.inventionMessage=e.message;}finally{this.inventionLoading=false;}},
+    get inventionReady(){return this.invention?.request?.status==='ready'&&!this.invention.stale;},
+    timeLabel(value){if(!value)return 'Not available';const date=new Date(value);return Number.isNaN(date.getTime())?'Not available':new Intl.DateTimeFormat('en-US',{month:'short',day:'numeric',hour:'2-digit',minute:'2-digit',second:'2-digit',timeZoneName:'short'}).format(date);},
+    async loadInvention(){
+      if(!this.selected||this.demo||this.inventionChecking)return;
+      const id=this.selected.type_id,seq=this.detailSequence;
+      this.inventionChecking=true;this.inventionMessage='Checking saved calculation...';
+      try{
+        const data=await this.api(`/api/v1/invention/${id}?${this.inventionParams()}`);
+        if(seq!==this.detailSequence||this.selected?.type_id!==id)return;
+        this.invention=data;this.lastInventionCheck=new Date().toISOString();this.inventionMessage='Status checked. '+this.inventionStatus(data);
+      }catch(_){if(seq===this.detailSequence)this.inventionMessage='Could not check calculation status. Please try again.';}
+      finally{if(seq===this.detailSequence)this.inventionChecking=false;}
+    },
+    async prepareInvention(){
+      if(!this.selected||this.demo||this.inventionLoading||this.inventionChecking)return;
+      const id=this.selected.type_id,seq=this.detailSequence;
+      this.inventionLoading=true;this.inventionMessage='Requesting a background calculation...';
+      try{
+        const data=await this.api(`/api/v1/invention/${id}/prepare?${this.inventionParams()}`,{method:'POST'});
+        if(seq!==this.detailSequence||this.selected?.type_id!==id)return;
+        this.invention=data;this.lastInventionCheck=new Date().toISOString();
+        this.inventionMessage=data.queued?'Calculation queued. Select Check status to follow its progress.':data.request?.status==='ready'&&!data.stale?'This calculation is already prepared and current. The saved daily result is being reused; no extra job was created.':data.request?.status==='unsupported'?'No supported invention route is available.': 'Preparation is already pending or queued. Select Check status to follow its progress.';
+      }catch(_){if(seq===this.detailSequence)this.inventionMessage='Could not request calculation preparation. Please try again.';}
+      finally{if(seq===this.detailSequence)this.inventionLoading=false;}
+    },
     demoPage(form=this.form,offset=this.page.offset){
       const seeds=[['Damage Control II',2048,2,137000,91000,66.4,9200000,890000000],['Hobgoblin II',2456,2,173000,62000,35.8,6800000,1540000000],['Medium Core Defense Field Extender II',31796,2,820000,244000,29.7,5300000,612000000],['Warrior II',2488,2,206000,73000,35.4,4100000,940000000],['Scourge Heavy Missile',209,1,48,17,35.4,3600000,2640000000],['Gyrostabilizer II',519,2,610000,128000,20.9,2900000,731000000],['Large Shield Extender II',3841,2,936000,164000,17.5,2100000,483000000]];
       let items=seeds.map((s,i)=>({_category:i===2?'Rigs':[1,3].includes(i)?'Drones':i===4?'Ammunition & Charges':'Modules',name:s[0],type_id:s[1],meta_group_id:s[2],total_cost_per_unit:String(s[3]),material_cost_per_unit:String(s[3]*0.96),job_cost_per_unit:String(s[3]*0.04),profit_per_unit:String(s[4]),margin_pct:String(s[5]),rank_profit_per_day:String(s[6]),profit_per_day:String(s[6]*1.2),daily_isk_volume:String(s[7]),units:1,seconds:'7200',revenue_per_unit:String(s[3]+s[4]),invention_required:s[2]===2,invention_included:false,invention_cost_per_unit:'0',sales_tax_per_unit:'0',sales_broker_fee_per_unit:'0',procurement_broker_fee_per_unit:'0',stale:i===5,demand_warnings:i===4?['single_buy_order_at_best']:[],product_volume_at_price:100,full_runs_at_buy_price:100,production_limit_units:100,profit_at_current_buy_price:String(s[4]*100),materials:[{type_id:34,quantity:100,price:String(s[3]*0.96/100),cost:String(s[3]*0.96)}]}));

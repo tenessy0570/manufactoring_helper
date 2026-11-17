@@ -141,6 +141,41 @@ def main() -> None:
                 path = Path(tempfile.gettempdir()) / f"eve-final-{label}.png"
                 path.write_bytes(base64.b64decode(shot))
                 print(path)
+            print(
+                evaluate("""(async()=>{const a=Alpine.$data(document.body);
+                await a.openItem(a.page.items[0]);
+                a.invention=JSON.parse(sessionStorage.getItem('inventionFixture'));
+                await a.$nextTick();const panel=a.$refs.dialog;
+                if(panel.scrollWidth>panel.clientWidth+1)throw Error('Dialog overflow');
+                panel.querySelector('.invention-box').scrollIntoView({block:'start'});
+                return 'PASS: nine invention options fit the mobile dialog';})()""")
+            )
+            shot = call("Page.captureScreenshot", {"format": "png"})["result"]["data"]
+            path = Path(tempfile.gettempdir()) / "eve-invention-mobile.png"
+            path.write_bytes(base64.b64decode(shot))
+            print(path)
+            call(
+                "Emulation.setDeviceMetricsOverride",
+                {
+                    "width": 1440,
+                    "height": 1100,
+                    "deviceScaleFactor": 1,
+                    "mobile": False,
+                },
+            )
+            print(
+                evaluate("""(()=>{const panel=Alpine.$data(document.body).$refs.dialog;
+                panel.querySelector('.invention-box').scrollIntoView({block:'start'});
+                const rows=[...panel.querySelectorAll('.invention-table tbody tr')];
+                const right=rows[0].cells[2].getBoundingClientRect().right;
+                if(rows.some(r=>Math.abs(r.cells[2].getBoundingClientRect().right-right)>1))
+                  throw Error('Misaligned costs');
+                return 'PASS: desktop invention columns align';})()""")
+            )
+            shot = call("Page.captureScreenshot", {"format": "png"})["result"]["data"]
+            path = Path(tempfile.gettempdir()) / "eve-invention-desktop.png"
+            path.write_bytes(base64.b64decode(shot))
+            print(path)
             if errors:
                 raise RuntimeError(str(errors))
             print("PASS: no uncaught JavaScript errors")

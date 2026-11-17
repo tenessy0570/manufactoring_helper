@@ -13,8 +13,8 @@ create the required tables and an initial profile. The English web interface is 
 with a unified filter panel, browser profiles and item details. Interactive API documentation
 is available at `/docs`.
 
-Latest validation on Windows/Python 3.12: 253 tests passed, 1 optional PostgreSQL test skipped
-in the default suite, 98.71% combined coverage. The PostgreSQL test passed separately, including
+Latest validation on Windows/Python 3.12: 284 tests passed, 1 optional PostgreSQL test skipped
+in the default suite, 98.38% combined coverage. The PostgreSQL test passed separately, including
 migrations, cache persistence and concurrent profile selection. Ruff, formatting and strict
 mypy passed. Public ESI/EVE Ref smoke probes passed; a complete production Compose deployment
 has not been validated end to end. These are recorded results, not checks run on every startup.
@@ -350,7 +350,7 @@ The UI has one item-category selector: All categories, Rigs, Ammo, Drones, Modul
 
 ## Interface workflow
 
-All controls live in one filter form, grouped into items, market prices, profit/demand, calculation assumptions and result ordering. Apply filters updates the results; unsaved filter edits are shown explicitly and do not relabel existing results. Reload results reads the last applied query from saved market data; source refresh remains a background task. Pagination is disabled until edited filters are applied. Browser profiles can be created, updated and deleted with confirmation; deleting a profile keeps the current filters. The item dialog supports Escape, keyboard focus containment and focus restoration. Mobile layouts keep horizontal scrolling inside the table.
+All controls live in one filter form, grouped into items, market prices, profit/demand, calculation assumptions and result ordering. Show results applies the current filters and reloads saved results; unsaved filter edits are shown explicitly and do not relabel existing results. The duplicate top-level reload button was removed; source refresh remains a background task. Pagination is disabled until edited filters are applied. Browser profiles can be created, updated and deleted with confirmation; deleting a profile keeps the current filters. The item dialog supports Escape, keyboard focus containment and focus restoration. Mobile layouts keep horizontal scrolling inside the table.
 
 Frontend regression checks (isolated Edge/Chromium, no live database):
 
@@ -366,3 +366,15 @@ Legacy science/encryption values in API requests, queued jobs and saved profiles
 Refresh schedule: market orders hourly at :00 UTC; regional-history planning daily at 12:15 UTC (19:15 Tomsk); invention valuation planning daily at 12:30 UTC (19:30 Tomsk). Startup also checks stale data. A valuation is retained until the next daily refresh boundary; hourly market refreshes do not automatically reprice it. Explicit preparation of a new setting combination remains available. ESI expiry still marks market snapshots stale; polling less often does not change ESI freshness.
 
 Daily valuation expiry is aligned to 12:30 UTC, rather than job-finish time plus 24 hours: otherwise queue delay can make the next daily planner skip a still-fresh result for another full day. Existing valuation expiry timestamps must be aligned during deployment. Latest checks: 280 passed, 1 skipped; Ruff, format and mypy passed.
+
+
+## Readable item details
+
+Materials show English inventory names and icons, quantities and readable ISK prices per production run. Per-unit build costs, purchase broker fees, sales tax and sale broker fees are listed separately. GET /api/v1/catalog/names accepts repeated positive type_ids (1-1000 IDs), resolves names in one public ESI request and caches complete batches for seven days through Redis/RAM. Incomplete lookups are returned with missing_type_ids and are not cached, so retry can recover missing names. Name-service failures do not block the financial breakdown.
+
+The results help explains margin, per-slot daily profit, regional turnover and stale inputs. Buy-order warnings and invention states use plain English. Missing-input notices distinguish recipes, prices and invention; a separate button queues invention preparation for the applied material market and pricing choice.
+
+Monetary displays use at most two decimal places without trailing zeroes. This rounding affects display only; backend Decimal calculations and stored values retain their precision.
+
+
+Invention panel layout/feedback: alternatives use aligned columns with decryptor, per-attempt success chance and estimated ISK per finished unit; the cheapest priced alternative is marked. Mobile rows become labeled cards and the dialog cannot grow beyond the viewport. Check status shows a loading state, response feedback and a last-checked timestamp; saved/expiry timestamps are displayed in the browser timezone. Prepare calculation consumes the POST response and distinguishes queued work, cached-ready reuse and unsupported routes. Fresh ready results show a disabled Already prepared action. API logs confirmed the prior buttons sent GET 200 and POST 202; lack of visible feedback and cache reuse made them appear inert. Added browser checks for progress, queued/cached responses and nine-option mobile layout. No financial formulas or refresh cadence changed. Not committed.

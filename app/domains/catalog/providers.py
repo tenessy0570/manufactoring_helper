@@ -7,6 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.config import Settings
 from app.core.repository import UnitOfWork
 from app.domains.catalog.gateway import CatalogGateway, EsiEverefCatalogGateway
+from app.domains.catalog.names import ItemNameService
 from app.domains.catalog.repository import ItemTypeRepository, SQLItemTypeRepository
 from app.domains.catalog.selector import MarketTreeSelector
 from app.domains.catalog.service import CatalogService, CatalogSyncService
@@ -49,6 +50,7 @@ class CatalogProvider(Provider):
     def repository(self, session: AsyncSession) -> ItemTypeRepository:
         return SQLItemTypeRepository(session)
 
+    names = provide(ItemNameService, scope=Scope.APP)
     service = provide(CatalogService, scope=Scope.REQUEST)
 
     @provide(scope=Scope.REQUEST)

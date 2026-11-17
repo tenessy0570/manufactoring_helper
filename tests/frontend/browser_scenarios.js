@@ -37,6 +37,43 @@ async function checkFrontendWorkflow() {
   await app.openItem(app.page.items[0]);
   await app.$nextTick();
   check(document.querySelector('main').inert, 'Dialog isolates background controls');
+  check(app.$refs.dialog.querySelector('.material-name').textContent.includes('Tritanium'), 'Materials have readable names');
+  const originalNameApi = app.api;
+  try {
+    app.demo = false;
+    delete app.materialNames[34];
+    app.api = async () => { throw new Error('Name source unavailable'); };
+    await app.loadMaterialNames();
+    check(app.materialNamesMessage && app.selected.type_id === 31796, 'Name failure keeps item costs visible');
+    app.api = async () => ({names: {'34': 'Tritanium'}, missing_type_ids: []});
+    await app.loadMaterialNames();
+    check(!app.materialNamesMessage && app.materialName(34) === 'Tritanium', 'Material name retry recovers');
+  } finally {
+    app.demo = true;
+    app.api = originalNameApi;
+  }
+  const inventionApi = app.api;
+  const options=['None','Accelerant','Attainment','Augmentation','Optimized Attainment','Optimized Augmentation','Parity','Process','Symmetry'].map((name,i)=>({plan:{decryptor_name:name,decryptor_id:i||null,probability:0.487+i/100},expected_cost_per_unit:String(47000+i*12345.6789)}));
+  const ready={request:{status:'ready',updated_at:new Date().toISOString(),expires_at:new Date(Date.now()+86400000).toISOString(),result:{options,best:options[0],complete_pricing:true}},stale:false,queued:false};
+  sessionStorage.setItem('inventionFixture',JSON.stringify(ready));
+  try {
+    app.demo=false;
+    let finishCheck;
+    app.api=()=>new Promise(resolve=>{finishCheck=resolve;});
+    const checking=app.loadInvention();
+    check(app.inventionChecking,'Check status shows progress');
+    finishCheck(ready);await checking;
+    check(!app.inventionChecking&&app.lastInventionCheck&&app.inventionReady,'Check status shows ready result and timestamp');
+    app.invention=null;
+    app.api=async()=>({...ready,queued:true,request:{...ready.request,status:'pending'}});
+    await app.prepareInvention();
+    check(app.inventionMessage.includes('queued'),'Prepare explains queued job');
+    app.api=async()=>ready;
+    await app.prepareInvention();
+    check(app.inventionMessage.includes('no extra job'),'Fresh cache explains why no new job is created');
+  } finally {app.demo=true;app.api=inventionApi;}
+  check(!app.demandWarning('single_buy_order').includes('_'), 'Demand warnings are explained');
+  check(app.inventionStatus({request:{status:'missing_prices'},stale:false}).includes('prices'), 'Invention status is explained');
   app.$refs.dialog.dispatchEvent(new KeyboardEvent('keydown', {key: 'Tab', bubbles: true}));
   check(document.activeElement.getAttribute('aria-label') === 'Close item details', 'Dialog traps Tab');
   window.dispatchEvent(new KeyboardEvent('keydown', {key: 'Escape'}));
