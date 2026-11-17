@@ -111,7 +111,10 @@ class InventionSyncService:
         )
         quotes = await self._manufacturing.quotes(settings.hub_id, material_ids)
         result = price_plans(plan.plans, quotes, settings)
-        expires_at = min([plan.expires_at, *(quote.expires_at for quote in quotes.values())])
+        # Valuation refresh follows the daily policy, independently of ESI page expiry.
+        expires_at = now.astimezone(UTC).replace(hour=12, minute=30, second=0, microsecond=0)
+        if expires_at <= now:
+            expires_at += timedelta(days=1)
         status = (
             "ready"
             if result.best is not None
@@ -119,8 +122,6 @@ class InventionSyncService:
             if plan.plans
             else "unsupported"
         )
-        if not result.complete_pricing:
-            expires_at = min(expires_at, now + timedelta(seconds=60))
         request = InventionRequest(
             key=settings.key,
             settings=settings,

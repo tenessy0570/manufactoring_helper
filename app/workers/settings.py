@@ -65,10 +65,10 @@ class WorkerSettings:
     )
     cron_jobs = (
         cron(sync_catalog, hour=4, minute=0, run_at_startup=True),
-        cron(sync_markets, minute=set(range(0, 60, 5)), run_at_startup=True),
-        cron(enqueue_history, minute=15, run_at_startup=True),
+        cron(sync_markets, minute=0, run_at_startup=True),
+        cron(enqueue_history, hour=12, minute=15, run_at_startup=True),
         cron(enqueue_manufacturing, minute=20, run_at_startup=True),
-        cron(enqueue_inventions, minute=set(range(0, 60, 5)), second=30, run_at_startup=True),
+        cron(enqueue_inventions, hour=12, minute=30, run_at_startup=True),
     )
     on_startup = startup
     on_shutdown = shutdown

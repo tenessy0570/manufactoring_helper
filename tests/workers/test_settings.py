@@ -133,3 +133,16 @@ async def test_market_worker_isolates_hubs_and_continues_on_failure(fail_jita: b
         ]
     finally:
         await container.close()
+
+
+def test_owner_refresh_schedule() -> None:
+    jobs = worker.WorkerSettings.cron_jobs
+    markets = next(j for j in jobs if j.name == "cron:sync_markets")
+    history = next(j for j in jobs if j.name == "cron:enqueue_history")
+    invention = next(j for j in jobs if j.name == "cron:enqueue_inventions")
+    assert markets.hour is None
+    assert markets.minute == 0
+    assert history.hour == 12
+    assert history.minute == 15
+    assert invention.hour == 12
+    assert invention.minute == 30

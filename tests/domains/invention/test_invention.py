@@ -244,7 +244,7 @@ async def test_source_is_cached_across_hubs_and_repricing_never_refetches(
         gateway,
         manufacturing,
         SQLAlchemyUnitOfWork(session),
-        clock=lambda: NOW + timedelta(hours=1),
+        clock=lambda: NOW + timedelta(days=1),
     )
     result = await later.sync(settings())
     gateway.fetch.assert_awaited_once()
@@ -459,3 +459,47 @@ def test_default_valuation_key_keeps_existing_prepared_cache() -> None:
     expected = hashlib.sha256(json.dumps(previous, sort_keys=True).encode()).hexdigest()
     assert settings().key == expected
     assert settings().plan_key == f"v1:{settings().type_id}:5:4"
+
+
+async def test_daily_valuation_does_not_repeat_when_market_quotes_expire(
+    session: AsyncSession,
+) -> None:
+    repository = SQLInventionRepository(session)
+    gateway = AsyncMock(spec=InventionGateway)
+    gateway.fetch.return_value = [plan()]
+    manufacturing = AsyncMock(spec=ManufacturingRepository)
+    manufacturing.quotes.return_value = {34: price(34, expires_at=NOW - timedelta(minutes=1))}
+    service = InventionSyncService(
+        repository, gateway, manufacturing, SQLAlchemyUnitOfWork(session), clock=lambda: NOW
+    )
+    first = await service.sync(settings())
+    assert first.expires_at == NOW.replace(hour=12, minute=30)
+    later = InventionSyncService(
+        repository,
+        gateway,
+        manufacturing,
+        SQLAlchemyUnitOfWork(session),
+        clock=lambda: NOW + timedelta(hours=11),
+    )
+    assert await later.sync(settings()) == first
+    manufacturing.quotes.assert_awaited_once()
+    gateway.fetch.assert_awaited_once()
+
+
+async def test_valuation_expires_at_next_daily_refresh_not_after_job_finish(
+    session: AsyncSession,
+) -> None:
+    repository = SQLInventionRepository(session)
+    gateway = AsyncMock(spec=InventionGateway)
+    gateway.fetch.return_value = [plan()]
+    manufacturing = AsyncMock(spec=ManufacturingRepository)
+    manufacturing.quotes.return_value = {34: price(34)}
+    service = InventionSyncService(
+        repository,
+        gateway,
+        manufacturing,
+        SQLAlchemyUnitOfWork(session),
+        clock=lambda: NOW.replace(hour=12, minute=33),
+    )
+    result = await service.sync(settings())
+    assert result.expires_at == (NOW + timedelta(days=1)).replace(hour=12, minute=30)

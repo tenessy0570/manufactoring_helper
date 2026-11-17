@@ -110,7 +110,7 @@ run `RUN_POSTGRES_TESTS=1 pytest` (PowerShell: `$env:RUN_POSTGRES_TESTS='1'; pyt
 Rens and Hek. `GET /api/v1/market/prices?hub_id=amarr` selects a hub; Jita is the default.
 Each hub has its own snapshot and freshness timestamps. Structure markets are not included.
 
-The worker checks all five hubs every five minutes and at startup, skipping snapshots until
+The worker checks all five hubs hourly and at startup, skipping snapshots until
 their ESI `Expires` time. `MARKET_CACHE_SECONDS` (default 300) caps the refresh interval and
 provides a fallback for missing or malformed expiration headers. A failure in one hub does
 not stop the remaining hubs. Full regional order books are read page by page; only compact
@@ -238,8 +238,8 @@ Source calls use the shared bounded industry client (three concurrent requests b
 
 Valuations are separate by hub, material buy/sell side and broker fee. Price updates
 reuse saved plans, without downloading the blueprints/options again. Their expiry is capped
-by both source and market-price expiry; requested valuations refresh through the scheduler
-every five minutes. Default backfill prepares Jita/sell with science 5 and encryption 4;
+by the daily valuation boundary at 12:30 UTC, independently of source/price cache expiry; requested valuations refresh through the scheduler
+daily at 12:30 UTC and at startup. Default backfill prepares Jita/sell with science 5 and encryption 4;
 other settings are prepared on request. The initial backfill can take time.
 
 API examples:
@@ -361,3 +361,8 @@ Frontend regression checks (isolated Edge/Chromium, no live database):
 Pass `--browser` to specify another Chromium executable. The runner starts and stops its own preview and browser, uses a temporary browser profile, checks the main workflow and saves desktop/mobile screenshots in the temporary directory.
 
 Legacy science/encryption values in API requests, queued jobs and saved profiles are ignored; they no longer create separate source plans or valuation keys. Existing default 5/4 cache keys are preserved.
+
+
+Refresh schedule: market orders hourly at :00 UTC; regional-history planning daily at 12:15 UTC (19:15 Tomsk); invention valuation planning daily at 12:30 UTC (19:30 Tomsk). Startup also checks stale data. A valuation is retained until the next daily refresh boundary; hourly market refreshes do not automatically reprice it. Explicit preparation of a new setting combination remains available. ESI expiry still marks market snapshots stale; polling less often does not change ESI freshness.
+
+Daily valuation expiry is aligned to 12:30 UTC, rather than job-finish time plus 24 hours: otherwise queue delay can make the next daily planner skip a still-fresh result for another full day. Existing valuation expiry timestamps must be aligned during deployment. Latest checks: 280 passed, 1 skipped; Ruff, format and mypy passed.
