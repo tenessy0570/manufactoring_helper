@@ -60,6 +60,22 @@ async function checkFrontendWorkflow() {
   await app.openItem(app.page.items[0]);
   await app.$nextTick();
   check(document.querySelector('main').inert, 'Dialog isolates background controls');
+  check(app.historyData.days.length===Number(app.resultForm.days),'History matches chosen period');
+  check(app.historyChart('average').path.includes('L'),'Price chart has line segments');
+  check(app.historyChart('volume').path.includes('Z'),'Volume chart has bars');
+  check(document.querySelectorAll('.combined-history svg').length===1,'Price and volume share one chart');
+  check(document.querySelectorAll('.combined-history svg path').length===3,'Combined chart includes grid, volume bars and price line');
+  const savedHistory=app.historyData,historyApi=app.api;
+  try{
+    app.demo=false;app.api=async()=>{throw new Error('History offline');};
+    await app.loadHistory();check(app.historyError&&app.selected,'History failure leaves item details usable');
+    app.api=async()=>({stale:false,state:{},days:[]});await app.loadHistory();
+    check(!app.historyError&&!app.historyChart('average').path,'Empty history shows no invented prices');
+    app.api=async()=>({stale:true,days:[{date:'2026-01-01',average:'100',volume:0},{date:'2026-01-03',average:'100',volume:5}]});await app.loadHistory();
+    check(app.historyChart('average').path.split('M').length===3,'Missing dates break price line');
+    check(!app.historyChart('volume').path.includes('NaN'),'Zero volume produces finite bars');
+  }finally{app.demo=true;app.api=historyApi;app.historyData=savedHistory;}
+
   check(app.demandDuration({seconds:'7200',full_runs_at_buy_price:100}) === '6d 1h 36m', 'One-line time uses full runs and Industry V / Advanced Industry III');
   check(app.demandDuration({seconds:'7200',full_runs_at_buy_price:0}) === '0s', 'No complete runs takes zero time');
   check(app.demandDuration({seconds:'7200',full_runs_at_buy_price:null}) === 'Not available', 'Sell pricing does not invent a demand duration');

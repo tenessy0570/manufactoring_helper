@@ -434,3 +434,11 @@ on hub/result changes; manual Refresh status is available. Counts are saved cove
 that a worker is currently running. This read-only endpoint performs no upstream downloads.
 
 Market snapshot coverage shows elapsed hours/minutes instead of absolute date; exact timestamp remains in tooltip. Elapsed display updates on the 30-second visible-page tick.
+
+Item details include SVG charts of saved regional daily average price and traded volume, using the applied hub and history period. UTC dates, independent price/volume scales, pointer inspection and an expandable exact-values table are included. Missing dates break price lines; empty/error/stale states are explicit and do not block costs. No new dependencies or upstream requests; the existing saved-history API is used.
+
+History charts now share one plot: muted blue volume bars behind a green average-price line, left ISK axis/right units axis, matching legend, shared dates and day inspection. Exact-values table retained.
+
+Owner cancelled remaining blueprint-selection and server-profile UI stages. Only Docker build optimization remains in scope: dependencies extracted directly from pyproject.toml into an early BuildKit-cached pip layer; app copied afterward, installed offline with no dependency resolution/build isolation. Code/UI edits reuse dependency layer; pyproject changes invalidate it. First build populates cache.
+
+Docker optimization verified: normal compose built all five app images; source-only app.js change rebuilt a separate verification image in 6.8 seconds with dependency step CACHED and no downloads. Temporary source modification restored byte-for-byte. All five application containers recreated and healthy. Other pending feature stages cancelled by owner. Changes uncommitted.

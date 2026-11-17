@@ -3,6 +3,7 @@ document.addEventListener('alpine:init', () => {
   Alpine.data('manufacturingApp', () => ({
     demo: new URLSearchParams(location.search).get('demo') === '1', loading: false,
     filtersOpen: true, error: '', profileId: '', profiles: [], profileSettings: {},
+    historyData:null,historyLoading:false,historyError:'',historyHoverText:'',
     materialNames:{},materialNamesLoading:false,materialNamesMessage:'',preparingMarket:false,preparationMessage:'',
     profileSaveOpen:false,profileName:'',profileError:'',profileWarning:'',storageWarning:'',
     selected: null, invention: null, inventionMessage: '', inventionLoading: false, inventionChecking:false, lastInventionCheck:null,
@@ -189,7 +190,37 @@ document.addEventListener('alpine:init', () => {
       if(event.shiftKey&&(document.activeElement===first||document.activeElement===this.$refs.dialog)){event.preventDefault();last.focus();}
       else if(!event.shiftKey&&(document.activeElement===last||document.activeElement===this.$refs.dialog)){event.preventDefault();first.focus();}
     },
-    async openItem(item){this.returnFocus=document.activeElement;document.body.style.overflow='hidden';this.selected=item;this.invention=null;this.inventionMessage='';this.inventionChecking=false;this.inventionLoading=false;this.lastInventionCheck=null;this.detailSequence++;await this.$nextTick();await new Promise(resolve=>requestAnimationFrame(resolve));if(this.selected?.type_id!==item.type_id)return;(this.$refs.dialog.querySelector('button:not([disabled])')||this.$refs.dialog).focus();await Promise.allSettled([this.loadMaterialNames(),item.invention_required&&!this.demo?this.loadInvention():Promise.resolve()]);},
+    async openItem(item){this.returnFocus=document.activeElement;document.body.style.overflow='hidden';this.selected=item;this.invention=null;this.inventionMessage='';this.inventionChecking=false;this.inventionLoading=false;this.lastInventionCheck=null;this.detailSequence++;await this.$nextTick();await new Promise(resolve=>requestAnimationFrame(resolve));if(this.selected?.type_id!==item.type_id)return;(this.$refs.dialog.querySelector('button:not([disabled])')||this.$refs.dialog).focus();await Promise.allSettled([this.loadHistory(),this.loadMaterialNames(),item.invention_required&&!this.demo?this.loadInvention():Promise.resolve()]);},
+    async loadHistory(){
+      if(!this.selected)return;
+      const seq=this.detailSequence,id=this.selected.type_id;
+      this.historyData=null;this.historyError='';this.historyHoverText='';this.historyLoading=true;
+      try{
+        const data=this.demo?{stale:false,days:Array.from({length:Number(this.resultForm.days)},(_,i)=>({date:new Date(Math.floor(Date.now()/86400000)*86400000-(Number(this.resultForm.days)-i)*86400000).toISOString().slice(0,10),average:String(100000+i*1000+Math.sin(i)*5000),volume:100+i*3}))}:await this.api('/api/v1/market/history/'+id+'?'+new URLSearchParams({hub_id:this.resultForm.hub_id,days:this.resultForm.days}));
+        if(seq!==this.detailSequence)return;
+        this.historyData={...data,days:[...data.days].sort((a,b)=>a.date.localeCompare(b.date))};
+      }catch(_){if(seq===this.detailSequence)this.historyError='Trading history could not be loaded. Your cost calculations are still available.';}
+      finally{if(seq===this.detailSequence)this.historyLoading=false;}
+    },
+    historyChart(metric){
+      const days=(this.historyData?.days||[]).filter(d=>Number.isFinite(Number(d[metric])));
+      if(!days.length)return {path:'',min:0,max:0,first:'',last:''};
+      const values=days.map(d=>Number(d[metric])),low=metric==='volume'?0:Math.min(...values),high=Math.max(...values),padding=metric==='volume'?0:Math.max((high-low)*0.05,high*0.01,1),min=Math.max(0,low-padding),max=Math.max(min+1,high+padding);
+      const first=Date.parse(days[0].date),last=Date.parse(days.at(-1).date),span=Math.max(86400000,last-first);
+      let previous=null;
+      const path=days.map(d=>{const time=Date.parse(d.date),x=last===first?300:10+(time-first)/span*580,y=150-(Number(d[metric])-min)/(max-min)*140;
+        if(metric==='volume'){const w=Math.max(1,Math.min(12,580/(span/86400000+1)*0.7));return 'M'+(x-w/2)+',150V'+y+'h'+w+'V150Z';}
+        if(days.length===1)return 'M297,'+y+'L303,'+y;
+        const command=previous===null||time-previous>86400000?'M':'L';previous=time;return command+x+','+y;
+      }).join(' ');
+      return {path,min,max,first:days[0].date,last:days.at(-1).date};
+    },
+    inspectHistory(event){
+      const days=this.historyData?.days||[];if(!days.length)return;
+      const rect=event.currentTarget.getBoundingClientRect(),ratio=Math.max(0,Math.min(1,(event.clientX-rect.left)/rect.width)),first=Date.parse(days[0].date),last=Date.parse(days.at(-1).date),target=first+(last-first)*ratio;
+      const day=days.reduce((a,b)=>Math.abs(Date.parse(a.date)-target)<Math.abs(Date.parse(b.date)-target)?a:b);
+      this.historyHoverText=day.date+' | '+this.fullMoney(day.average)+' ISK average | '+Number(day.volume).toLocaleString('en-US')+' units traded';
+    },
     fullMoney(value){if(value===null||value===undefined||!Number.isFinite(Number(value)))return 'Not available';return new Intl.NumberFormat('en-US',{maximumFractionDigits:2}).format(Number(value));},
     materialName(id){return this.materialNames[id]||(this.materialNamesLoading?'Loading name...':'Name unavailable');},
     async loadMaterialNames(){
