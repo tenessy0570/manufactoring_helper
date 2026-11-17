@@ -20,6 +20,7 @@ async function checkFrontendWorkflow() {
   await app.$nextTick();
   check(document.querySelector('[aria-label="Trade hub"]').value === app.form.hub_id, 'Hub select shows actual selection');
 
+  app.form.buy_demand_tolerance_pct='2.5';
   app.profileName = 'Browser check ' + Date.now();
   app.saveBrowserProfile();
   check(!app.profileError && app.browserProfile, 'Save named browser profile');
@@ -28,15 +29,23 @@ async function checkFrontendWorkflow() {
   app.form.tech = '1';
   await app.applyProfile();
   check(app.form.tech === '2', 'Update and reapply profile');
+  check(app.form.buy_demand_tolerance_pct==='2.5','Price range saved in profile');
   app.form.category = 'Rigs';
   await app.load(false, 0);
   check(app.page.total === 1 && app.page.items[0].type_id === 31796, 'T2 rig selection');
+  app.form.product_order_type='buy';app.form.rank_by='demand_profit';app.form.buy_demand_tolerance_pct='2.5';
+  await app.load(false,0);
+  check(app.page.items[0].profit_at_current_buy_price!==null,'Demand profit is available with buy pricing');
 
   const row = document.querySelector('tbody tr');
   row.focus();
   await app.openItem(app.page.items[0]);
   await app.$nextTick();
   check(document.querySelector('main').inert, 'Dialog isolates background controls');
+  check(app.demandDuration({seconds:'7200',full_runs_at_buy_price:100}) === '6d 1h 36m', 'One-line time uses full runs and Industry V / Advanced Industry III');
+  check(app.demandDuration({seconds:'7200',full_runs_at_buy_price:0}) === '0s', 'No complete runs takes zero time');
+  check(app.demandDuration({seconds:'7200',full_runs_at_buy_price:null}) === 'Not available', 'Sell pricing does not invent a demand duration');
+  check(app.duration(59.9) === '1m 0s', 'Duration rounds across minute boundaries');
   check(app.$refs.dialog.querySelector('.material-name').textContent.includes('Tritanium'), 'Materials have readable names');
   const originalNameApi = app.api;
   try {

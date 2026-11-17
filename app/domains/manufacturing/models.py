@@ -34,6 +34,9 @@ class ManufacturingQuery(LiquidityQuery):
     @classmethod
     def discard_legacy_skill_settings(cls, value: Any) -> Any:
         if isinstance(value, dict):
+            value = dict(value)
+            if value.get("buy_demand_tolerance_pct") in (None, ""):
+                value["buy_demand_tolerance_pct"] = 5
             return {
                 key: item
                 for key, item in value.items()
@@ -41,6 +44,7 @@ class ManufacturingQuery(LiquidityQuery):
             }
         return value
 
+    buy_demand_tolerance_pct: Decimal = Field(default=Decimal(5), ge=0, le=100, allow_inf_nan=False)
     include_invention_cost: bool = False
     material_order_type: Literal["buy", "sell"] = "sell"
     product_order_type: Literal["buy", "sell"] = "sell"
@@ -58,7 +62,7 @@ class ManufacturingQuery(LiquidityQuery):
     min_product_volume: int | None = Field(default=None, ge=0)
     require_full_run_demand: bool = False
     exclude_fragile_buy_demand: bool = False
-    rank_by: Literal["profit_per_day", "margin", "profit"] = "profit_per_day"
+    rank_by: Literal["profit_per_day", "margin", "profit", "demand_profit"] = "profit_per_day"
 
     @model_validator(mode="after")
     def profit_ranges(self) -> "ManufacturingQuery":
@@ -116,6 +120,10 @@ class Opportunity(ProfitCalculation):
     profit_at_current_buy_price: Decimal | None
     demand_limited_profit_per_day: Decimal | None
     rank_profit_per_day: Decimal
+    buy_demand_volume: int | None = None
+    buy_demand_min_price: Decimal | None = None
+    buy_demand_average_price: Decimal | None = None
+    buy_demand_depth_available: bool | None = None
     demand_warnings: list[str] = Field(default_factory=list)
     stale: bool
 
@@ -146,3 +154,15 @@ class CalculationInput(BaseModel):
     quotes: dict[int, MarketPrice]
     product_quote: MarketPrice
     invention_cost_per_unit: Decimal = Field(default=Decimal(0), ge=0, allow_inf_nan=False)
+
+
+class BuyDemandEstimate(BaseModel):
+    volume: int
+    order_count: int | None
+    full_runs: int
+    units: int
+    profit: Decimal
+    daily_profit: Decimal
+    min_price: Decimal | None
+    average_price: Decimal | None
+    depth_available: bool

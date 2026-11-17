@@ -46,7 +46,13 @@ class SQLMarketRepository(MarketRepository):
         )
         for start in range(0, len(prices), 100):
             self._session.add_all(
-                MarketPriceTable(**price.model_dump()) for price in prices[start : start + 100]
+                MarketPriceTable(
+                    **price.model_dump(exclude={"buy_levels"}),
+                    buy_levels=None
+                    if price.buy_levels is None
+                    else [level.model_dump(mode="json") for level in price.buy_levels],
+                )
+                for price in prices[start : start + 100]
             )
             await self._session.flush()
         await self._session.merge(MarketStateTable(**state.model_dump()))

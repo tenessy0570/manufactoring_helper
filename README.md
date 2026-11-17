@@ -8,12 +8,12 @@ Only public ESI and EVE Ref endpoints are used; no API keys, SSO or app registra
 ## Current state
 
 Implemented: catalog sync, hub prices and demand, regional history/liquidity, manufacturing
-profitability, persistent invention caching and saved calculation profiles. Migrations 0001-0007
+profitability, persistent invention caching and saved calculation profiles. Migrations 0001-0008
 create the required tables and an initial profile. The English web interface is available at `/`,
 with a unified filter panel, browser profiles and item details. Interactive API documentation
 is available at `/docs`.
 
-Latest validation on Windows/Python 3.12: 284 tests passed, 1 optional PostgreSQL test skipped
+Latest validation on Windows/Python 3.12: 300 tests passed, 1 optional PostgreSQL test skipped
 in the default suite, 98.38% combined coverage. The PostgreSQL test passed separately, including
 migrations, cache persistence and concurrent profile selection. Ruff, formatting and strict
 mypy passed. Public ESI/EVE Ref smoke probes passed; a complete production Compose deployment
@@ -113,8 +113,8 @@ Each hub has its own snapshot and freshness timestamps. Structure markets are no
 The worker checks all five hubs hourly and at startup, skipping snapshots until
 their ESI `Expires` time. `MARKET_CACHE_SECONDS` (default 300) caps the refresh interval and
 provides a fallback for missing or malformed expiration headers. A failure in one hub does
-not stop the remaining hubs. Full regional order books are read page by page; only compact
-best-price summaries for the chosen station are retained. Successful downloads replace that
+not stop the remaining hubs. Full regional order books are read page by page; best-price summaries and aggregated buy-price levels for the chosen station are retained;
+individual regional orders are not stored. Successful downloads replace that
 hub's prices in one transaction, including removal of prices whose orders disappeared.
 Failed pages or a changing page count preserve the previous snapshot. ESI does not supply a
 transactional snapshot across pages, so orders can still change during a scan.
@@ -196,12 +196,16 @@ Blueprint purchase/copy costs, hauling and custom facility bonuses are also not 
 
 Buy-side demand is reported separately from profit:
 
-- `product_order_count`: all orders on the chosen side at the station.
+- `product_order_count`: buy orders inside the selected price range, or all sell orders.
 - `orders_at_price`: orders at the quoted best price.
 - `product_volume_at_price`: remaining units at that price.
-- `full_runs_at_buy_price`: complete production runs that current best buy volume can absorb.
+- `buy_demand_tolerance_pct`: maximum drop below the best buy price, default 5%; blank/null
+  uses 5%, and 0 means best price only. Valid range: 0-100%.
+- `buy_demand_volume`, `buy_demand_min_price`, `buy_demand_average_price`: eligible volume,
+  lowest included price and volume-weighted sale price for complete-run output.
+- `full_runs_at_buy_price`: legacy field name for complete runs covered by the selected buy range.
 - `production_limit_units` and `profit_at_current_buy_price`: output and estimated profit
-  from those complete runs, without assuming that demand replenishes.
+  from those complete runs using their actual price levels, without assuming replenishment.
 - `demand_limited_profit_per_day`: per-slot daily production capped by that snapshot's volume.
 - `demand_warnings`: a single buy order, a single order at the best price, insufficient volume
   for one run, or unknown counts on an older snapshot. Counts are orders, not unique players.
@@ -213,7 +217,9 @@ These are current quotes, not fill guarantees: orders may disappear before produ
 In product buy-mode, the default daily-profit ranking and `min_profit_per_day` use the
 demand-limited figure (`rank_profit_per_day`), so a high unit margin with tiny demand does not
 dominate the ranking. `profit_per_day` remains the explicitly theoretical slot throughput.
-Only best-price volume is covered, not lower-priced buy orders; no future replenishment is assumed.
+Buy demand includes price levels within the selected percentage below the best price. Profit
+is integrated from the highest price downward with the actual sales tax and per-unit build cost,
+not calculated by multiplying all units by the best-price margin. No future replenishment is assumed.
 Counts on pre-migration snapshots are null until the next price refresh, not a fabricated zero.
 
 A separate `manufacturing-worker` fetches public EVE Ref recipes daily with three concurrent
@@ -378,3 +384,10 @@ Monetary displays use at most two decimal places without trailing zeroes. This r
 
 
 Invention panel layout/feedback: alternatives use aligned columns with decryptor, per-attempt success chance and estimated ISK per finished unit; the cheapest priced alternative is marked. Mobile rows become labeled cards and the dialog cannot grow beyond the viewport. Check status shows a loading state, response feedback and a last-checked timestamp; saved/expiry timestamps are displayed in the browser timezone. Prepare calculation consumes the POST response and distinguishes queued work, cached-ready reuse and unsupported routes. Fresh ready results show a disabled Already prepared action. API logs confirmed the prior buttons sent GET 200 and POST 202; lack of visible feedback and cache reuse made them appear inert. Added browser checks for progress, queued/cached responses and nine-option mobile layout. No financial formulas or refresh cadence changed. Not committed.
+
+
+Profit on demand is shown directly in the table with units and full-run counts. The selected price range defaults to 5% below the best buy price; 0% means best price only. Profit sums revenue at the actual included prices, less taxes and production costs, excluding residual volume smaller than one run and orders outside the range. Sell pricing has no executable demand and displays Buy pricing only. rank_by=demand_profit sorts total profit descending before pagination, with unavailable values last and type ID as tie-breaker. The threshold and sort selection persist in browser/server profiles.
+
+Migration 0008 adds nullable buy_levels JSON to market snapshots. Old snapshots have unknown depth and conservatively use best-price volume only, with an explicit UI notice, until the next successful market refresh. New snapshots store volume and order count per station buy price, not individual orders. Changing the threshold reads these saved levels without issuing ESI requests or new invention jobs.
+
+The demand column also estimates sequential manufacturing time on one line using Industry V and Advanced Industry III: full runs ? base seconds per run ? 0.80 ? 0.91. The tooltip and item details state these assumptions. This display-only estimate excludes TE, facilities, specialist skills, invention, copying and manufacturing input materials; it does not change margin or daily-profit calculations.

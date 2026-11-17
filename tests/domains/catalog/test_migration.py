@@ -13,6 +13,8 @@ def test_catalog_migration_upgrades_and_downgrades() -> None:
     counts = runpy.run_path("alembic/versions/0005_order_counts.py")
     invention = runpy.run_path("alembic/versions/0006_invention.py")
     profiles = runpy.run_path("alembic/versions/0007_profiles.py")
+    depth = runpy.run_path("alembic/versions/0008_buy_price_levels.py")
+
     engine = create_engine("sqlite:///:memory:")
     with (
         engine.begin() as connection,
@@ -25,6 +27,7 @@ def test_catalog_migration_upgrades_and_downgrades() -> None:
         counts["upgrade"]()
         invention["upgrade"]()
         profiles["upgrade"]()
+        depth["upgrade"]()
         columns = {column["name"] for column in inspect(connection).get_columns("item_types")}
         assert {"type_id", "group_path", "meta_group_id", "is_active"} <= columns
         assert len(inspect(connection).get_indexes("item_types")) == 7
@@ -33,6 +36,7 @@ def test_catalog_migration_upgrades_and_downgrades() -> None:
         assert "manufacturing_recipes" in inspect(connection).get_table_names()
         assert "invention_plans" in inspect(connection).get_table_names()
         assert "profiles" in inspect(connection).get_table_names()
+        depth["downgrade"]()
         profiles["downgrade"]()
         invention["downgrade"]()
         counts["downgrade"]()

@@ -345,3 +345,32 @@ async def test_pagination_drift_restarts_without_mixing_snapshots() -> None:
     assert report.pages == 2
     assert repository.prices["jita"][0].sell_volume == 5
     uow.commit.assert_awaited_once()
+
+
+async def test_buy_levels_aggregate_and_round_trip_without_raw_orders(
+    session: AsyncSession,
+) -> None:
+    aggregator = PriceAggregator(get_hub("jita"), NOW, EXPIRES)
+    for entry in [
+        order(is_buy_order=True, price="95", volume_remain=40),
+        order(is_buy_order=True, price="100", volume_remain=1),
+        order(is_buy_order=True, price="95", volume_remain=60),
+        order(is_buy_order=True, price="94.99", volume_remain=200),
+        order(is_buy_order=True, price="10000", volume_remain=999, location_id=123),
+    ]:
+        aggregator.add(entry)
+    result = aggregator.finish(EXPIRES)[0]
+    assert result.buy_price == 100
+    assert result.buy_volume == 1
+    assert result.buy_levels is not None
+    assert [(v.price, v.volume, v.order_count) for v in result.buy_levels] == [
+        (Decimal(100), 1, 1),
+        (Decimal(95), 100, 2),
+        (Decimal("94.99"), 200, 1),
+    ]
+    repository = SQLMarketRepository(session)
+    await repository.replace(state(), [result])
+    await session.commit()
+    stored = (await repository.find(PriceQuery(), NOW))[0]
+    assert stored.buy_levels == result.buy_levels
+    assert stored.buy_volume == result.buy_volume

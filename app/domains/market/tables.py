@@ -1,7 +1,8 @@
 from datetime import datetime
 from decimal import Decimal
+from typing import Any
 
-from sqlalchemy import BigInteger, DateTime, Numeric
+from sqlalchemy import JSON, BigInteger, DateTime, Numeric
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.core.orm import Base
@@ -12,6 +13,7 @@ class MarketPriceTable(Base):
 
     hub_id: Mapped[str] = mapped_column(primary_key=True)
     type_id: Mapped[int] = mapped_column(primary_key=True)
+    buy_levels: Mapped[list[dict[str, Any]] | None] = mapped_column(JSON(none_as_null=True))
     buy_price: Mapped[Decimal | None] = mapped_column(Numeric(24, 2))
     sell_price: Mapped[Decimal | None] = mapped_column(Numeric(24, 2))
     buy_volume: Mapped[int] = mapped_column(BigInteger)

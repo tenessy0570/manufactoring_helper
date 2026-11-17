@@ -45,9 +45,16 @@ class OrderPage(BaseModel):
     expires_at: AwareDatetime
 
 
+class BuyPriceLevel(BaseModel):
+    price: Decimal = Field(gt=0, allow_inf_nan=False)
+    volume: int = Field(ge=0)
+    order_count: int | None = Field(default=None, ge=1)
+
+
 class MarketPrice(BaseModel):
     hub_id: HubId
     type_id: int
+    buy_levels: list[BuyPriceLevel] | None = None
     buy_price: Decimal | None = None
     sell_price: Decimal | None = None
     buy_volume: int = 0

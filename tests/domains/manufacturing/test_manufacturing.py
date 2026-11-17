@@ -350,6 +350,12 @@ async def test_api_defaults_and_validation(session: AsyncSession) -> None:
         assert response.json()["product_order_type"] == "sell"
         assert response.json()["sales_tax"] == "0"
         assert (
+            await client.get("/api/v1/manufacturing/opportunities?buy_demand_tolerance_pct=")
+        ).status_code == 200
+        assert (
+            await client.get("/api/v1/manufacturing/opportunities?buy_demand_tolerance_pct=101")
+        ).status_code == 422
+        assert (
             await client.get("/api/v1/manufacturing/opportunities?sales_tax=101")
         ).status_code == 422
     await container.close()
@@ -552,3 +558,86 @@ async def test_mass_production_group_limit_cannot_be_overridden(
         page = await service.opportunities(ManufacturingQuery())
         assert page.items == []
         assert page.non_manufacturable == 1
+
+
+async def test_total_demand_profit_sorting_precedes_pagination(session: AsyncSession) -> None:
+    repository = await seed(session)
+    await repository.save(recipe_state(20, recipe=recipe(type_id=20, seconds="1000000")))
+    await SQLMarketRepository(session).replace(
+        market_state(),
+        [
+            price(10, buy_price="200", buy_volume=3),
+            price(20, buy_price="100", buy_volume=100),
+            price(34, sell_price="3"),
+        ],
+    )
+    service = ManufacturingService(repository, SQLHistoryRepository(session), lambda: NOW)
+    daily = await service.opportunities(
+        ManufacturingQuery(type_ids=[10, 20], product_order_type="buy", rank_by="profit_per_day")
+    )
+    assert daily.items[0].type_id == 10
+    total = await service.opportunities(
+        ManufacturingQuery(
+            type_ids=[10, 20], product_order_type="buy", rank_by="demand_profit", limit=1
+        )
+    )
+    assert total.total == 2
+    assert total.items[0].type_id == 20
+    assert total.items[0].profit_at_current_buy_price == 8300
+    remainder = await service.opportunities(
+        ManufacturingQuery(type_ids=[10], product_order_type="buy", rank_by="demand_profit")
+    )
+    assert remainder.items[0].production_limit_units == 2
+    assert remainder.items[0].profit_at_current_buy_price == 366
+    sells = await service.opportunities(
+        ManufacturingQuery(type_ids=[10, 20], product_order_type="sell", rank_by="demand_profit")
+    )
+    assert [item.type_id for item in sells.items] == [10, 20]
+    assert all(item.profit_at_current_buy_price is None for item in sells.items)
+
+
+async def test_demand_band_changes_volume_weighted_profit_and_sort(session: AsyncSession) -> None:
+    from app.domains.market.models import BuyPriceLevel
+
+    repository = await seed(session)
+    await SQLMarketRepository(session).replace(
+        market_state(),
+        [
+            price(
+                10,
+                buy_price="200",
+                buy_volume=2,
+                buy_orders_at_best=1,
+                buy_order_count=21,
+                buy_levels=[
+                    BuyPriceLevel(price=Decimal(200), volume=2, order_count=1),
+                    BuyPriceLevel(price=Decimal(190), volume=100, order_count=20),
+                ],
+            ),
+            price(
+                20,
+                buy_price="250",
+                buy_volume=10,
+                buy_orders_at_best=2,
+                buy_order_count=2,
+                buy_levels=[
+                    BuyPriceLevel(price=Decimal(250), volume=10, order_count=2),
+                ],
+            ),
+            price(34, sell_price="3"),
+        ],
+    )
+    service = ManufacturingService(repository, SQLHistoryRepository(session), lambda: NOW)
+    query = ManufacturingQuery(type_ids=[10, 20], product_order_type="buy", rank_by="demand_profit")
+    result = await service.opportunities(query)
+    assert [i.type_id for i in result.items] == [10, 20]
+    first = result.items[0]
+    assert first.buy_demand_volume == 102
+    assert first.product_volume_at_price == 2
+    assert first.profit_at_current_buy_price == 17666
+    assert first.rank_profit_per_day == 8324
+    assert first.demand_warnings == []
+    query.buy_demand_tolerance_pct = Decimal(0)
+    exact = await service.opportunities(query)
+    assert [i.type_id for i in exact.items] == [20, 10]
+    assert exact.items[1].profit_at_current_buy_price == 366

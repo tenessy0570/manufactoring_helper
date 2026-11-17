@@ -46,6 +46,8 @@ async def test_migration_and_upsert_on_postgres() -> None:
     invention_migration = runpy.run_path("alembic/versions/0006_invention.py")
     profile_migration = runpy.run_path("alembic/versions/0007_profiles.py")
 
+    depth_migration = runpy.run_path("alembic/versions/0008_buy_price_levels.py")
+
     def upgrade(connection: Connection) -> None:
         with Operations.context(MigrationContext.configure(connection)):
             migration["upgrade"]()
@@ -55,10 +57,12 @@ async def test_migration_and_upsert_on_postgres() -> None:
             counts_migration["upgrade"]()
             invention_migration["upgrade"]()
             profile_migration["upgrade"]()
+            depth_migration["upgrade"]()
         assert "item_types" in inspect(connection).get_table_names()
 
     def downgrade(connection: Connection) -> None:
         with Operations.context(MigrationContext.configure(connection)):
+            depth_migration["downgrade"]()
             profile_migration["downgrade"]()
             invention_migration["downgrade"]()
             counts_migration["downgrade"]()
@@ -102,7 +106,10 @@ async def test_migration_and_upsert_on_postgres() -> None:
                 assert stored.name == "Updated"
                 assert await repository.latest_synced_at() == NOW
                 market = SQLMarketRepository(session)
-                await market.replace(state(), [price()])
+                await market.replace(
+                    state(), [price(buy_levels=[{"price": "9.10", "volume": 10, "order_count": 1}])]
+                )
+                assert (await market.find(PriceQuery(), NOW))[0].buy_levels is not None
                 await market.replace(state("amarr"), [price(hub_id="amarr")])
                 await session.commit()
                 assert await market.state("jita") == state()

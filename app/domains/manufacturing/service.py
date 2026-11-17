@@ -9,6 +9,7 @@ from app.domains.history.repository import HistoryRepository
 from app.domains.invention.models import InventionSettings
 from app.domains.invention.repository import InventionRepository
 from app.domains.manufacturing.calculation import calculate
+from app.domains.manufacturing.demand import estimate_buy_demand
 from app.domains.manufacturing.gateway import IndustryGateway
 from app.domains.manufacturing.models import (
     CalculationInput,
@@ -179,20 +180,14 @@ class ManufacturingService:
             if query.fresh_only and stale:
                 continue
             is_buy = query.product_order_type == "buy"
-            order_count = product.buy_order_count if is_buy else product.sell_order_count
+            demand = estimate_buy_demand(product, calculated, query) if is_buy else None
+            order_count = demand.order_count if demand else product.sell_order_count
             orders_at_price = product.buy_orders_at_best if is_buy else product.sell_orders_at_best
-            volume = product.buy_volume if is_buy else product.sell_volume
-            runs_at_price = volume // state.recipe.units if is_buy else None
-            production_limit = None if runs_at_price is None else runs_at_price * state.recipe.units
-            demand_profit = (
-                None if production_limit is None else calculated.profit_per_unit * production_limit
-            )
-            limited_daily_profit = (
-                None
-                if production_limit is None
-                else calculated.profit_per_unit
-                * min(calculated.units * 86400 / calculated.seconds, Decimal(production_limit))
-            )
+            volume = demand.volume if demand else product.sell_volume
+            runs_at_price = demand.full_runs if demand else None
+            production_limit = demand.units if demand else None
+            demand_profit = demand.profit if demand else None
+            limited_daily_profit = demand.daily_profit if demand else None
             rank_daily_profit = (
                 calculated.profit_per_day if limited_daily_profit is None else limited_daily_profit
             )
@@ -202,7 +197,9 @@ class ManufacturingService:
                     warnings.append("buy_order_count_unknown")
                 if order_count == 1:
                     warnings.append("single_buy_order")
-                if orders_at_price == 1:
+                if orders_at_price == 1 and (
+                    demand is None or not demand.depth_available or order_count in (None, 1)
+                ):
                     warnings.append("single_buy_order_at_best")
                 if runs_at_price == 0:
                     warnings.append("insufficient_buy_volume_for_one_run")
@@ -247,7 +244,11 @@ class ManufacturingService:
                     recipe_synced_at=state.synced_at,
                     daily_isk_volume=candidate.daily_isk_volume,
                     daily_units=candidate.daily_units,
-                    product_volume_at_price=volume,
+                    product_volume_at_price=product.buy_volume if is_buy else product.sell_volume,
+                    buy_demand_volume=demand.volume if demand else None,
+                    buy_demand_min_price=demand.min_price if demand else None,
+                    buy_demand_average_price=demand.average_price if demand else None,
+                    buy_demand_depth_available=demand.depth_available if demand else None,
                     product_order_count=order_count,
                     orders_at_price=orders_at_price,
                     full_runs_at_buy_price=runs_at_price,
@@ -263,8 +264,15 @@ class ManufacturingService:
             "profit_per_day": "rank_profit_per_day",
             "margin": "margin_pct",
             "profit": "profit_per_unit",
+            "demand_profit": "profit_at_current_buy_price",
         }[query.rank_by]
-        results.sort(key=lambda result: (-getattr(result, field), result.type_id))
+        results.sort(
+            key=lambda result: (
+                getattr(result, field) is None,
+                -(getattr(result, field) or Decimal(0)),
+                result.type_id,
+            )
+        )
         return OpportunityPage(
             hub_id=query.hub_id,
             material_hub_id=material_hub,
