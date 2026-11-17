@@ -10,6 +10,19 @@ async function checkFrontendWorkflow() {
     control => control.closest('form')?.id === 'opportunity-filters'
   ), 'All filters belong to one form');
 
+  const columnsButton=document.querySelector('[aria-controls="column-options"]');
+  columnsButton.click();await app.$nextTick();
+  await new Promise(resolve=>setTimeout(resolve,50));
+  check(getComputedStyle(document.querySelector('#column-options')).display!=='none','Columns button opens checkbox menu');
+  columnsButton.dispatchEvent(new KeyboardEvent('keydown',{key:'Escape',bubbles:true}));
+  app.hiddenColumns=['cost','margin'];
+  await app.$nextTick();
+  await new Promise(resolve=>setTimeout(resolve,50));
+  check(getComputedStyle(document.querySelector('thead th:nth-child(2)')).display==='none','Hidden column header disappears');
+  check(getComputedStyle(document.querySelector('tbody tr td:nth-child(2)')).display==='none','Hidden cells match headers');
+  app.saveSettings();app.hiddenColumns=[];app.restoreSettings();
+  check(!app.columnVisible('cost')&&!app.columnVisible('margin'),'Column choices persist');
+  app.hiddenColumns=[];
   const originalHub = app.resultForm.hub_id;
   app.form.hub_id = originalHub === 'amarr' ? 'hek' : 'amarr';
   check(app.hasChanges && app.resultForm.hub_id === originalHub, 'Drafts do not relabel results');
@@ -50,6 +63,9 @@ async function checkFrontendWorkflow() {
   check(app.demandDuration({seconds:'7200',full_runs_at_buy_price:100}) === '6d 1h 36m', 'One-line time uses full runs and Industry V / Advanced Industry III');
   check(app.demandDuration({seconds:'7200',full_runs_at_buy_price:0}) === '0s', 'No complete runs takes zero time');
   check(app.demandDuration({seconds:'7200',full_runs_at_buy_price:null}) === 'Not available', 'Sell pricing does not invent a demand duration');
+  app.appliedForm.production_lines='3';
+  check(app.demandDuration({seconds:'7200',full_runs_at_buy_price:100}) === '2d 1h 30m', 'Parallel lines round up full runs on busiest line');
+  app.appliedForm.production_lines='1';
   check(app.duration(59.9) === '1m 0s', 'Duration rounds across minute boundaries');
   check(app.$refs.dialog.querySelector('.material-name').textContent.includes('Tritanium'), 'Materials have readable names');
   const originalNameApi = app.api;

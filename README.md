@@ -420,3 +420,9 @@ Source-plan keys and the former zero-fee valuation keys remain compatible. The m
 downgrade retains the canonical estimates rather than recreating discarded fee variants.
 Changing a user's tax rates never schedules invention. Source plans remain cached seven days;
 material-price valuations still refresh daily at 12:30 UTC.
+
+Production lines setting: production_lines, integer 1..1000, defaults to 1 (blank/null also 1). Saved in browser/server profiles. Demand completion time uses ceil(full runs / lines) * adjusted seconds per run, preserving whole runs; applied settings determine displayed time. Financial profit and daily ranking remain unchanged. Latest change is uncommitted.
+
+Table Columns chooser: seven optional metric/data columns with checkboxes, all visible by default. Item identity remains visible. hiddenColumns stored in versioned browser settings separately from calculation/profile filters; Show all columns resets visibility. No API calls for toggles. Browser verified matching hidden headers/cells and storage restoration. Uncommitted.
+
+Columns control now sits at the top-right edge of the table, opening a compact checkbox popover. Outside click/Escape closes it; Escape restores button focus. Commit cancelled by owner; changes remain uncommitted.

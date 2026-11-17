@@ -8,16 +8,19 @@ document.addEventListener('alpine:init', () => {
     selected: null, invention: null, inventionMessage: '', inventionLoading: false, inventionChecking:false, lastInventionCheck:null,
     requestSequence: 0, detailSequence: 0, appliedForm:null, appliedSettings:{}, returnFocus:null, profileNotice:'',
     hubs: [{id:'jita',name:'Jita'},{id:'amarr',name:'Amarr'},{id:'dodixie',name:'Dodixie'},{id:'rens',name:'Rens'},{id:'hek',name:'Hek'}],
+    hiddenColumns:[], columnOptions:[{id:'cost',label:'Cost / unit'},{id:'profit',label:'Profit / unit'},{id:'demand',label:'Profit on demand'},{id:'margin',label:'Margin'},{id:'daily',label:'Profit / day'},{id:'turnover',label:'Regional turnover / day'},{id:'data',label:'Data freshness'}],
+    columnVisible(id){return !this.hiddenColumns.includes(id);},
     form: {}, page: {items:[],total:0,offset:0,limit:25},
     defaults() {return {search:'',hub_id:'jita',material_hub_id:'',tech:'',category:'',
       material_order_type:'sell',product_order_type:'sell',buy_demand_tolerance_pct:'5',min_profit:'',min_margin:'',min_daily_isk_volume:'',
-      days:'30',sales_tax:'0',buy_broker_fee:'0',sell_broker_fee:'0',facility_tax:'0',system_cost_index:'0',
+      production_lines:'1',days:'30',sales_tax:'0',buy_broker_fee:'0',sell_broker_fee:'0',facility_tax:'0',system_cost_index:'0',
       min_product_volume:'',include_invention_cost:false,fresh_only:false,require_full_run_demand:false,
       rank_by:'profit_per_day',limit:'25'};},
     async init() {
       this.form = this.defaults();
       this.profiles=this.readBrowserProfiles();
       const restored=this.restoreSettings();
+      this.$watch('hiddenColumns', () => this.saveSettings());
       this.$watch('form', () => this.saveSettings());
       this.$watch('filtersOpen', () => this.saveSettings());
       window.addEventListener('pagehide', () => this.saveSettings());
@@ -50,6 +53,7 @@ document.addEventListener('alpine:init', () => {
         if(saved.form.rigs==='true')form.category='Rigs';
         else if(form.category==='Ship and Module Modifications')form.category='Rigs';
         else if(form.category==='Ship Equipment')form.category='Modules';
+        this.hiddenColumns=Array.isArray(saved.hiddenColumns)?saved.hiddenColumns.filter(id=>this.columnOptions.some(c=>c.id===id)):[];
         this.form=form;
         this.profileSettings=saved.profileSettings && typeof saved.profileSettings==='object' && !Array.isArray(saved.profileSettings)?saved.profileSettings:{};
         this.profileId=typeof saved.profileId==='string'?saved.profileId:'';
@@ -60,7 +64,7 @@ document.addEventListener('alpine:init', () => {
     },
     saveSettings() {
       try {
-        localStorage.setItem(this.storageKey(),JSON.stringify({version:1,form:this.form,profileSettings:this.profileSettings,profileId:this.profileId,filtersOpen:this.filtersOpen}));
+        localStorage.setItem(this.storageKey(),JSON.stringify({version:1,hiddenColumns:this.hiddenColumns,form:this.form,profileSettings:this.profileSettings,profileId:this.profileId,filtersOpen:this.filtersOpen}));
       } catch (_) { this.storageWarning='Browser storage is unavailable. Changes will work, but may not survive a page reload.'; }
     },
     browserProfilesKey(){return this.storageKey()+'.profiles';},
@@ -200,7 +204,8 @@ document.addEventListener('alpine:init', () => {
     },
     demandTolerance(){const value=this.resultForm.buy_demand_tolerance_pct;return value===undefined||value===null||value===''?5:Number(value);},
     demandWarning(code){return {single_buy_order:'Only one buy order is available. Its removal could eliminate this selling opportunity.',single_buy_order_at_best:'Only one order offers the best buy price. The displayed profit may disappear when it fills.',buy_order_count_unknown:'The number of buy orders is unknown. Check available demand before building.',insufficient_buy_volume_for_one_run:'Buy orders within your selected price range cannot absorb one full production run.'}[code]||'Check the available buy demand before building.';},
-    demandDuration(item){const runs=item.full_runs_at_buy_price,seconds=Number(item.seconds);if(runs===null||runs===undefined||!Number.isFinite(seconds)||seconds<=0)return 'Not available';return this.duration(seconds*runs*(1-0.04*5)*(1-0.03*3));},
+    productionLines(){return Number(this.resultForm.production_lines)||1;},
+    demandDuration(item){const runs=item.full_runs_at_buy_price,seconds=Number(item.seconds);if(runs===null||runs===undefined||!Number.isFinite(seconds)||seconds<=0)return 'Not available';return this.duration(seconds*Math.ceil(runs/this.productionLines())*(1-0.04*5)*(1-0.03*3));},
     duration(seconds){const n=Number(seconds);if(!Number.isFinite(n)||n<0)return 'Not available';const total=Math.ceil(n),d=Math.floor(total/86400),h=Math.floor(total%86400/3600),m=Math.floor(total%3600/60),s=total%60;return d?(d+'d '+h+'h '+m+'m'):h?(h+'h '+m+'m'):m?(m+'m '+s+'s'):s+'s';},
     inventionStatus(view){
       if(!view?.request)return 'No calculation is prepared for this market and pricing choice. Select Prepare calculation to queue it.';
