@@ -36,7 +36,11 @@ class ManufacturingSyncService:
     async def sync_if_stale(self, type_id: int) -> bool:
         now = self._clock()
         previous = (await self._repository.recipes([type_id])).get(type_id)
-        if previous is not None and previous.expires_at > now:
+        if (
+            previous is not None
+            and previous.expires_at > now
+            and (previous.recipe is None or previous.recipe.estimated_item_value is not None)
+        ):
             return False
         recipe = await self._gateway.fetch(type_id)
         state = RecipeState(
@@ -102,7 +106,6 @@ class ManufacturingService:
                 type_id=candidate.type_id,
                 hub_id=material_hub,
                 order_type=query.material_order_type,
-                broker_fee=query.broker_fee,
             )
             for candidate in candidates
             if candidate.meta_group_id == 2
@@ -114,6 +117,7 @@ class ManufacturingService:
         )
         results: list[Opportunity] = []
         missing_recipes = non_manufacturable = missing_prices = 0
+        missing_job_costs = 0
         missing_invention = 0
         invention_unavailable: dict[int, str] = {}
         for candidate in candidates:
@@ -123,6 +127,11 @@ class ManufacturingService:
                 continue
             if state.recipe is None:
                 non_manufacturable += 1
+                continue
+            if state.recipe.estimated_item_value is None and (
+                query.facility_tax or query.system_cost_index
+            ):
+                missing_job_costs += 1
                 continue
             product = products.get(candidate.type_id)
             if product is None:
@@ -280,11 +289,16 @@ class ManufacturingService:
             product_order_type=query.product_order_type,
             sales_tax=query.sales_tax,
             broker_fee=query.broker_fee,
+            buy_broker_fee=query.buy_broker_fee,
+            sell_broker_fee=query.sell_broker_fee,
+            facility_tax=query.facility_tax,
+            system_cost_index=query.system_cost_index,
             items=results[query.offset : query.offset + query.limit],
             total=len(results),
             missing_recipes=missing_recipes,
             non_manufacturable=non_manufacturable,
             missing_prices=missing_prices,
+            missing_job_costs=missing_job_costs,
             missing_invention=missing_invention,
             invention_unavailable=invention_unavailable,
             limit=query.limit,

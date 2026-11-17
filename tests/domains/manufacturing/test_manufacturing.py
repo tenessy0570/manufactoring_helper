@@ -54,6 +54,7 @@ def recipe(**kwargs: Any) -> Recipe:
             "units": 2,
             "seconds": "3600",
             "job_cost": "4",
+            "estimated_item_value": "100",
             "materials": [{"type_id": 34, "quantity": 10}],
             **kwargs,
         }
@@ -223,6 +224,7 @@ async def test_gateway_saved_public_fixture_and_errors() -> None:
             route = respx.get("https://test/v1/industry/cost").respond(200, json=payload)
             result = await gateway.fetch(2454)
             assert result is not None
+            assert result.estimated_item_value == Decimal(3668)
             assert result.units == 1
             assert result.seconds == 204
             assert result.materials[0] == Material(type_id=34, quantity=509)
@@ -349,6 +351,31 @@ async def test_api_defaults_and_validation(session: AsyncSession) -> None:
         assert response.json()["material_order_type"] == "sell"
         assert response.json()["product_order_type"] == "sell"
         assert response.json()["sales_tax"] == "0"
+        legacy = await client.get("/api/v1/manufacturing/opportunities?broker_fee=2")
+        assert legacy.status_code == 200
+        assert legacy.json()["sell_broker_fee"] == "2"
+
+        taxed = await client.get(
+            "/api/v1/manufacturing/opportunities",
+            params={
+                "type_ids": 10,
+                "buy_broker_fee": "2",
+                "sell_broker_fee": "3",
+                "sales_tax": "10",
+                "facility_tax": "1",
+                "system_cost_index": "2",
+            },
+        )
+        assert taxed.status_code == 200, taxed.text
+        assert taxed.json()["items"][0]["profit_per_unit"] == "7.60"
+        for field in ("buy_broker_fee", "sell_broker_fee", "facility_tax", "system_cost_index"):
+            assert (
+                await client.get("/api/v1/manufacturing/opportunities", params={field: "101"})
+            ).status_code == 422
+            blank = await client.get("/api/v1/manufacturing/opportunities", params={field: ""})
+            assert blank.status_code == 200
+            assert blank.json()[field] == "0"
+
         assert (
             await client.get("/api/v1/manufacturing/opportunities?buy_demand_tolerance_pct=")
         ).status_code == 200
@@ -641,3 +668,28 @@ async def test_demand_band_changes_volume_weighted_profit_and_sort(session: Asyn
     exact = await service.opportunities(query)
     assert [i.type_id for i in exact.items] == [20, 10]
     assert exact.items[1].profit_at_current_buy_price == 366
+
+
+async def test_missing_eiv_is_visible_and_backfilled_without_waiting_for_ttl(
+    session: AsyncSession,
+) -> None:
+    repository = await seed(session)
+    await repository.save(recipe_state(recipe=recipe(estimated_item_value=None)))
+    service = ManufacturingService(repository, SQLHistoryRepository(session), lambda: NOW)
+    query = ManufacturingQuery(type_ids=[10], facility_tax=Decimal(1), system_cost_index=Decimal(2))
+    missing = await service.opportunities(query)
+    assert missing.total == 0
+    assert missing.missing_job_costs == 1
+    assert missing.missing_prices == 0
+    gateway = AsyncMock(spec=IndustryGateway)
+    gateway.fetch.return_value = recipe()
+    sync = ManufacturingSyncService(
+        repository, gateway, SQLAlchemyUnitOfWork(session), clock=lambda: NOW
+    )
+    assert await sync.sync_if_stale(10)
+    updated = await service.opportunities(query)
+    assert updated.missing_job_costs == 0
+    assert updated.items[0].job_cost_per_unit == Decimal("3.5")
+    assert updated.buy_broker_fee == updated.sell_broker_fee == 0
+    assert updated.facility_tax == 1
+    assert updated.system_cost_index == 2

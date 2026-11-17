@@ -29,7 +29,6 @@ class InventionQuery(BaseModel):
 
     hub_id: HubId = "jita"
     order_type: Literal["buy", "sell"] = "sell"
-    broker_fee: Decimal = Field(default=Decimal(0), ge=0, le=100, allow_inf_nan=False)
 
 
 class InventionSettings(InventionQuery):
@@ -42,9 +41,8 @@ class InventionSettings(InventionQuery):
     @property
     def key(self) -> str:
         data = self.model_dump(mode="json")
-        # Preserve the existing default cache while ignoring legacy skill overrides.
-        data.update(science_level=SCIENCE_LEVEL, encryption_level=ENCRYPTION_LEVEL)
-        data["broker_fee"] = format(self.broker_fee.normalize(), "f")
+        # Keep the former zero-fee key; legacy fees never split plans or valuations.
+        data.update(science_level=SCIENCE_LEVEL, encryption_level=ENCRYPTION_LEVEL, broker_fee="0")
         return hashlib.sha256(json.dumps(data, sort_keys=True).encode()).hexdigest()
 
 

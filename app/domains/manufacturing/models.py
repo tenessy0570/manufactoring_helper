@@ -19,6 +19,7 @@ class Recipe(BaseModel):
     units: int = Field(gt=0)
     seconds: Decimal = Field(gt=0, allow_inf_nan=False)
     job_cost: Decimal = Field(ge=0, allow_inf_nan=False)
+    estimated_item_value: Decimal | None = Field(default=None, ge=0, allow_inf_nan=False)
     materials: list[Material] = Field(min_length=1)
 
 
@@ -37,6 +38,17 @@ class ManufacturingQuery(LiquidityQuery):
             value = dict(value)
             if value.get("buy_demand_tolerance_pct") in (None, ""):
                 value["buy_demand_tolerance_pct"] = 5
+            for side in ("buy", "sell"):
+                value.setdefault(f"{side}_broker_fee", value.get("broker_fee", 0))
+            for name in (
+                "buy_broker_fee",
+                "sell_broker_fee",
+                "sales_tax",
+                "facility_tax",
+                "system_cost_index",
+            ):
+                if value.get(name) in (None, ""):
+                    value[name] = 0
             return {
                 key: item
                 for key, item in value.items()
@@ -51,6 +63,10 @@ class ManufacturingQuery(LiquidityQuery):
     material_hub_id: HubId | None = None
     sales_tax: Decimal = Field(default=Decimal(0), ge=0, le=100, allow_inf_nan=False)
     broker_fee: Decimal = Field(default=Decimal(0), ge=0, le=100, allow_inf_nan=False)
+    buy_broker_fee: Decimal = Field(default=Decimal(0), ge=0, le=100, allow_inf_nan=False)
+    sell_broker_fee: Decimal = Field(default=Decimal(0), ge=0, le=100, allow_inf_nan=False)
+    facility_tax: Decimal = Field(default=Decimal(0), ge=0, le=100, allow_inf_nan=False)
+    system_cost_index: Decimal = Field(default=Decimal(0), ge=0, le=100, allow_inf_nan=False)
     job_cost_per_run: Decimal | None = Field(default=None, ge=0, allow_inf_nan=False)
     min_profit: Decimal | None = Field(default=None, allow_inf_nan=False)
     max_profit: Decimal | None = Field(default=None, allow_inf_nan=False)
@@ -69,7 +85,7 @@ class ManufacturingQuery(LiquidityQuery):
         for low, high in ((self.min_profit, self.max_profit), (self.min_margin, self.max_margin)):
             if low is not None and high is not None and low > high:
                 raise ValueError("Minimum must not exceed maximum")
-        if self.sales_tax + self.broker_fee > 100:
+        if self.sales_tax + self.sell_broker_fee > 100:
             raise ValueError("Combined sales tax and broker fee must not exceed 100%")
         return self
 
@@ -88,6 +104,10 @@ class ProfitCalculation(BaseModel):
     materials: list[MaterialCost]
     material_cost_per_unit: Decimal
     job_cost_per_unit: Decimal
+    base_job_cost_per_unit: Decimal = Decimal(0)
+    facility_tax_per_unit: Decimal = Decimal(0)
+    system_cost_per_unit: Decimal = Decimal(0)
+    estimated_item_value_per_unit: Decimal | None = None
     invention_cost_per_unit: Decimal
     procurement_broker_fee_per_unit: Decimal
     sales_tax_per_unit: Decimal
@@ -136,13 +156,18 @@ class OpportunityPage(BaseModel):
     efficiency_basis: str = "base materials and production time; no ME/TE bonuses"
     sales_tax: Decimal
     broker_fee: Decimal
+    buy_broker_fee: Decimal = Decimal(0)
+    sell_broker_fee: Decimal = Decimal(0)
+    facility_tax: Decimal = Decimal(0)
+    system_cost_index: Decimal = Decimal(0)
     margin_basis: str = "material_cost"
-    job_cost_basis: str = "EVE Ref NPC station estimate; optional per-run override"
+    job_cost_basis: str = "EVE Ref base/SCC charge plus EIV-based facility tax and system cost"
     items: list[Opportunity]
     total: int
     missing_recipes: int
     non_manufacturable: int
     missing_prices: int
+    missing_job_costs: int = 0
     missing_invention: int = 0
     invention_unavailable: dict[int, str] = Field(default_factory=dict)
     limit: int

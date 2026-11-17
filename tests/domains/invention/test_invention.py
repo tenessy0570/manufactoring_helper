@@ -85,12 +85,12 @@ def request(**kwargs: Any) -> InventionRequest:
     )
 
 
-def test_keys_ignore_legacy_skills_but_separate_hub_side_and_fee() -> None:
-    assert settings(broker_fee="0.00").key == settings().key
+def test_keys_ignore_legacy_skills_and_fees_but_separate_hub_and_side() -> None:
+    assert settings(broker_fee="0.00").key == settings(broker_fee="99").key == settings().key
+    assert "broker_fee" not in settings(broker_fee="99").model_dump()
     for kwargs in (
         {"hub_id": "amarr"},
         {"order_type": "buy"},
-        {"broker_fee": "2"},
     ):
         assert settings(**kwargs).key != settings().key
     assert settings(hub_id="amarr", order_type="buy").plan_key == settings().plan_key
@@ -103,13 +103,13 @@ def test_keys_ignore_legacy_skills_but_separate_hub_side_and_fee() -> None:
 def test_expected_cost_uses_attempts_probability_runs_and_output_quantity() -> None:
     result = price_plans([plan()], {34: price(34, sell_price="100", buy_price="90")}, settings())
     assert result.best is not None
-    assert result.best.cost_per_attempt == 210
-    assert result.best.expected_cost_per_unit == 21
+    assert result.best.cost_per_attempt == 200
+    assert result.best.expected_cost_per_unit == 20
     bought = price_plans(
         [plan()], {34: price(34, buy_price="90")}, settings(order_type="buy", broker_fee="10")
     )
     assert bought.best is not None
-    assert bought.best.expected_cost_per_unit == Decimal("20.8")
+    assert bought.best.expected_cost_per_unit == Decimal("18")
     missing = price_plans([plan()], {}, settings())
     assert missing.best is None
     assert missing.options[0].missing_prices == [34]
@@ -134,7 +134,7 @@ def test_compares_decryptors_and_does_not_apply_me_te_to_manufacturing() -> None
     )
     assert result.best is not None
     assert result.best.plan.decryptor_name == "Accelerant"
-    assert result.best.expected_cost_per_unit == Decimal("10.55")
+    assert result.best.expected_cost_per_unit == Decimal("10.05")
 
 
 def test_captured_public_data_matches_expected_unit_cost_and_decryptors() -> None:
@@ -151,14 +151,15 @@ def test_captured_public_data_matches_expected_unit_cost_and_decryptors() -> Non
     }
     result = price_plans([plans[0]], quotes, settings())
     assert result.best is not None
-    assert abs(result.best.expected_cost_per_unit - source["avg_cost_per_unit"]) < Decimal("0.01")
+    material_only = source["total_material_cost"] / source["expected_units"]
+    assert abs(result.best.expected_cost_per_unit - material_only) < Decimal("0.01")
     assert len(plans) == 9
     for option in plans[1:]:
         assert any(material.type_id == option.decryptor_id for material in option.materials)
     ammo = plan(units_per_run=5000)
     result = price_plans([ammo], {34: price(34, sell_price="100")}, settings())
     assert result.best is not None
-    assert result.best.expected_cost_per_unit == Decimal("0.0084")
+    assert result.best.expected_cost_per_unit == Decimal("0.008")
 
 
 @pytest.fixture
@@ -232,8 +233,8 @@ async def test_source_is_cached_across_hubs_and_repricing_never_refetches(
     first = await service.sync(settings())
     assert first.result is not None
     assert first.result.best is not None
-    assert first.result.best.expected_cost_per_unit == 21
-    await service.sync(settings())
+    assert first.result.best.expected_cost_per_unit == 20
+    await service.sync(settings(broker_fee="15"))
     gateway.fetch.assert_awaited_once()
     manufacturing.quotes.assert_awaited_once()
     await service.sync(settings(hub_id="amarr"))
@@ -250,7 +251,7 @@ async def test_source_is_cached_across_hubs_and_repricing_never_refetches(
     gateway.fetch.assert_awaited_once()
     assert result.result is not None
     assert result.result.best is not None
-    assert result.result.best.expected_cost_per_unit == 41
+    assert result.result.best.expected_cost_per_unit == 40
     assert result.result.price_fingerprint != first.result.price_fingerprint
     await later.record_error(settings(), "ConnectionError")
     failed = (await repository.requests([settings().key]))[settings().key]
@@ -401,8 +402,8 @@ async def test_manufacturing_deducts_cached_unit_cost_before_ranking(session: As
     page = await service.opportunities(
         ManufacturingQuery(type_ids=[10], include_invention_cost=True)
     )
-    assert page.items[0].invention_cost_per_unit == 21
-    assert page.items[0].profit_per_unit == -8
+    assert page.items[0].invention_cost_per_unit == 20
+    assert page.items[0].profit_per_unit == -7
     assert page.items[0].invention_included
     assert page.items[0].invention_status == "ready"
     page = await service.opportunities(
@@ -503,3 +504,66 @@ async def test_valuation_expires_at_next_daily_refresh_not_after_job_finish(
     )
     result = await service.sync(settings())
     assert result.expires_at == (NOW + timedelta(days=1)).replace(hour=12, minute=30)
+
+
+async def test_migration_merges_fee_variants_and_reuses_tax_free_cache_without_source_calls(
+    session: AsyncSession,
+) -> None:
+    import runpy
+
+    from alembic.migration import MigrationContext
+    from alembic.operations import Operations
+    from sqlalchemy import insert, select
+    from sqlalchemy.engine import Connection
+
+    from app.domains.invention.tables import InventionRequestTable
+
+    repository = SQLInventionRepository(session)
+    source_plan = PlanState(
+        key=settings().plan_key, plans=[plan()], synced_at=NOW, expires_at=EXPIRES
+    )
+    await repository.save_plan(source_plan)
+    for fee, total in (("10", "208"), ("20", "226")):
+        row = request().model_dump(mode="json")
+        row.update(
+            key="legacy-fee-" + fee,
+            settings={"type_id": 10, "hub_id": "jita", "order_type": "buy", "broker_fee": fee},
+            updated_at=NOW,
+            expires_at=EXPIRES,
+        )
+        assert row["result"] is not None
+        option = row["result"]["options"][0]
+        option["cost_per_attempt"] = total
+        option["expected_cost_per_unit"] = str(Decimal(total) / 10)
+        row["result"]["best"] = option
+        await session.execute(insert(InventionRequestTable).values(**row))
+    empty = request(key="pending", result=None, status="pending", settings=settings(hub_id="amarr"))
+    await repository.save_request(empty)
+    await session.commit()
+    migration = runpy.run_path("alembic/versions/0009_tax_free_invention.py")
+
+    def upgrade(connection: Connection) -> None:
+        with Operations.context(MigrationContext.configure(connection)):
+            migration["upgrade"]()
+
+    await (await session.connection()).run_sync(upgrade)
+    await session.commit()
+    rows = list(await session.scalars(select(InventionRequestTable)))
+    assert len(rows) == 2
+    canonical = (await repository.requests([settings(order_type="buy").key]))[
+        settings(order_type="buy").key
+    ]
+    assert canonical.result is not None
+    assert canonical.result.best is not None
+    assert canonical.result.best.cost_per_attempt == 180
+    assert canonical.result.best.expected_cost_per_unit == 18
+    assert canonical.expires_at == EXPIRES
+    assert await repository.plan(source_plan.key) == source_plan
+    gateway = AsyncMock(spec=InventionGateway)
+    quotes = AsyncMock(spec=ManufacturingRepository)
+    sync = InventionSyncService(
+        repository, gateway, quotes, SQLAlchemyUnitOfWork(session), clock=lambda: NOW
+    )
+    assert await sync.sync(settings(order_type="buy", broker_fee="99")) == canonical
+    gateway.fetch.assert_not_awaited()
+    quotes.quotes.assert_not_awaited()

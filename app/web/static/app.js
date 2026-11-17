@@ -11,7 +11,7 @@ document.addEventListener('alpine:init', () => {
     form: {}, page: {items:[],total:0,offset:0,limit:25},
     defaults() {return {search:'',hub_id:'jita',material_hub_id:'',tech:'',category:'',
       material_order_type:'sell',product_order_type:'sell',buy_demand_tolerance_pct:'5',min_profit:'',min_margin:'',min_daily_isk_volume:'',
-      days:'30',sales_tax:'0',broker_fee:'0',
+      days:'30',sales_tax:'0',buy_broker_fee:'0',sell_broker_fee:'0',facility_tax:'0',system_cost_index:'0',
       min_product_volume:'',include_invention_cost:false,fresh_only:false,require_full_run_demand:false,
       rank_by:'profit_per_day',limit:'25'};},
     async init() {
@@ -41,6 +41,7 @@ document.addEventListener('alpine:init', () => {
         const saved=JSON.parse(localStorage.getItem(this.storageKey()));
         if(saved?.version!==1 || !saved.form || typeof saved.form!=='object' || Array.isArray(saved.form))return;
         const form=this.defaults();
+        this.migrateBrokerSettings(saved.form);
         for(const [key,value] of Object.entries(saved.form)) {
           if(!(key in form))continue;
           if(typeof form[key]==='boolean' ? typeof value!=='boolean' : !['string','number'].includes(typeof value))return;
@@ -81,7 +82,7 @@ document.addEventListener('alpine:init', () => {
       this.profiles=[profile,...this.profiles];this.profileId=profile.id;this.profileSaveOpen=false;this.profileName='';this.profileNotice='Profile saved in this browser.';this.saveSettings();
     },
     fieldLabel(field){
-      const labels={min_profit:'Minimum profit per unit',min_margin:'Minimum margin',min_daily_isk_volume:'Minimum regional turnover',min_product_volume:'Minimum volume at the selected price',days:'History period',sales_tax:'Sales tax',broker_fee:'Broker fee',limit:'Rows per page',hub_id:'Product hub',material_hub_id:'Material purchase hub'};
+      const labels={min_profit:'Minimum profit per unit',min_margin:'Minimum margin',min_daily_isk_volume:'Minimum regional turnover',min_product_volume:'Minimum volume at the selected price',days:'History period',sales_tax:'Sales tax',buy_broker_fee:'Buy broker',sell_broker_fee:'Sell broker',facility_tax:'Facility tax',system_cost_index:'System cost index',limit:'Rows per page',hub_id:'Product hub',material_hub_id:'Material purchase hub'};
       return labels[field]||String(field).replaceAll('_',' ').replace(/^./,v=>v.toUpperCase());
     },
     async api(url, options={}) {
@@ -96,7 +97,7 @@ document.addEventListener('alpine:init', () => {
     },
     params(form=this.form, settings=this.profileSettings, offset=this.page.offset) {
       const params = new URLSearchParams();
-      const values={...settings,...form};
+      const values={...this.migrateBrokerSettings({...settings}),...form};
       delete values.invention_science_level; delete values.invention_encryption_level;
       delete values.tech; delete values.category; delete values.rigs;
       delete values.meta_group_ids; delete values.categories; delete values.is_rig;
@@ -114,7 +115,9 @@ document.addEventListener('alpine:init', () => {
       }
       return params;
     },
+    migrateBrokerSettings(settings){if(settings.broker_fee!==undefined){settings.buy_broker_fee??=settings.broker_fee;settings.sell_broker_fee??=settings.broker_fee;delete settings.broker_fee;}return settings;},
     setProfile(profile) {
+      if(profile.browser)this.migrateBrokerSettings(profile.form);else this.migrateBrokerSettings(profile.settings);
       if(profile.browser){this.form=Object.fromEntries(Object.entries(this.defaults()).map(([key,value])=>[key,profile.form[key]??value]));this.profileSettings=JSON.parse(JSON.stringify(profile.settings||{}));return;}
       const s=profile.settings; this.profileSettings=JSON.parse(JSON.stringify(s));
       this.form={...this.defaults()};
@@ -162,7 +165,7 @@ document.addEventListener('alpine:init', () => {
     },
     nextPage(){this.load(true,this.page.offset+this.page.limit);},
     previousPage(){this.load(true,Math.max(0,this.page.offset-this.page.limit));},
-    get missingCount(){return (this.page.missing_recipes||0)+(this.page.missing_prices||0)+(this.page.missing_invention||0);},
+    get missingCount(){return (this.page.missing_recipes||0)+(this.page.missing_prices||0)+(this.page.missing_invention||0)+(this.page.missing_job_costs||0);},
     get topDaily(){return this.page.items.length?Math.max(...this.page.items.map(p=>Number(p.rank_profit_per_day))):null;},
     get medianMargin(){const values=this.page.items.map(p=>Number(p.margin_pct)).sort((a,b)=>a-b);if(!values.length)return null;const i=Math.floor(values.length/2);return values.length%2?values[i]:(values[i-1]+values[i])/2;},
     get activeFilters(){return ['search','tech','category','min_profit','min_margin','min_daily_isk_volume','min_product_volume'].filter(k=>this.form[k]!==''&&this.form[k]!==undefined).length+Number(this.form.include_invention_cost)+Number(this.form.fresh_only)+Number(this.form.require_full_run_demand);},
@@ -211,7 +214,7 @@ document.addEventListener('alpine:init', () => {
       catch(_){this.preparationMessage='Could not request invention preparation. Please try again.';}
       finally{this.preparingMarket=false;}
     },
-    inventionParams(){return new URLSearchParams({hub_id:this.resultForm.material_hub_id||this.resultForm.hub_id,order_type:this.resultForm.material_order_type,broker_fee:this.resultForm.broker_fee});},
+    inventionParams(){return new URLSearchParams({hub_id:this.resultForm.material_hub_id||this.resultForm.hub_id,order_type:this.resultForm.material_order_type});},
     get inventionReady(){return this.invention?.request?.status==='ready'&&!this.invention.stale;},
     timeLabel(value){if(!value)return 'Not available';const date=new Date(value);return Number.isNaN(date.getTime())?'Not available':new Intl.DateTimeFormat('en-US',{month:'short',day:'numeric',hour:'2-digit',minute:'2-digit',second:'2-digit',timeZoneName:'short'}).format(date);},
     async loadInvention(){

@@ -8,13 +8,13 @@ Only public ESI and EVE Ref endpoints are used; no API keys, SSO or app registra
 ## Current state
 
 Implemented: catalog sync, hub prices and demand, regional history/liquidity, manufacturing
-profitability, persistent invention caching and saved calculation profiles. Migrations 0001-0008
+profitability, persistent invention caching and saved calculation profiles. Migrations 0001-0009
 create the required tables and an initial profile. The English web interface is available at `/`,
 with a unified filter panel, browser profiles and item details. Interactive API documentation
 is available at `/docs`.
 
-Latest validation on Windows/Python 3.12: 300 tests passed, 1 optional PostgreSQL test skipped
-in the default suite, 98.38% combined coverage. The PostgreSQL test passed separately, including
+Latest validation on Windows/Python 3.12: 314 tests passed, 1 optional PostgreSQL test skipped
+in the default suite, 98.40% combined coverage. The PostgreSQL test passed separately, including
 migrations, cache persistence and concurrent profile selection. Ruff, formatting and strict
 mypy passed. Public ESI/EVE Ref smoke probes passed; a complete production Compose deployment
 has not been validated end to end. These are recorded results, not checks run on every startup.
@@ -181,14 +181,32 @@ costs per unit, profit per unit, margin and theoretical profit/day from one prod
 For parity with the original script, margin is profit divided by material cost, multiplied
 by 100; it is not profit divided by revenue. Slot/day profit does not guarantee daily sales.
 
-`sales_tax` and `broker_fee` are percentages, both zero by default. Sales tax applies to product
-revenue. Broker fees apply to material buy orders and product sell orders, not instant fills
-against someone else's orders. Relisting is not modeled. `job_cost_per_run` optionally overrides
-the cached EVE Ref installation estimate (which includes its SCC charge). That estimate uses
-the source's NPC/default skill assumptions, not your actual system/structure/character.
+Five independent percentage settings default to zero (blank/null also means zero):
+`buy_broker_fee`, `sell_broker_fee`, `sales_tax`, `facility_tax`, `system_cost_index`.
+Buy broker applies only to material BUY orders, sell broker only to product SELL orders;
+sales tax applies to either product sale type. Relisting is not modeled. Legacy `broker_fee`
+remains a shorthand for both broker rates when the separate values are omitted; explicit values,
+including zero, win. Old browser and server profiles retain their previous broker settings.
+
+Facility tax and system cost index apply ONLY to manufacturing, using the recipe's EVE Ref
+estimated item value (EIV), not the market material cost or product revenue:
+`installation/run = cached base/SCC charge + EIV * (facility_tax + system_cost_index) / 100`.
+SCC surcharge remains included in the base charge even when all five user rates are zero,
+as explicitly requested. `job_cost_per_run` overrides that BASE charge; the entered EIV-based
+charges still apply. Structure bonuses, alpha tax overrides and automatic system lookup are
+not modeled. Invention estimates are explicitly tax-free: only datacores/decryptors, no broker
+fees or installation/SCC charges. None of the five rates changes its cache key or queues work.
+
+All charges reduce net profit and therefore margin, profit/day and price-weighted demand profit.
+The item card exposes EIV per unit, base/SCC, facility tax and system index charge separately.
+Recipes persist EIV in their existing JSON payload; no database column change is needed.
+Legacy recipes are refreshed once for this missing metadata even if their normal TTL has not
+expired. With nonzero industry rates, missing EIV excludes the item and increments
+`missing_job_costs`; zero-rate calculations remain available. The manufacturing queue ID has
+an EIV revision so completed pre-feature jobs do not suppress this backfill.
 
 The liquidity endpoint's catalog filters are available alongside `min_profit`, `max_profit`,
-`min_margin`, `max_margin`, `min_profit_per_day` and `rank_by=profit_per_day|margin|profit`.
+`min_margin`, `max_margin`, `min_profit_per_day` and `rank_by=profit_per_day|margin|profit|demand_profit`.
 Ranking and filtering process all candidates before `limit`/`offset`. Missing prices or recipes
 are excluded and counted, never treated as free inputs. `fresh_only` requires fresh history,
 recipes and prices. T2 output explicitly marks invention as required and whether it was included.
@@ -242,7 +260,7 @@ download preserves the previous plan. `INVENTION_PLAN_TTL_SECONDS` defaults to s
 Redis locks share source work across hub/side requests; stable ARQ job IDs deduplicate requests.
 Source calls use the shared bounded industry client (three concurrent requests by default).
 
-Valuations are separate by hub, material buy/sell side and broker fee. Price updates
+Valuations are separate only by product, hub and material buy/sell side; tax rates are excluded. Price updates
 reuse saved plans, without downloading the blueprints/options again. Their expiry is capped
 by the daily valuation boundary at 12:30 UTC, independently of source/price cache expiry; requested valuations refresh through the scheduler
 daily at 12:30 UTC and at startup. Default backfill prepares Jita/sell with science 5 and encryption 4;
@@ -255,7 +273,7 @@ API examples:
 - `POST /api/v1/invention/prepare?hub_id=amarr&order_type=buy` schedules all active T2 catalog
   products for those settings, without doing the heavy calculations in the HTTP request.
 - `GET /api/v1/invention/2456?hub_id=amarr&order_type=buy` reads cached status
-  and alternatives. All settings must match the prepare request; broker fee defaults to 0.
+  and alternatives. Hub and material price side must match the prepare request. Legacy broker-fee inputs are ignored.
 
 States are `pending`, `ready`, `missing_prices`, `unsupported`, and `error`, with an independent
 `stale` flag. An unrequested combination returns `request=null`. Failures retain old results
@@ -264,7 +282,9 @@ is marked `complete_pricing=false`; the best option is only the cheapest among p
 Unknown datacore/decryptor prices are never interpreted as free inputs.
 
 Expected cost per manufactured unit is:
-`(attempt materials + applicable buy-order broker fee + job estimate) / (success probability * runs per copy * units per manufacturing run)`.
+`attempt materials / (success probability * runs per copy * units per manufacturing run)`.
+The estimate includes datacores/decryptors and expected failed attempts, excluding all taxes
+and broker fees. Manufacturing SCC is still charged separately as described above.
 Scaled upstream material/job quantities are normalized to one attempt before calculating.
 This handles ammo/drone output quantities correctly. Skills are fixed to science 5/encryption 4;
 no user skill variants, SSO or character access are used. Decryptor ME/TE is shown as
@@ -273,7 +293,7 @@ purchase costs and the player's actual facility/system bonuses remain outside th
 
 Set `include_invention_cost=true` on `/api/v1/manufacturing/opportunities` to deduct a prepared
 cost before profit/margin/demand-limited ranking. Legacy skill settings are ignored. The valuation follows `material_hub_id` (or `hub_id`),
-`material_order_type` and `broker_fee`. Missing/failed T2 results are excluded and reported in
+`material_order_type`; it is shared across all tax settings. Missing/failed T2 results are excluded and reported in
 `missing_invention` and `invention_unavailable`, never charged zero. Stale cached results are
 marked; `fresh_only=true` excludes them. Cost inclusion defaults to false.
 
@@ -371,7 +391,7 @@ Legacy science/encryption values in API requests, queued jobs and saved profiles
 
 Refresh schedule: market orders hourly at :00 UTC; regional-history planning daily at 12:15 UTC (19:15 Tomsk); invention valuation planning daily at 12:30 UTC (19:30 Tomsk). Startup also checks stale data. A valuation is retained until the next daily refresh boundary; hourly market refreshes do not automatically reprice it. Explicit preparation of a new setting combination remains available. ESI expiry still marks market snapshots stale; polling less often does not change ESI freshness.
 
-Daily valuation expiry is aligned to 12:30 UTC, rather than job-finish time plus 24 hours: otherwise queue delay can make the next daily planner skip a still-fresh result for another full day. Existing valuation expiry timestamps must be aligned during deployment. Latest checks: 280 passed, 1 skipped; Ruff, format and mypy passed.
+Daily valuation expiry is aligned to 12:30 UTC, rather than job-finish time plus 24 hours: otherwise queue delay can make the next daily planner skip a still-fresh result for another full day. Existing valuation expiry timestamps must be aligned during deployment. Latest checks: 314 passed, 1 skipped; Ruff, format and mypy passed.
 
 
 ## Readable item details
@@ -391,3 +411,12 @@ Profit on demand is shown directly in the table with units and full-run counts. 
 Migration 0008 adds nullable buy_levels JSON to market snapshots. Old snapshots have unknown depth and conservatively use best-price volume only, with an explicit UI notice, until the next successful market refresh. New snapshots store volume and order count per station buy price, not individual orders. Changing the threshold reads these saved levels without issuing ESI requests or new invention jobs.
 
 The demand column also estimates sequential manufacturing time on one line using Industry V and Advanced Industry III: full runs ? base seconds per run ? 0.80 ? 0.91. The tooltip and item details state these assumptions. This display-only estimate excludes TE, facilities, specialist skills, invention, copying and manufacturing input materials; it does not change margin or daily-profit calculations.
+
+Migration 0009 merges historical broker-fee invention variants into one valuation per
+product/hub/price side. It removes embedded broker fees and installation charges from the
+saved attempt costs, recomputes unit costs/best decryptor locally, and preserves the selected
+ready result's timestamps and expiry. No ESI/EVE Ref lookup or plan regeneration is needed.
+Source-plan keys and the former zero-fee valuation keys remain compatible. The migration's
+downgrade retains the canonical estimates rather than recreating discarded fee variants.
+Changing a user's tax rates never schedules invention. Source plans remain cached seven days;
+material-price valuations still refresh daily at 12:30 UTC.

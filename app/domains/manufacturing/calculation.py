@@ -40,14 +40,23 @@ def calculate(data: CalculationInput, query: ManufacturingQuery) -> ProfitCalcul
     material_cost = sum((cost.cost for cost in costs), Decimal(0)) / recipe.units
     if material_cost <= 0:
         return None
-    job_cost = (
+    base_job_cost = (
         recipe.job_cost if query.job_cost_per_run is None else query.job_cost_per_run
     ) / recipe.units
+    eiv = recipe.estimated_item_value
+    if eiv is None and (query.facility_tax or query.system_cost_index):
+        return None
+    eiv_per_unit = None if eiv is None else eiv / recipe.units
+    facility_tax = (eiv_per_unit or Decimal(0)) * query.facility_tax / 100
+    system_cost = (eiv_per_unit or Decimal(0)) * query.system_cost_index / 100
+    job_cost = base_job_cost + facility_tax + system_cost
     procurement_fee = (
-        material_cost * query.broker_fee / 100 if query.material_order_type == "buy" else Decimal(0)
+        material_cost * query.buy_broker_fee / 100
+        if query.material_order_type == "buy"
+        else Decimal(0)
     )
     sales_fee = (
-        revenue * query.broker_fee / 100 if query.product_order_type == "sell" else Decimal(0)
+        revenue * query.sell_broker_fee / 100 if query.product_order_type == "sell" else Decimal(0)
     )
     sales_tax = revenue * query.sales_tax / 100
     total_cost = material_cost + job_cost + procurement_fee + data.invention_cost_per_unit
@@ -59,6 +68,10 @@ def calculate(data: CalculationInput, query: ManufacturingQuery) -> ProfitCalcul
         materials=costs,
         material_cost_per_unit=material_cost,
         job_cost_per_unit=job_cost,
+        base_job_cost_per_unit=base_job_cost,
+        facility_tax_per_unit=facility_tax,
+        system_cost_per_unit=system_cost,
+        estimated_item_value_per_unit=eiv_per_unit,
         invention_cost_per_unit=data.invention_cost_per_unit,
         procurement_broker_fee_per_unit=procurement_fee,
         sales_tax_per_unit=sales_tax,

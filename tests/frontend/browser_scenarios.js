@@ -21,6 +21,8 @@ async function checkFrontendWorkflow() {
   check(document.querySelector('[aria-label="Trade hub"]').value === app.form.hub_id, 'Hub select shows actual selection');
 
   app.form.buy_demand_tolerance_pct='2.5';
+  const fees={buy_broker_fee:'1.2',sell_broker_fee:'2.3',sales_tax:'3.4',facility_tax:'0.5',system_cost_index:'4.6'};
+  Object.assign(app.form,fees);
   app.profileName = 'Browser check ' + Date.now();
   app.saveBrowserProfile();
   check(!app.profileError && app.browserProfile, 'Save named browser profile');
@@ -30,6 +32,9 @@ async function checkFrontendWorkflow() {
   await app.applyProfile();
   check(app.form.tech === '2', 'Update and reapply profile');
   check(app.form.buy_demand_tolerance_pct==='2.5','Price range saved in profile');
+  check(Object.entries(fees).every(([key,value])=>app.form[key]===value&&app.params().get(key)===value),'Five independent percentages survive profile roundtrip and reach API');
+  const migrated=app.migrateBrokerSettings({broker_fee:'2',sell_broker_fee:'3'});
+  check(migrated.buy_broker_fee==='2'&&migrated.sell_broker_fee==='3'&&!('broker_fee' in migrated),'Legacy broker settings migrate without overriding explicit rates');
   app.form.category = 'Rigs';
   await app.load(false, 0);
   check(app.page.total === 1 && app.page.items[0].type_id === 31796, 'T2 rig selection');

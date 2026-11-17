@@ -48,6 +48,8 @@ async def test_migration_and_upsert_on_postgres() -> None:
 
     depth_migration = runpy.run_path("alembic/versions/0008_buy_price_levels.py")
 
+    untaxed_migration = runpy.run_path("alembic/versions/0009_tax_free_invention.py")
+
     def upgrade(connection: Connection) -> None:
         with Operations.context(MigrationContext.configure(connection)):
             migration["upgrade"]()
@@ -58,10 +60,12 @@ async def test_migration_and_upsert_on_postgres() -> None:
             invention_migration["upgrade"]()
             profile_migration["upgrade"]()
             depth_migration["upgrade"]()
+            untaxed_migration["upgrade"]()
         assert "item_types" in inspect(connection).get_table_names()
 
     def downgrade(connection: Connection) -> None:
         with Operations.context(MigrationContext.configure(connection)):
+            untaxed_migration["downgrade"]()
             depth_migration["downgrade"]()
             profile_migration["downgrade"]()
             invention_migration["downgrade"]()

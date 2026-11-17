@@ -38,7 +38,7 @@ async def enqueue_manufacturing(ctx: dict[str, Any]) -> int:
         batch = ids[start : start + 20]
         digest = hashlib.sha256(",".join(map(str, batch)).encode()).hexdigest()[:16]
         job = await ctx["redis"].enqueue_job(
-            "sync_recipes", batch, _queue_name=QUEUE, _job_id=f"manufacturing:{today}:{digest}"
+            "sync_recipes", batch, _queue_name=QUEUE, _job_id=f"manufacturing:eiv:{today}:{digest}"
         )
         count += job is not None
     return count

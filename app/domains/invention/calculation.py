@@ -31,9 +31,6 @@ def price_plans(
                 missing.append(material.type_id)
             else:
                 cost += material.quantity * price
-        if settings.order_type == "buy":
-            cost *= 1 + settings.broker_fee / 100
-        cost += plan.job_cost_per_attempt
         unit_cost = cost / (plan.probability * plan.runs_per_copy * plan.units_per_run)
         options.append(
             PricedOption(

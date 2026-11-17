@@ -42,6 +42,7 @@ class Production(BaseModel):
     te: int
     runs: Decimal
     total_job_cost: Decimal = Field(ge=0)
+    estimated_item_value: Decimal = Field(ge=0, allow_inf_nan=False)
     materials: dict[str, Material]
 
 
@@ -68,6 +69,8 @@ class EverefIndustryGateway(IndustryGateway):
                     "me": 0,
                     "te": 0,
                     "runs": 1,
+                    "manufacturing_cost": 0,
+                    "facility_tax": 0,
                     "material_prices": "FUZZWORK_JITA_SELL_MIN",
                 },
             )
@@ -111,5 +114,6 @@ class EverefIndustryGateway(IndustryGateway):
             units=production.units,
             seconds=duration_seconds(production.time),
             job_cost=production.total_job_cost,
+            estimated_item_value=production.estimated_item_value,
             materials=list(production.materials.values()),
         )
