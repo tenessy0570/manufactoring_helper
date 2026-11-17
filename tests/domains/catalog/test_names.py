@@ -51,7 +51,7 @@ async def test_names_api_validates_ids_and_does_not_expose_source_errors() -> No
     provider = Provider(scope=Scope.APP)
     provider.provide(lambda: service, provides=ItemNameService)
     container = make_async_container(provider)
-    app = create_app(container=container, settings=make_settings())
+    app = create_app(container=container, settings=make_settings(), require_login=False)
     try:
         async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
             response = await client.get("/api/v1/catalog/names?type_ids=34")

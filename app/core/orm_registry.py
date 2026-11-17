@@ -1,5 +1,7 @@
 """Imports every domain's tables so Alembic sees them in Base.metadata."""
 
+from app.domains.accounts.tables import SessionTable as SessionTable
+from app.domains.accounts.tables import UserTable as UserTable
 from app.domains.catalog.tables import ItemTypeTable as ItemTypeTable
 from app.domains.history.tables import HistoryDayTable as HistoryDayTable
 from app.domains.history.tables import HistoryStateTable as HistoryStateTable

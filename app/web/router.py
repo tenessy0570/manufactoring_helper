@@ -33,3 +33,24 @@ async def status(request: Request, service: FromDishka[HealthService]) -> HTMLRe
 @router.get("/invention-shopping", response_class=HTMLResponse)
 async def invention_shopping(request: Request) -> HTMLResponse:
     return templates.TemplateResponse(request=request, name="shopping.html")
+
+
+@router.get("/login", response_class=HTMLResponse)
+async def login_page(request: Request) -> HTMLResponse:
+    return templates.TemplateResponse(
+        request=request, name="account.html", context={"mode": "login"}
+    )
+
+
+@router.get("/account", response_class=HTMLResponse)
+async def account_page(request: Request) -> HTMLResponse:
+    return templates.TemplateResponse(
+        request=request, name="account.html", context={"mode": "account"}
+    )
+
+
+@router.get("/admin", response_class=HTMLResponse)
+async def admin_page(request: Request) -> HTMLResponse:
+    return templates.TemplateResponse(
+        request=request, name="account.html", context={"mode": "admin"}
+    )

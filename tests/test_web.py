@@ -16,7 +16,7 @@ from tests.helpers import make_settings
     ],
 )
 async def test_interface_and_bundled_assets_are_available(path: str) -> None:
-    app = create_app(settings=make_settings())
+    app = create_app(settings=make_settings(), require_login=False)
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
         response = await client.get(path)
     assert response.status_code == 200
@@ -27,7 +27,8 @@ async def test_interface_and_bundled_assets_are_available(path: str) -> None:
 
 async def test_interface_requires_configured_authentication() -> None:
     app = create_app(
-        settings=make_settings(basic_auth_username="admin", basic_auth_password="secret")
+        settings=make_settings(basic_auth_username="admin", basic_auth_password="secret"),
+        require_login=False,
     )
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
         response = await client.get("/")

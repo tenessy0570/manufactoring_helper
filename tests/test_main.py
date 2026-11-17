@@ -7,7 +7,7 @@ from tests.helpers import make_settings
 
 
 def make_client(**settings_overrides: object) -> AsyncClient:
-    app = create_app(settings=make_settings(**settings_overrides))
+    app = create_app(settings=make_settings(**settings_overrides), require_login=False)
     return AsyncClient(transport=ASGITransport(app=app), base_url="http://test")
 
 

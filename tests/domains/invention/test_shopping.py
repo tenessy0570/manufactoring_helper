@@ -91,7 +91,7 @@ async def test_shopping_api_and_page() -> None:
     provider.provide(lambda: service, provides=ShoppingService)
     container = make_async_container(provider)
     async with httpx.AsyncClient(
-        transport=httpx.ASGITransport(create_app(container, make_settings())),
+        transport=httpx.ASGITransport(create_app(container, make_settings(), require_login=False)),
         base_url="http://test",
     ) as client:
         assert (await client.get("/invention-shopping")).status_code == 200

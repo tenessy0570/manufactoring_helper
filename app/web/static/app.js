@@ -95,11 +95,11 @@ document.addEventListener('alpine:init', () => {
       return labels[field]||String(field).replaceAll('_',' ').replace(/^./,v=>v.toUpperCase());
     },
     async api(url, options={}) {
-      const response = await fetch(url, {credentials:'same-origin',...options});
+      const response = await fetch(url, {credentials:'same-origin',...options,headers:{'X-Requested-With':'XMLHttpRequest',...options.headers}});
       let data; try {data=await response.json();} catch (_) {data=null;}
       if (!response.ok) {
         if (response.status===422 && Array.isArray(data?.detail)) throw new Error(data.detail.map(e => this.fieldLabel(e.loc.at(-1))+': '+e.msg.replace(/^Value error, /,'')).join(' · '));
-        if (response.status===401) throw new Error('Authentication required. Sign in and retry.');
+        if (response.status===401) {location.assign('/login');throw new Error('Your session expired. Please log in again.');}
         throw new Error(typeof data?.detail==='string' ? data.detail : 'Could not load data from the service. Please try again.');
       }
       return data;

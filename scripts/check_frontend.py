@@ -194,6 +194,40 @@ def main() -> None:
                         "throw Error('Shopping overflow'); 'PASS: shopping layout'"
                     )
                 )
+            call("Page.navigate", {"url": url + "/login"})
+            time.sleep(1)
+            print(
+                evaluate("""(async()=>{const a=Alpine.$data(document.body);
+            a.api=async()=>{throw Error('Invalid username or password');};
+            a.username='example';a.password='bad';await a.submitLogin();
+            if(!a.error||a.busy)throw Error('Login feedback');
+            if(document.querySelector('input[type=password]').autocomplete!=='current-password')
+              throw Error('Password autocomplete');return 'PASS: login page';})()""")
+            )
+            call("Page.navigate", {"url": url + "/admin"})
+            time.sleep(1)
+            print(
+                evaluate("""(async()=>{const a=Alpine.$data(document.body);
+            a.user={id:'admin',username:'admin',is_superuser:true};
+            let created=false;a.api=async(path,options={})=>{
+            if(path==='/users'&&options.method==='POST'){created=true;return {};}
+            return [{id:'user',username:'example',is_active:true,is_superuser:false}];};
+            a.newUsername='example';a.initialPassword='example-password';await a.createUser();
+            if(!created||a.initialPassword||a.users.length!==1)throw Error('Admin create user');
+            return 'PASS: administration page';})()""")
+            )
+            for width in (1440, 390):
+                call(
+                    "Emulation.setDeviceMetricsOverride",
+                    {"width": width, "height": 1100, "deviceScaleFactor": 1, "mobile": False},
+                )
+                time.sleep(0.2)
+                print(
+                    evaluate(
+                        "if(document.documentElement.scrollWidth>innerWidth+1)"
+                        "throw Error('Admin overflow'); 'PASS: admin layout'"
+                    )
+                )
             if errors:
                 raise RuntimeError(str(errors))
             print("PASS: no uncaught JavaScript errors")

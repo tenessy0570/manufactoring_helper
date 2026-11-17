@@ -50,6 +50,8 @@ async def test_migration_and_upsert_on_postgres() -> None:
 
     untaxed_migration = runpy.run_path("alembic/versions/0009_tax_free_invention.py")
 
+    account_migration = runpy.run_path("alembic/versions/0010_accounts.py")
+
     def upgrade(connection: Connection) -> None:
         with Operations.context(MigrationContext.configure(connection)):
             migration["upgrade"]()
@@ -61,10 +63,12 @@ async def test_migration_and_upsert_on_postgres() -> None:
             profile_migration["upgrade"]()
             depth_migration["upgrade"]()
             untaxed_migration["upgrade"]()
+            account_migration["upgrade"]()
         assert "item_types" in inspect(connection).get_table_names()
 
     def downgrade(connection: Connection) -> None:
         with Operations.context(MigrationContext.configure(connection)):
+            account_migration["downgrade"]()
             untaxed_migration["downgrade"]()
             depth_migration["downgrade"]()
             profile_migration["downgrade"]()
@@ -161,6 +165,29 @@ async def test_migration_and_upsert_on_postgres() -> None:
                 await session.commit()
                 assert await invention.plan(settings().plan_key) == plans
                 assert (await invention.requests([settings().key]))[settings().key] == request()
+                from app.domains.accounts.models import Credentials, UserCreate
+                from app.domains.accounts.repository import SQLAccountRepository
+                from app.domains.accounts.service import AccountService
+                from tests.domains.accounts.test_accounts import PASSWORD, Limiter
+
+                accounts = AccountService(
+                    SQLAccountRepository(session), SQLAlchemyUnitOfWork(session), Limiter()
+                )
+                account = await accounts.create(
+                    UserCreate.model_validate(
+                        {"username": "postgres_admin", "password": PASSWORD, "is_superuser": True}
+                    )
+                )
+                identity, token = await accounts.login(
+                    Credentials.model_validate(
+                        {"username": "postgres_admin", "password": PASSWORD}
+                    ),
+                    "test",
+                )
+                assert identity.id == account.id
+                assert await accounts.identity(token) == identity
+                await accounts.logout(token)
+                assert await accounts.identity(token) is None
                 profiles = ProfileService(
                     SQLProfileRepository(session), SQLAlchemyUnitOfWork(session)
                 )

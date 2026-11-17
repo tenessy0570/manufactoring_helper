@@ -441,7 +441,9 @@ async def test_api_reads_and_schedules_cached_work(session: AsyncSession) -> Non
     provider.provide(lambda: queue, provides=InventionQueue)
     container = make_async_container(provider)
     async with httpx.AsyncClient(
-        transport=httpx.ASGITransport(create_app(container=container, settings=make_settings())),
+        transport=httpx.ASGITransport(
+            create_app(container=container, settings=make_settings(), require_login=False)
+        ),
         base_url="http://test",
     ) as client:
         assert (await client.get("/api/v1/invention/10")).json()["request"] is None

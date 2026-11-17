@@ -37,7 +37,9 @@ async def test_progress_persists_coverage_and_validates_hub() -> None:
         provider.provide(lambda: service, provides=ProgressService)
         container = make_async_container(provider)
         async with httpx.AsyncClient(
-            transport=httpx.ASGITransport(create_app(container, make_settings())),
+            transport=httpx.ASGITransport(
+                create_app(container, make_settings(), require_login=False)
+            ),
             base_url="http://test",
         ) as client:
             assert (await client.get("/health/data-progress")).json()["recipes_loaded"] == 3

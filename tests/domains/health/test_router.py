@@ -25,7 +25,9 @@ def make_client(healthy: bool) -> AsyncClient:
     service = HealthService([StubCheck(healthy)])
     provider = Provider(scope=Scope.APP)
     provider.provide(lambda: service, provides=HealthService)
-    app = create_app(container=make_async_container(provider), settings=make_settings())
+    app = create_app(
+        container=make_async_container(provider), settings=make_settings(), require_login=False
+    )
     return AsyncClient(transport=ASGITransport(app=app), base_url="http://test")
 
 

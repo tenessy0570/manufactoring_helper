@@ -342,7 +342,7 @@ async def test_api_defaults_and_validation(session: AsyncSession) -> None:
     provider = Provider(scope=Scope.REQUEST)
     provider.provide(lambda: service, provides=ManufacturingService)
     container = make_async_container(provider)
-    app = create_app(container=container, settings=make_settings())
+    app = create_app(container=container, settings=make_settings(), require_login=False)
     async with httpx.AsyncClient(
         transport=httpx.ASGITransport(app), base_url="http://test"
     ) as client:

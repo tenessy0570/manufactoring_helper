@@ -12,3 +12,7 @@
 .blueprint-picker{position:relative;min-width:0;grid-column:span 2}.blueprint-picker>label{display:block;margin-bottom:8px;font-size:11px;color:#9ab0bf}.blueprint-picker>input{width:100%}.blueprint-suggestions{position:absolute;left:0;right:0;top:100%;max-height:320px;overflow:auto;background:#161e26;border:1px solid #475967;border-radius:6px;box-shadow:0 12px 28px #0007;z-index:30}.blueprint-suggestions [role=option]{display:flex;align-items:center;gap:10px;padding:9px 12px;cursor:pointer;font-size:12px;line-height:1.5}.blueprint-suggestions [role=option]:hover,.blueprint-highlight{background:#29463a}.blueprint-suggestions img{width:28px;height:28px;flex-shrink:0}.blueprint-suggestions p{padding:12px}.blueprint-suggestions span{overflow-wrap:anywhere}@media(max-width:600px){.blueprint-picker{grid-column:1/-1}}
 
 .shopping-panel{overflow:visible}
+
+.account-form{display:grid;gap:18px;max-width:420px}.account-form label{display:grid;gap:8px;font-size:12px}.account-form input{width:100%}
+
+@media(max-width:800px){.sidebar{max-width:100%;min-width:0;overflow-x:auto;justify-content:flex-start;gap:12px}.sidebar .brand,.sidebar .nav-item{flex-shrink:0}}

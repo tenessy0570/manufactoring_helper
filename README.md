@@ -8,13 +8,13 @@ Only public ESI and EVE Ref endpoints are used; no API keys, SSO or app registra
 ## Current state
 
 Implemented: catalog sync, hub prices and demand, regional history/liquidity, manufacturing
-profitability, persistent invention caching and saved calculation profiles. Migrations 0001-0009
+profitability, persistent invention caching and saved calculation profiles. Migrations 0001-0010
 create the required tables and an initial profile. The English web interface is available at `/`,
 with a unified filter panel, browser profiles and item details. Interactive API documentation
 is available at `/docs`.
 
-Latest validation on Windows/Python 3.12: 322 tests passed, 1 optional PostgreSQL test skipped
-in the default suite, 98.38% combined coverage. The PostgreSQL test passed separately, including
+Latest validation on Windows/Python 3.12: 329 tests passed, 1 optional PostgreSQL test skipped
+in the default suite, 96.85% combined coverage. The PostgreSQL test passed separately, including
 migrations, cache persistence and concurrent profile selection. Ruff, formatting and strict
 mypy passed. Public ESI/EVE Ref smoke probes passed; a complete production Compose deployment
 has not been validated end to end. These are recorded results, not checks run on every startup.
@@ -27,8 +27,32 @@ cp .env.example .env   # fill in passwords
 ./redeploy.sh --pull   # same, but runs `git pull --ff-only` first
 ```
 
-The site listens on `APP_PORT` (default 8000). Set `BASIC_AUTH_USERNAME` and
-`BASIC_AUTH_PASSWORD` to protect it; `/health/*` stays open for healthchecks.
+The site listens on `APP_PORT` (default 8000). All tools, data APIs, demo pages and API docs
+require a user login. Local accounts replace the former optional HTTP Basic Auth; legacy
+`BASIC_AUTH_*` values do not create accounts or bypass the login screen.
+
+Create the first superuser from the server terminal (password is prompted without echo):
+
+```bash
+docker compose exec api python -m app.domains.accounts.manage --username admin
+```
+
+Then open `/login`. Superusers manage users at `/admin`: create accounts/superusers,
+disable/enable access and reset passwords. Users have `/account` with logout and password
+change. Public self-registration is unavailable. Passwords must contain 12-128 characters;
+usernames are case-insensitive ASCII letters/digits plus dot, underscore or hyphen (3-32).
+Changing/resetting a password or disabling an account revokes its sessions. You cannot disable
+your own account. User-specific data/profile storage remains a future feature, not part of
+this stage; existing server profiles remain shared.
+
+Migration 0010 stores users and hashed opaque session tokens in PostgreSQL. Session cookies
+are HttpOnly, SameSite=Lax, Secure on HTTPS, expire after 14 days. Passwords use salted scrypt
+(32768/8/3), calculated outside the event loop. Login attempts are limited in Redis over
+15 minutes (10 per username/address, 50 per address). Serve public deployments over HTTPS.
+Mutating API requests, including login/logout, require `X-Requested-With: XMLHttpRequest`;
+foreign Origin headers are rejected. No CORS access is enabled. Only `/login`, login API,
+static assets, and exact `/health/live` and `/health/ready` are public. Data coverage is private.
+There is no ESI SSO or character access involved.
 
 On Windows, the equivalent initial commands are:
 
