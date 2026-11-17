@@ -3,9 +3,16 @@ from typing import Annotated
 from dishka.integrations.fastapi import DishkaRoute, FromDishka
 from fastapi import APIRouter, Path, Query
 
-from app.domains.invention.models import InventionQuery, InventionSettings, InventionView
+from app.domains.invention.models import (
+    InventionQuery,
+    InventionSettings,
+    InventionView,
+    ShoppingPlan,
+)
 from app.domains.invention.queue import InventionQueue
 from app.domains.invention.service import InventionService
+from app.domains.invention.shopping import ShoppingService
+from app.domains.market.models import HubId
 
 router = APIRouter(prefix="/api/v1/invention", tags=["invention"], route_class=DishkaRoute)
 
@@ -33,3 +40,13 @@ async def prepare(
     query: Annotated[InventionQuery, Query()],
 ) -> InventionView:
     return await service.prepare(InventionSettings(type_id=type_id, **query.model_dump()))
+
+
+@router.get("/shopping/{type_id}")
+async def shopping(
+    service: FromDishka[ShoppingService],
+    type_id: Annotated[int, Path(gt=0)],
+    units: Annotated[int, Query(ge=1, le=1000000000)] = 1,
+    hub_id: HubId = "jita",
+) -> ShoppingPlan:
+    return await service.plan(type_id, units, hub_id)

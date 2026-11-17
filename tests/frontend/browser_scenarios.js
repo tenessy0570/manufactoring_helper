@@ -99,7 +99,7 @@ async function checkFrontendWorkflow() {
     app.api = originalNameApi;
   }
   const inventionApi = app.api;
-  const options=['None','Accelerant','Attainment','Augmentation','Optimized Attainment','Optimized Augmentation','Parity','Process','Symmetry'].map((name,i)=>({plan:{decryptor_name:name,decryptor_id:i||null,probability:0.487+i/100},expected_cost_per_unit:String(47000+i*12345.6789)}));
+  const options=['None','Accelerant','Attainment','Augmentation','Optimized Attainment','Optimized Augmentation','Parity','Process','Symmetry'].map((name,i)=>({plan:{decryptor_name:name,decryptor_id:i||null,probability:0.487+i/100,runs_per_copy:10+i},expected_cost_per_unit:String(47000+i*12345.6789)}));
   const ready={request:{status:'ready',updated_at:new Date().toISOString(),expires_at:new Date(Date.now()+86400000).toISOString(),result:{options,best:options[0],complete_pricing:true}},stale:false,queued:false};
   sessionStorage.setItem('inventionFixture',JSON.stringify(ready));
   try {
@@ -118,6 +118,8 @@ async function checkFrontendWorkflow() {
     await app.prepareInvention();
     check(app.inventionMessage.includes('no extra job'),'Fresh cache explains why no new job is created');
   } finally {app.demo=true;app.api=inventionApi;}
+  await app.$nextTick();
+  check(app.$refs.dialog.textContent.includes('10 runs / T2 BPC'),'Candidate invention options show runs per successful copy');
   check(!app.demandWarning('single_buy_order').includes('_'), 'Demand warnings are explained');
   check(app.inventionStatus({request:{status:'missing_prices'},stale:false}).includes('prices'), 'Invention status is explained');
   app.$refs.dialog.dispatchEvent(new KeyboardEvent('keydown', {key: 'Tab', bubbles: true}));

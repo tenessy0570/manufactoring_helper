@@ -100,3 +100,38 @@ class InventionView(BaseModel):
     request: InventionRequest | None
     stale: bool
     queued: bool = False
+
+
+class ShoppingMaterial(BaseModel):
+    type_id: int
+    quantity: int
+
+
+class ShoppingOption(BaseModel):
+    runs_per_copy: int
+    units_per_run: int
+    estimated_cost: Decimal | None = None
+    missing_prices: list[int] = Field(default_factory=list)
+    decryptor_id: int | None
+    decryptor_name: str
+    probability: Decimal
+    source_blueprint_id: int
+    invented_blueprint_id: int
+    manufacturing_runs: int
+    successful_copies: int
+    attempts: int
+    output_capacity: int
+    materials: list[ShoppingMaterial]
+
+
+class ShoppingPlan(BaseModel):
+    hub_id: HubId = "jita"
+    best: ShoppingOption | None = None
+    complete_pricing: bool = False
+    type_id: int
+    desired_units: int
+    status: Literal["ready", "not_prepared", "unsupported"]
+    stale: bool = False
+    science_level: int = 2
+    encryption_level: int = 2
+    options: list[ShoppingOption] = Field(default_factory=list)

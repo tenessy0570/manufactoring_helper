@@ -28,3 +28,8 @@ async def status(request: Request, service: FromDishka[HealthService]) -> HTMLRe
             "healthy": report.status == HealthStatus.OK,
         },
     )
+
+
+@router.get("/invention-shopping", response_class=HTMLResponse)
+async def invention_shopping(request: Request) -> HTMLResponse:
+    return templates.TemplateResponse(request=request, name="shopping.html")

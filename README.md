@@ -13,8 +13,8 @@ create the required tables and an initial profile. The English web interface is 
 with a unified filter panel, browser profiles and item details. Interactive API documentation
 is available at `/docs`.
 
-Latest validation on Windows/Python 3.12: 315 tests passed, 1 optional PostgreSQL test skipped
-in the default suite, 98.37% combined coverage. The PostgreSQL test passed separately, including
+Latest validation on Windows/Python 3.12: 322 tests passed, 1 optional PostgreSQL test skipped
+in the default suite, 98.38% combined coverage. The PostgreSQL test passed separately, including
 migrations, cache persistence and concurrent profile selection. Ruff, formatting and strict
 mypy passed. Public ESI/EVE Ref smoke probes passed; a complete production Compose deployment
 has not been validated end to end. These are recorded results, not checks run on every startup.
@@ -442,3 +442,30 @@ History charts now share one plot: muted blue volume bars behind a green average
 Owner cancelled remaining blueprint-selection and server-profile UI stages. Only Docker build optimization remains in scope: dependencies extracted directly from pyproject.toml into an early BuildKit-cached pip layer; app copied afterward, installed offline with no dependency resolution/build isolation. Code/UI edits reuse dependency layer; pyproject changes invalidate it. First build populates cache.
 
 Docker optimization verified: normal compose built all five app images; source-only app.js change rebuilt a separate verification image in 6.8 seconds with dependency step CACHED and no downloads. Temporary source modification restored byte-for-byte. All five application containers recreated and healthy. Other pending feature stages cancelled by owner. Changes uncommitted.
+
+New invention shopping planner: /invention-shopping, navigation from Opportunities.
+Search cached T2 products by product/blueprint name (Blueprint suffix removed), select target,
+enter finished-unit count and price hub (Jita default). GET /api/v1/invention/shopping/{type_id}
+accepts units=1..1e9 and hub_id. Reuses canonical weekly source plan and cached hub sell prices;
+explicit Prepare uses existing deduplicated invention queue, no per-skill source variants.
+Planner-only skills are both science II and encryption II; existing opportunity valuation remains
+science V/encryption IV. Chance scales cached probability by 71/86 (CCP Phoebe formula:
+https://www.eveonline.com/fr/news/view/patch-notes-for-phoebe).
+Manufacturing runs=ceil(desired units/units per run); successful BPCs=ceil(runs/BPC runs);
+attempt budget=ceil(successful BPCs/chance). Materials and T1 BPC licensed-run requirement scale
+by whole attempts, NOT number of BPC physical copies. Output capacity can exceed desired units,
+especially ammunition. This is rounded-up expected consumption, not a probability guarantee.
+Automatic best decryptor minimizes total datacore+decryptor shopping budget for the requested
+batch, including chance/runs/output/rounding (NOT lowest decryptor purchase price). T1 BPC costs,
+manufacturing materials, taxes and fees excluded. Missing prices exclude alternatives from best;
+partial/no pricing explicit. Alternative comparison shown. Names resolve via cached names API.
+Empty/unsupported/stale/error states, explicit preparation/check status; no new upstream reads
+for calculations. New feature uncommitted; previous committed checkpoint 7928ac5.
+
+Shopping UI condensed: four summary cards (budget, attempts/chance, T2 copies/runs, capacity/request), best-decryptor header, item icons including T1 BPC/datacores/decryptor. Long assumptions under Calculation details; concise visible uncertainty/BPC-cost note preserved.
+
+Shopping blueprint search now uses an inline autocomplete listbox, replacing separate select. Mouse/arrow/Enter selection, Escape/outside/Tab dismissal, immediate invalidation and stale-search guards. BPC images use image-server /bpc variant (blueprint /icon returned400, /bpc returned200 in live probe).
+
+Invention shopping Copy buy list exports supply material names plus tab-separated whole quantities, newline-separated for EVE Multibuy paste. T1 BPC licensed runs excluded. Copy disabled until all names resolve; clipboard fallback/manual textarea available.
+
+Invention chance now accompanied by runs per successful T2 BPC in shopping summary/alternatives and opportunity detail alternatives. Shopping response exposes runs_per_copy and units_per_run from shared source plan.

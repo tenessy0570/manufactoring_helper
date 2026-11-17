@@ -11,6 +11,7 @@ from app.domains.invention.gateway import EverefInventionGateway, InventionGatew
 from app.domains.invention.queue import InventionQueue, RedisInventionQueue
 from app.domains.invention.repository import InventionRepository, SQLInventionRepository
 from app.domains.invention.service import InventionService, InventionSyncService
+from app.domains.invention.shopping import ShoppingService
 from app.domains.manufacturing.gateway import IndustryClient
 from app.domains.manufacturing.repository import ManufacturingRepository
 
@@ -60,3 +61,9 @@ class InventionProvider(Provider):
         return InventionSyncService(
             repository, gateway, manufacturing, unit_of_work, settings.invention_plan_ttl_seconds
         )
+
+    @provide(scope=Scope.REQUEST)
+    def shopping_service(
+        self, repository: InventionRepository, market: ManufacturingRepository
+    ) -> ShoppingService:
+        return ShoppingService(repository, market)

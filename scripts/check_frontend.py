@@ -176,6 +176,24 @@ def main() -> None:
             path = Path(tempfile.gettempdir()) / "eve-invention-desktop.png"
             path.write_bytes(base64.b64decode(shot))
             print(path)
+            call("Page.navigate", {"url": url + "/invention-shopping"})
+            time.sleep(1)
+            shopping_scenarios = (ROOT / "tests/frontend/shopping_scenarios.js").read_text(
+                encoding="utf-8"
+            )
+            print(evaluate(shopping_scenarios + "\ncheckShoppingWorkflow()"))
+            for width in (1440, 390):
+                call(
+                    "Emulation.setDeviceMetricsOverride",
+                    {"width": width, "height": 1100, "deviceScaleFactor": 1, "mobile": False},
+                )
+                time.sleep(0.2)
+                print(
+                    evaluate(
+                        "if(document.documentElement.scrollWidth>innerWidth+1)"
+                        "throw Error('Shopping overflow'); 'PASS: shopping layout'"
+                    )
+                )
             if errors:
                 raise RuntimeError(str(errors))
             print("PASS: no uncaught JavaScript errors")

@@ -1,0 +1,31 @@
+async function checkShoppingWorkflow(){
+  const app=Alpine.$data(document.body),check=(v,m)=>{if(!v)throw Error(m);};
+  const option={decryptor_id:34201,decryptor_name:'Accelerant',probability:'0.4953',runs_per_copy:10,units_per_run:5000,source_blueprint_id:11,invented_blueprint_id:12,manufacturing_runs:11,successful_copies:2,attempts:5,output_capacity:100000,estimated_cost:'15000',materials:[{type_id:34,quantity:10},{type_id:34201,quantity:5}]};
+  const ready={status:'ready',desired_units:50001,stale:false,complete_pricing:true,best:option,options:[option]};
+  let captured='';
+  app.api=async(url)=>{captured=url;if(url.includes('/catalog/items'))return {items:[{type_id:10,name:'Test Ammo II'}]};if(url.includes('/catalog/names'))return {names:{11:'T1 Blueprint',34:'Datacore',34201:'Accelerant Decryptor'},missing_type_ids:[]};return ready;};
+  app.searchText='Test Ammo II Blueprint';await app.search();
+  check(!captured.includes('Blueprint'),'Blueprint suffix normalized for catalog search');
+  const searchInput=document.querySelector('#blueprint-search');searchInput.focus();
+  searchInput.dispatchEvent(new KeyboardEvent('keydown',{key:'ArrowDown',bubbles:true,cancelable:true}));
+  searchInput.dispatchEvent(new KeyboardEvent('keydown',{key:'Enter',bubbles:true,cancelable:true}));
+  check(app.typeId==='10'&&!app.suggestionsOpen,'Keyboard selects autocomplete result');
+  check(app.searchText==='Test Ammo II Blueprint','Selected blueprint fills search input');
+  app.units='50001';await app.calculate();await app.$nextTick();
+  check(app.selected.decryptor_id===34201,'Best invention option selected automatically');
+  check(app.selected.output_capacity===100000,'Multi-unit blueprint output retained');
+  check(document.body.textContent.includes('10 runs / T2 BPC'),'Successful blueprint run count shown beside chance');
+  check(document.body.textContent.includes('licensed runs'),'BPC runs explained');
+  check(document.body.textContent.includes('Datacore'),'Shopping rows have item names');
+  check(app.buyListText==='Datacore\t10\nAccelerant Decryptor\t5','Multibuy text contains names and whole quantities without BPC');
+  check(app.canCopyBuyList,'Resolved names allow clipboard copy');
+  delete app.names[34];check(!app.canCopyBuyList,'Missing names prevent invalid multibuy text');app.names[34]='Datacore';
+  check(document.querySelectorAll('.shopping-result .material-name img').length>=3,'Blueprint and supply rows have icons');
+  check(document.querySelector('.shopping-result tbody tr .material-name img').src.includes('/bpc?'),'Blueprint copy uses bpc image variant');
+  check(document.querySelectorAll('.shopping-stats>div').length===4,'Key numbers grouped in four summary cards');
+  app.api=async()=>{throw Error('Offline');};await app.calculate();check(app.error==='Offline','Calculation errors are visible');
+  app.api=async()=>({status:'not_prepared',options:[]});await app.calculate();check(app.result.status==='not_prepared','Missing plan offers preparation');
+  await app.prepare();check(app.message.includes('shared invention cache'),'Preparation explains shared cache');
+  app.api=async(url)=>url.includes('/catalog/names')?{names:{},missing_type_ids:[]}:ready;await app.calculate();
+  return 'PASS: invention shopping search, automatic decryptor, ammo, names, errors and shared preparation';
+}

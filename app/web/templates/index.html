@@ -15,6 +15,7 @@
     <div class="nav-caption">WORKSPACE</div>
     <a class="nav-item active" href="/" aria-current="page"><span>▦</span> Opportunities <span class="nav-count" x-text="page.total.toLocaleString('en-US')"></span></a>
     <button class="nav-item" @click="filtersOpen = true; $nextTick(() => $refs.filters.scrollIntoView({block: 'start'}))">Filters &amp; settings</button>
+    <a class="nav-item" href="/invention-shopping">Invention shopping</a>
     <a class="nav-item" href="/docs" target="_blank" rel="noopener"><span>↗</span> API reference</a>
     <div class="sidebar-bottom"><span class="status-dot"></span> Public market data<div>Five trade hubs. One workspace.</div><span class="version">FIRST PREVIEW · v0.1</span></div>
   </aside>
@@ -174,10 +175,10 @@
       <p class="muted" x-show="lastInventionCheck">Last checked: <span x-text="timeLabel(lastInventionCheck)"></span></p>
       <template x-if="invention && invention.request"><p class="muted">Saved: <span x-text="timeLabel(invention.request.updated_at)"></span>. Refresh due: <span x-text="timeLabel(invention.request.expires_at)"></span>.</p></template>
       <template x-if="invention && invention.request && invention.request.result"><table class="invention-table">
-        <caption>Invention cost comparison per manufactured unit</caption><thead><tr><th>DECRYPTOR</th><th>SUCCESS CHANCE</th><th>EST. COST / UNIT (ISK)</th></tr></thead>
+        <caption>Invention cost comparison per manufactured unit</caption><thead><tr><th>DECRYPTOR</th><th>CHANCE / BPC OUTPUT</th><th>EST. COST / UNIT (ISK)</th></tr></thead>
         <tbody><template x-for="option in invention.request.result.options" :key="option.plan.decryptor_name"><tr :class="invention.request.result.best?.plan.decryptor_id === option.plan.decryptor_id && option.expected_cost_per_unit !== null ? 'best-option' : ''">
           <td><span x-text="option.plan.decryptor_name === 'None' ? 'No decryptor' : option.plan.decryptor_name"></span><span class="best-label" x-show="invention.request.result.best?.plan.decryptor_id === option.plan.decryptor_id && option.expected_cost_per_unit !== null">Lowest cost</span></td>
-          <td data-label="Success chance" x-text="percent(Number(option.plan.probability) * 100)"></td>
+          <td data-label="Chance / BPC output"><span x-text="percent(Number(option.plan.probability) * 100)"></span><div class="muted" x-text="option.plan.runs_per_copy + ' runs / T2 BPC'"></div></td>
           <td data-label="Est. ISK / unit" x-text="option.expected_cost_per_unit === null ? 'Missing prices' : fullMoney(option.expected_cost_per_unit)"></td>
         </tr></template></tbody>
       </table></template>
