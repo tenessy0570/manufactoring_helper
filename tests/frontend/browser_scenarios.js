@@ -111,6 +111,11 @@ async function checkFrontendWorkflow() {
   check(!app.selected && document.activeElement === row, 'Escape restores row focus');
   check(!document.body.style.overflow, 'Closing restores page scrolling');
 
+  check(app.timeAgo(new Date(app.progressNow-135*60000).toISOString())==='2h 15m ago','Progress uses hours and minutes since snapshot');
+  check(app.timeAgo(null)==='not yet loaded','Missing snapshot is explicit');
+  const progressApi=app.api;
+  try {app.demo=false;app.api=async()=>({catalog_items:100,recipes_loaded:80});await app.loadProgress();check(app.dataProgress.recipes_loaded===80,'Progress shows saved coverage');app.api=async()=>{throw new Error('Offline');};await app.loadProgress();check(app.progressError&&app.dataProgress.recipes_loaded===80,'Progress error preserves last saved coverage');}
+  finally{app.demo=true;app.api=progressApi;app.progressError=false;}
   const previousPage = JSON.stringify(app.page);
   const originalApi = app.api;
   try {

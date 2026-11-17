@@ -2,7 +2,9 @@ import asyncio
 from collections.abc import Sequence
 
 from app.domains.health.checks import HealthCheck
-from app.domains.health.models import ComponentHealth, HealthReport, HealthStatus
+from app.domains.health.models import ComponentHealth, DataProgress, HealthReport, HealthStatus
+from app.domains.health.repository import ProgressRepository
+from app.domains.market.models import HubId
 
 
 class HealthService:
@@ -27,3 +29,11 @@ class HealthService:
                 name=check.name, status=HealthStatus.FAIL, detail=type(error).__name__
             )
         return ComponentHealth(name=check.name, status=HealthStatus.OK)
+
+
+class ProgressService:
+    def __init__(self, repository: ProgressRepository) -> None:
+        self._repository = repository
+
+    async def snapshot(self, hub: HubId) -> DataProgress:
+        return await self._repository.snapshot(hub)

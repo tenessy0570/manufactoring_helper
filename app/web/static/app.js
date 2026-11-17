@@ -8,6 +8,10 @@ document.addEventListener('alpine:init', () => {
     selected: null, invention: null, inventionMessage: '', inventionLoading: false, inventionChecking:false, lastInventionCheck:null,
     requestSequence: 0, detailSequence: 0, appliedForm:null, appliedSettings:{}, returnFocus:null, profileNotice:'',
     hubs: [{id:'jita',name:'Jita'},{id:'amarr',name:'Amarr'},{id:'dodixie',name:'Dodixie'},{id:'rens',name:'Rens'},{id:'hek',name:'Hek'}],
+    progressNow:Date.now(),
+    timeAgo(value){if(!value)return 'not yet loaded';const stamp=new Date(value).getTime();if(!Number.isFinite(stamp))return 'not available';const minutes=Math.floor(Math.max(0,this.progressNow-stamp)/60000);return minutes<1?'less than a minute ago':Math.floor(minutes/60)+'h '+minutes%60+'m ago';},
+    dataProgress:null,progressError:false,progressSequence:0,
+    async loadProgress(){if(this.demo)return;const seq=++this.progressSequence;try{const result=await this.api('/health/data-progress?hub='+this.resultForm.hub_id);if(seq!==this.progressSequence)return;this.dataProgress=result;this.progressError=false;}catch(_){if(seq===this.progressSequence)this.progressError=true;}},
     hiddenColumns:[], columnOptions:[{id:'cost',label:'Cost / unit'},{id:'profit',label:'Profit / unit'},{id:'demand',label:'Profit on demand'},{id:'margin',label:'Margin'},{id:'daily',label:'Profit / day'},{id:'turnover',label:'Regional turnover / day'},{id:'data',label:'Data freshness'}],
     columnVisible(id){return !this.hiddenColumns.includes(id);},
     form: {}, page: {items:[],total:0,offset:0,limit:25},
@@ -164,6 +168,7 @@ document.addEventListener('alpine:init', () => {
         if(this.demo) result=this.demoPage(queryForm,offset); else result=await this.api('/api/v1/manufacturing/opportunities?'+this.params(queryForm,querySettings,offset));
         if(seq!==this.requestSequence)return;
         this.closeItem();this.page=result;this.appliedForm=queryForm;this.appliedSettings=querySettings;
+        this.loadProgress();
       } catch(error) {if(seq===this.requestSequence){this.error=error.message;}}
       finally {if(seq===this.requestSequence)this.loading=false;}
     },

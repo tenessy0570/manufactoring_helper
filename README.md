@@ -13,8 +13,8 @@ create the required tables and an initial profile. The English web interface is 
 with a unified filter panel, browser profiles and item details. Interactive API documentation
 is available at `/docs`.
 
-Latest validation on Windows/Python 3.12: 314 tests passed, 1 optional PostgreSQL test skipped
-in the default suite, 98.40% combined coverage. The PostgreSQL test passed separately, including
+Latest validation on Windows/Python 3.12: 315 tests passed, 1 optional PostgreSQL test skipped
+in the default suite, 98.37% combined coverage. The PostgreSQL test passed separately, including
 migrations, cache persistence and concurrent profile selection. Ruff, formatting and strict
 mypy passed. Public ESI/EVE Ref smoke probes passed; a complete production Compose deployment
 has not been validated end to end. These are recorded results, not checks run on every startup.
@@ -244,7 +244,7 @@ A separate `manufacturing-worker` fetches public EVE Ref recipes daily with thre
 requests and up to three attempts. Confirmed non-manufacturable products are cached; other
 failures preserve previous recipes. `MANUFACTURING_CACHE_SECONDS` defaults to 86400.
 `python scripts/manufacturing_smoke.py` captures one public response for reproducible tests.
-The user interface remains a future stage.
+The English web interface is available at `/`.
 
 ## Invention cache
 
@@ -421,8 +421,16 @@ downgrade retains the canonical estimates rather than recreating discarded fee v
 Changing a user's tax rates never schedules invention. Source plans remain cached seven days;
 material-price valuations still refresh daily at 12:30 UTC.
 
-Production lines setting: production_lines, integer 1..1000, defaults to 1 (blank/null also 1). Saved in browser/server profiles. Demand completion time uses ceil(full runs / lines) * adjusted seconds per run, preserving whole runs; applied settings determine displayed time. Financial profit and daily ranking remain unchanged. Latest change is uncommitted.
+Production lines setting: production_lines, integer 1..1000, defaults to 1 (blank/null also 1). Saved in browser/server profiles. Demand completion time uses ceil(full runs / lines) * adjusted seconds per run, preserving whole runs; applied settings determine displayed time. Financial profit and daily ranking remain unchanged. Committed in 34bf018.
 
-Table Columns chooser: seven optional metric/data columns with checkboxes, all visible by default. Item identity remains visible. hiddenColumns stored in versioned browser settings separately from calculation/profile filters; Show all columns resets visibility. No API calls for toggles. Browser verified matching hidden headers/cells and storage restoration. Uncommitted.
+Table Columns chooser: seven optional metric/data columns with checkboxes, all visible by default. Item identity remains visible. hiddenColumns stored in versioned browser settings separately from calculation/profile filters; Show all columns resets visibility. No API calls for toggles. Browser verified matching hidden headers/cells and storage restoration. Committed in 34bf018.
 
-Columns control now sits at the top-right edge of the table, opening a compact checkbox popover. Outside click/Escape closes it; Escape restores button focus. Commit cancelled by owner; changes remain uncommitted.
+Columns control now sits at the top-right edge of the table, opening a compact checkbox popover. Outside click/Escape closes it; Escape restores button focus. Committed in 34bf018 after the menu placement update.
+
+Background data coverage is available above the table and at GET /health/data-progress?hub=jita.
+It reports persisted catalog/recipe/history coverage, market snapshot size/time, and T2 invention
+status counts (sell-priced inputs). It refreshes every 30 seconds while the page is visible and
+on hub/result changes; manual Refresh status is available. Counts are saved coverage, not a claim
+that a worker is currently running. This read-only endpoint performs no upstream downloads.
+
+Market snapshot coverage shows elapsed hours/minutes instead of absolute date; exact timestamp remains in tooltip. Elapsed display updates on the 30-second visible-page tick.

@@ -90,6 +90,17 @@
         </div></div>
         <p class="profile-notice" role="status" x-show="preparationMessage" x-text="preparationMessage" x-cloak></p>
         <div class="pending-banner" x-show="hasChanges" x-cloak>Filters have changed. Select Show results to update the results below.</div>
+        <details class="results-help" x-show="!demo" x-init="setInterval(() => { if (!document.hidden) { progressNow=Date.now(); loadProgress(); } }, 30000)"><summary @click="loadProgress()">Background data coverage</summary>
+          <p class="muted">Saved coverage for the selected product hub, independent of item filters. Counts do not mean workers are currently running. Empty trading history also counts as loaded. Invention coverage uses sell-priced inputs.</p>
+          <p x-show="progressError" role="status">Progress is temporarily unavailable.</p>
+          <template x-if="dataProgress"><dl>
+            <dt>Catalog candidates</dt><dd x-text="dataProgress.catalog_items"></dd>
+            <dt>Manufacturing recipes</dt><dd x-text="dataProgress.recipes_loaded + ' loaded / ' + dataProgress.catalog_items + ' candidates; ' + dataProgress.recipes_unavailable + ' unavailable'"></dd>
+            <dt>Regional history</dt><dd x-text="dataProgress.history_loaded + ' / ' + dataProgress.catalog_items + ' loaded'"></dd>
+            <dt>Market snapshots</dt><dd :title="dataProgress.market_updated_at ? new Date(dataProgress.market_updated_at).toLocaleString() : ''" x-text="dataProgress.market_items + ' items; last saved ' + timeAgo(dataProgress.market_updated_at)"></dd>
+            <dt>T2 invention</dt><dd x-text="dataProgress.invention_ready + ' ready / ' + dataProgress.t2_items + ' T2 items; ' + dataProgress.invention_pending + ' requested; ' + dataProgress.invention_unsupported + ' unsupported; ' + dataProgress.invention_errors + ' errors or missing prices'"></dd>
+          </dl></template><button type="button" class="text-button" @click="loadProgress()">Refresh status</button>
+        </details>
         <div class="table-meta"><span><span class="status-dot"></span> <span x-text="demo ? 'Sample opportunities' : 'Saved market snapshots'"></span></span><span>Amounts in ISK</span></div>
         <details class="results-help"><summary>How to read these results</summary><dl>
           <dt>Cost per unit</dt><dd>Materials, estimated job installation and optional invention/procurement fees for one finished item.</dd>
