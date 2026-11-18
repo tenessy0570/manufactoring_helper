@@ -54,3 +54,8 @@ async def admin_page(request: Request) -> HTMLResponse:
     return templates.TemplateResponse(
         request=request, name="account.html", context={"mode": "admin"}
     )
+
+
+@router.get("/production-history", response_class=HTMLResponse)
+async def production_history(request: Request) -> HTMLResponse:
+    return templates.TemplateResponse(request=request, name="production.html")

@@ -8,14 +8,16 @@ Only public ESI and EVE Ref endpoints are used; no API keys, SSO or app registra
 ## Current state
 
 Implemented: catalog sync, hub prices and demand, regional history/liquidity, manufacturing
-profitability, persistent invention caching and saved calculation profiles. Migrations 0001-0010
+profitability, persistent invention caching, saved calculation profiles and private production
+history. Migrations 0001-0011
 create the required tables and an initial profile. The English web interface is available at `/`,
 with a unified filter panel, browser profiles and item details. Interactive API documentation
-is available at `/docs`.
+is available at `/docs`. The shared navigation groups workspace tools and account links,
+highlights the active page and collapses into an accessible menu on mobile.
 
-Latest validation on Windows/Python 3.12: 329 tests passed, 1 optional PostgreSQL test skipped
-in the default suite, 96.85% combined coverage. The PostgreSQL test passed separately, including
-migrations, cache persistence and concurrent profile selection. Ruff, formatting and strict
+Latest validation on Windows/Python 3.12: 338 tests passed, 1 optional PostgreSQL test skipped
+in the default suite, 97.17% combined coverage. The PostgreSQL test passed separately, including
+migrations, cache persistence, concurrent profile selection and concurrent production income. Ruff, formatting and strict
 mypy passed. Public ESI/EVE Ref smoke probes passed; a complete production Compose deployment
 has not been validated end to end. These are recorded results, not checks run on every startup.
 
@@ -42,8 +44,8 @@ disable/enable access and reset passwords. Users have `/account` with logout and
 change. Public self-registration is unavailable. Passwords must contain 12-128 characters;
 usernames are case-insensitive ASCII letters/digits plus dot, underscore or hyphen (3-32).
 Changing/resetting a password or disabling an account revokes its sessions. You cannot disable
-your own account. User-specific data/profile storage remains a future feature, not part of
-this stage; existing server profiles remain shared.
+your own account. Production history belongs to each user; existing server calculation profiles
+remain shared.
 
 Migration 0010 stores users and hashed opaque session tokens in PostgreSQL. Session cookies
 are HttpOnly, SameSite=Lax, Secure on HTTPS, expire after 14 days. Passwords use salted scrypt
@@ -74,6 +76,35 @@ keeps both volumes; these are Docker-managed volumes, not folders in the reposit
 Optional settings include `CATALOG_MAX_AGE_HOURS=20`, `MARKET_CACHE_SECONDS=300`,
 `HISTORY_CACHE_SECONDS=86400`, `MANUFACTURING_CACHE_SECONDS=86400`,
 `INVENTION_PLAN_TTL_SECONDS=604800`, and `INDUSTRY_MAX_CONCURRENCY=3`.
+
+## Production history
+
+Open `/production-history` after login. Create a batch by product/blueprint name; planned finished
+units and comments are optional. A new batch has no expenses. Add invention, materials and
+manufacturing expenses independently as work progresses, and increase planned units when extending
+the batch. Changing units does not rewrite previously saved expenses.
+
+Record each partial sale using **Income from sale ? Received (ISK) ? Add income**. Received sums
+accumulate; quantities sold are not required, so remaining stock is not inferred. Entries can be
+edited/deleted, and batches marked completed. Cash balance is received income minus recorded
+expenses; return on costs uses total recorded expenses as denominator. Neither values unsold stock
+nor assumes unrecorded expenses are zero. An absent category shows **Not recorded**; an explicit
+zero is retained. Amounts accept up to two decimal places.
+
+**Estimate from saved market data ? Estimate & fill amount** fills an editable amount without
+saving it. Choose the finished units for this particular expense (including additional batches).
+Materials use whole runs, output units/run, ME 0 and saved hub buy/sell prices; procurement buy
+broker fees are optional. Manufacturing uses the saved base/SCC charge plus optional EIV-based
+facility tax and system cost index. Invention reuses the shared source plans with skills II/II/II
+and the cheapest total expected datacore/decryptor budget for the batch, excluding T1 BPC prices.
+Missing data returns an actionable message; stale data is flagged. Estimates trigger no external
+fetches or new invention jobs. Saved ledger amounts do not change when market prices refresh.
+
+Migration 0011 stores private ledgers in PostgreSQL. `/api/v1/productions` exposes paginated
+GET/POST, `/{id}` GET/PUT/DELETE, `/{id}/entries` POST, `/{id}/entries/{entry_id}` PUT/DELETE,
+and `/{id}/estimate` POST. Ownership is taken from the session, never accepted from input;
+foreign records return 404 even to superusers. Parent row locks serialize ledger changes to retain
+concurrent additions. Production pages and APIs use the existing session and CSRF protections.
 
 ## Develop
 
@@ -122,7 +153,8 @@ manufacturability is checked by the manufacturing recipe stage.
 Repeat list parameters to select several values. Values within a filter use OR;
 different filters use AND. Responses include `items`, `total`, `limit`, and `offset`.
 Example: `/api/v1/catalog/items?meta_group_ids=2&is_rig=true&search=shield`.
-Interactive API documentation is available at `/docs`.
+Interactive API documentation is available at `/docs`. The shared navigation groups workspace tools and account links,
+highlights the active page and collapses into an accessible menu on mobile.
 
 Run `python scripts/esi_smoke.py` to probe public catalog endpoints without loading `.env`.
 To additionally verify the migration and upserts on a disposable PostgreSQL 17 container,

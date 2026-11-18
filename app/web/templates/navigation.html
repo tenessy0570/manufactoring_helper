@@ -1,0 +1,34 @@
+{% macro icon(name) -%}
+<svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">
+{% if name == 'opportunities' %}<path d="M3 17l6-6 4 4 8-10M15 5h6v6M3 21h18"/>
+{% elif name == 'shopping' %}<path d="M9 3h6M10 3v6l-6 10a1 1 0 001 2h14a1 1 0 001-2L14 9V3M8 14h8"/>
+{% elif name == 'production' %}<rect x="5" y="5" width="14" height="16" rx="2"/><path d="M9 5V3h6v2M9 10h6M9 14h6M9 18h4"/>
+{% elif name == 'account' %}<circle cx="12" cy="8" r="4"/><path d="M4 21v-2a8 8 0 0116 0v2"/>
+{% elif name == 'admin' %}<path d="M12 3l8 3v6c0 5-8 9-8 9s-8-4-8-9V6zM9 12l2 2 4-4"/>
+{% elif name == 'docs' %}<path d="M9 7l-5 5 5 5M15 7l5 5-5 5M13 4l-2 16"/>
+{% elif name == 'menu' %}<path d="M4 6h16M4 12h16M4 18h16"/>
+{% endif %}</svg>
+{%- endmacro %}
+{% set page_names = {'opportunities':'Opportunities','shopping':'Invention shopping','production':'Production history','account':'My account','admin':'User administration'} %}
+<aside class="sidebar site-navigation" x-data="{menuOpen:false}" :class="{'navigation-open':menuOpen}" {% if active_page == 'opportunities' %}:inert="selected !== null"{% endif %} @click.outside="menuOpen=false" @keydown.escape="if(menuOpen){menuOpen=false;$refs.navToggle.focus()}">
+  <div class="navigation-header">
+    <a class="brand" href="/" aria-label="EVE Manufacturing home"><span class="brand-mark">E</span><span>EVE<span class="brand-sub">MANUFACTURING</span></span></a>
+    <button type="button" class="navigation-toggle" x-ref="navToggle" @click="menuOpen=!menuOpen" :aria-expanded="menuOpen" aria-controls="workspace-navigation">{{ icon('menu') }}<span>{{ page_names[active_page] }}</span><span class="navigation-toggle-label" x-text="menuOpen?'Close':'Menu'">Menu</span></button>
+  </div>
+  <nav id="workspace-navigation" aria-label="Main navigation">
+    <div class="navigation-group">
+      <div class="nav-caption">WORKSPACE</div>
+      {% for key, href in [('opportunities','/'),('shopping','/invention-shopping'),('production','/production-history')] %}
+      <a class="nav-item{% if active_page == key %} active{% endif %}" href="{{ href }}" {% if active_page == key %}aria-current="page"{% endif %}>{{ icon(key) }}<span>{{ page_names[key] }}</span></a>
+      {% endfor %}
+    </div>
+    <div class="navigation-group navigation-account">
+      <div class="nav-caption">ACCOUNT</div>
+      <a class="nav-item{% if active_page == 'account' %} active{% endif %}" href="/account" {% if active_page == 'account' %}aria-current="page"{% endif %}>{{ icon('account') }}<span>My account</span></a>
+      {% if request.state.user is defined and request.state.user.is_superuser %}
+      <a class="nav-item{% if active_page == 'admin' %} active{% endif %}" href="/admin" {% if active_page == 'admin' %}aria-current="page"{% endif %}>{{ icon('admin') }}<span>User administration</span></a>
+      {% endif %}
+    </div>
+    <div class="navigation-support"><a class="nav-item" href="/docs" target="_blank" rel="noopener">{{ icon('docs') }}<span>API reference</span><span class="navigation-external" aria-label="opens in new tab">&#8599;</span></a><p>Public market data<br>Five trade hubs</p></div>
+  </nav>
+</aside>

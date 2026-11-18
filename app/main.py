@@ -17,6 +17,8 @@ from app.domains.history.router import router as history_router
 from app.domains.invention.router import router as invention_router
 from app.domains.manufacturing.router import router as manufacturing_router
 from app.domains.market.router import router as market_router
+from app.domains.production.router import router as production_router
+from app.domains.production.service import ProductionError
 from app.domains.profiles.router import router as profile_router
 from app.web.router import WEB_ROOT
 from app.web.router import router as web_router
@@ -41,6 +43,7 @@ def create_app(
     app.include_router(manufacturing_router)
     app.include_router(invention_router)
     app.include_router(profile_router)
+    app.include_router(production_router)
     app.include_router(web_router)
     app.mount("/static", StaticFiles(directory=str(WEB_ROOT / "static")), name="static")
     if require_login:
@@ -52,8 +55,11 @@ def create_app(
             password=settings.basic_auth_password.get_secret_value(),
         )
 
+    @app.exception_handler(ProductionError)
     @app.exception_handler(AccountError)
-    async def account_error(request: Request, error: AccountError) -> JSONResponse:
+    async def account_error(
+        request: Request, error: AccountError | ProductionError
+    ) -> JSONResponse:
         return JSONResponse({"detail": error.message}, status_code=error.status)
 
     setup_dishka(container, app)

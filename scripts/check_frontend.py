@@ -228,6 +228,61 @@ def main() -> None:
                         "throw Error('Admin overflow'); 'PASS: admin layout'"
                     )
                 )
+            call("Page.navigate", {"url": url + "/production-history"})
+            time.sleep(1)
+            production_scenarios = (ROOT / "tests/frontend/production_scenarios.js").read_text(
+                encoding="utf-8"
+            )
+            print(evaluate(production_scenarios + "\ncheckProductionWorkflow()"))
+            for width in (1440, 390):
+                call(
+                    "Emulation.setDeviceMetricsOverride",
+                    {
+                        "width": width,
+                        "height": 1100,
+                        "deviceScaleFactor": 1,
+                        "mobile": False,
+                    },
+                )
+                time.sleep(0.2)
+                print(
+                    evaluate(
+                        "if(document.documentElement.scrollWidth>innerWidth+1)"
+                        "throw Error('Production overflow'); 'PASS: production layout'"
+                    )
+                )
+                shot = call("Page.captureScreenshot", {"format": "png"})["result"]["data"]
+                (Path(tempfile.gettempdir()) / f"eve-production-{width}.png").write_bytes(
+                    base64.b64decode(shot)
+                )
+            for path in ("/", "/invention-shopping", "/production-history", "/account"):
+                call("Page.navigate", {"url": url + path})
+                time.sleep(0.5)
+                print(
+                    evaluate("""(()=>{
+                    const nav=document.querySelector('.site-navigation');
+                    if(nav.querySelectorAll('[aria-current=page]').length!==1)
+                        throw Error('Missing active navigation');
+                    for(const href of ['/','/invention-shopping','/production-history','/account'])
+                        if(!nav.querySelector('a[href="'+href+'"] .nav-icon'))
+                            throw Error('Missing navigation link or icon');
+                    nav.querySelector('.navigation-toggle').click();
+                    return 'PASS: shared navigation and icons';})()""")
+                )
+                time.sleep(0.1)
+                print(
+                    evaluate("""(()=>{
+                    const nav=document.querySelector('.site-navigation');
+                    for(const link of nav.querySelectorAll('nav a')){
+                        const r=link.getBoundingClientRect();
+                        if(r.width===0||r.right>innerWidth)throw Error('Hidden mobile link');
+                    }
+                    if(document.documentElement.scrollWidth>innerWidth+1)
+                        throw Error('Navigation overflow');
+                    nav.dispatchEvent(new KeyboardEvent('keydown',{key:'Escape',bubbles:true}));
+                    if(Alpine.$data(nav).menuOpen)throw Error('Menu did not close');
+                    return 'PASS: mobile navigation opens and closes';})()""")
+                )
             if errors:
                 raise RuntimeError(str(errors))
             print("PASS: no uncaught JavaScript errors")

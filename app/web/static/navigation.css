@@ -1,0 +1,32 @@
+.site-navigation{padding:28px 14px;overflow-y:auto;z-index:40}
+.site-navigation .brand{font-size:21px;letter-spacing:1px;padding:0 10px;margin:0}
+.site-navigation .brand-mark{flex-shrink:0}
+.navigation-header{margin-bottom:38px}
+.site-navigation nav{display:flex;flex:1;flex-direction:column;min-height:0}
+.site-navigation .nav-caption{margin:0 0 10px;padding:0 12px;font-size:10px}
+.site-navigation .nav-item{display:flex;align-items:center;gap:11px;padding:12px 10px;margin:0 0 6px;min-height:46px;font-size:12px;line-height:1.5}
+.site-navigation .nav-item.active{border-left:3px solid #7de1af;padding-left:8px;color:#a3f0cb;background:#203a30}
+.site-navigation .nav-item:focus-visible,.navigation-toggle:focus-visible{outline:2px solid #91eac1;outline-offset:3px}
+.nav-icon{width:20px;height:20px;flex:0 0 20px}
+.navigation-account{border-top:1px solid #2e3943;margin-top:22px;padding-top:22px}
+.navigation-support{border-top:1px solid #2e3943;margin-top:auto;padding-top:18px}
+.navigation-support p{font-size:10px;line-height:1.8;color:#8497a6;padding:8px 12px 0;margin:0}
+.navigation-external{margin-left:auto;font-size:15px}
+.navigation-toggle{display:none}
+@media(min-width:801px){.navigation-support{margin-top:32px}.site-navigation .brand-sub{letter-spacing:1.4px}}
+@media(max-width:800px){
+  .site-navigation{display:block;position:static;width:100%;height:auto;padding:14px 18px;overflow:visible;border-bottom:1px solid #34434e}
+  .navigation-header{display:flex;flex-wrap:wrap;align-items:center;gap:16px;justify-content:space-between;margin:0}
+  .site-navigation .brand{font-size:18px;padding:0}
+  .navigation-toggle{display:flex;align-items:center;gap:8px;min-height:44px;padding:8px 12px;border:1px solid #40575f;border-radius:8px;background:#1c2e30;color:#b2efd1;font-size:12px}
+  .navigation-toggle-label{color:#9eafbc;border-left:1px solid #40575f;margin-left:4px;padding-left:10px}
+  .site-navigation nav{display:none;margin-top:20px}
+  .site-navigation.navigation-open nav{display:flex}
+  .site-navigation .nav-caption,.site-navigation .nav-item.active,.site-navigation .nav-item:nth-of-type(2){display:flex}
+  .site-navigation .nav-item{width:100%;margin:0 0 6px;font-size:13px;padding:12px}
+  .site-navigation .nav-item.active{padding-left:10px}
+  .navigation-account{margin-top:12px;padding-top:18px}
+  .navigation-support{margin-top:12px;padding-top:12px}
+  .navigation-support p{display:none}
+}
+@media(max-width:480px){.navigation-header{gap:12px}.navigation-toggle{width:100%;justify-content:flex-start}.navigation-toggle-label{margin-left:auto}.site-navigation .brand-sub{font-size:7px}}

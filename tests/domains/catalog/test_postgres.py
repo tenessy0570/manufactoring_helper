@@ -52,6 +52,8 @@ async def test_migration_and_upsert_on_postgres() -> None:
 
     account_migration = runpy.run_path("alembic/versions/0010_accounts.py")
 
+    production_migration = runpy.run_path("alembic/versions/0011_production_history.py")
+
     def upgrade(connection: Connection) -> None:
         with Operations.context(MigrationContext.configure(connection)):
             migration["upgrade"]()
@@ -64,10 +66,12 @@ async def test_migration_and_upsert_on_postgres() -> None:
             depth_migration["upgrade"]()
             untaxed_migration["upgrade"]()
             account_migration["upgrade"]()
+            production_migration["upgrade"]()
         assert "item_types" in inspect(connection).get_table_names()
 
     def downgrade(connection: Connection) -> None:
         with Operations.context(MigrationContext.configure(connection)):
+            production_migration["downgrade"]()
             account_migration["downgrade"]()
             untaxed_migration["downgrade"]()
             depth_migration["downgrade"]()
@@ -188,6 +192,33 @@ async def test_migration_and_upsert_on_postgres() -> None:
                 assert await accounts.identity(token) == identity
                 await accounts.logout(token)
                 assert await accounts.identity(token) is None
+                from decimal import Decimal
+
+                from app.domains.production.models import EntryInput, ProductionCreate
+                from app.domains.production.repository import SQLProductionRepository
+                from app.domains.production.service import ProductionService
+
+                productions = ProductionService(
+                    SQLProductionRepository(session), repository, SQLAlchemyUnitOfWork(session)
+                )
+                batch = await productions.create(account.id, ProductionCreate(type_id=10))
+
+                async def add_income(amount: int) -> None:
+                    async with AsyncSession(engine) as other:
+                        service = ProductionService(
+                            SQLProductionRepository(other),
+                            SQLItemTypeRepository(other),
+                            SQLAlchemyUnitOfWork(other),
+                        )
+                        await service.entry(
+                            account.id, batch.id, EntryInput(kind="income", amount=Decimal(amount))
+                        )
+
+                await asyncio.gather(add_income(10), add_income(20))
+                stored_batch = await productions.get(account.id, batch.id)
+                assert stored_batch.totals["income"] == 30
+                assert len(stored_batch.entries) == 2
+                await productions.delete(account.id, batch.id)
                 profiles = ProfileService(
                     SQLProfileRepository(session), SQLAlchemyUnitOfWork(session)
                 )
