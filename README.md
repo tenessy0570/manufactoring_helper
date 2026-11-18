@@ -166,7 +166,7 @@ run `RUN_POSTGRES_TESTS=1 pytest` (PowerShell: `$env:RUN_POSTGRES_TESTS='1'; pyt
 Rens and Hek. `GET /api/v1/market/prices?hub_id=amarr` selects a hub; Jita is the default.
 Each hub has its own snapshot and freshness timestamps. Structure markets are not included.
 
-The worker checks all five hubs hourly and at startup, skipping snapshots until
+The worker checks all five hubs every 20 minutes (at :00, :20 and :40 UTC) and at startup, skipping snapshots until
 their ESI `Expires` time. `MARKET_CACHE_SECONDS` (default 300) caps the refresh interval and
 provides a fallback for missing or malformed expiration headers. A failure in one hub does
 not stop the remaining hubs. Full regional order books are read page by page; best-price summaries and aggregated buy-price levels for the chosen station are retained;
@@ -445,7 +445,7 @@ Pass `--browser` to specify another Chromium executable. The runner starts and s
 Legacy science/encryption values in API requests, queued jobs and saved profiles are ignored; they no longer create separate source plans or valuation keys. Existing default 5/4 cache keys are preserved.
 
 
-Refresh schedule: market orders hourly at :00 UTC; regional-history planning daily at 12:15 UTC (19:15 Tomsk); invention valuation planning daily at 12:30 UTC (19:30 Tomsk). Startup also checks stale data. A valuation is retained until the next daily refresh boundary; hourly market refreshes do not automatically reprice it. Explicit preparation of a new setting combination remains available. ESI expiry still marks market snapshots stale; polling less often does not change ESI freshness.
+Refresh schedule: market orders every 20 minutes at :00, :20 and :40 UTC; regional-history planning daily at 12:15 UTC (19:15 Tomsk); invention valuation planning daily at 12:30 UTC (19:30 Tomsk). Startup also checks stale data. A valuation is retained until the next daily refresh boundary; market refreshes do not automatically reprice it. Explicit preparation of a new setting combination remains available. ESI expiry still marks market snapshots stale; polling less often does not change ESI freshness.
 
 Daily valuation expiry is aligned to 12:30 UTC, rather than job-finish time plus 24 hours: otherwise queue delay can make the next daily planner skip a still-fresh result for another full day. Existing valuation expiry timestamps must be aligned during deployment. Latest checks: 314 passed, 1 skipped; Ruff, format and mypy passed.
 

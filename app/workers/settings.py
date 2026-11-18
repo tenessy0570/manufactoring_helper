@@ -65,7 +65,7 @@ class WorkerSettings:
     )
     cron_jobs = (
         cron(sync_catalog, hour=4, minute=0, run_at_startup=True),
-        cron(sync_markets, minute=0, run_at_startup=True),
+        cron(sync_markets, minute={0, 20, 40}, run_at_startup=True),
         cron(enqueue_history, hour=12, minute=15, run_at_startup=True),
         cron(enqueue_manufacturing, minute=20, run_at_startup=True),
         cron(enqueue_inventions, hour=12, minute=30, run_at_startup=True),
