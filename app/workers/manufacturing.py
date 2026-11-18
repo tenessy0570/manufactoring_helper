@@ -15,6 +15,7 @@ from app.core.logging import configure_logging
 from app.domains.catalog.models import MASS_PRODUCTION_META_GROUP_IDS, ItemTypeClause
 from app.domains.catalog.repository import ItemTypeRepository
 from app.domains.manufacturing.gateway import AmbiguousRecipeError
+from app.domains.manufacturing.repository import ManufacturingRepository
 from app.domains.manufacturing.service import ManufacturingSyncService
 
 logger = logging.getLogger(__name__)
@@ -32,15 +33,30 @@ async def enqueue_manufacturing(ctx: dict[str, Any]) -> int:
                 ItemTypeClause(meta_group_ids=list(MASS_PRODUCTION_META_GROUP_IDS))
             )
         )
+        recipes = await (await scope.get(ManufacturingRepository)).recipes(ids)
+    now = datetime.now(UTC)
+    ids = [
+        type_id
+        for type_id in ids
+        if (
+            type_id not in recipes
+            or recipes[type_id].expires_at <= now
+            or (
+                recipes[type_id].recipe is not None
+                and recipes[type_id].recipe.estimated_item_value is None
+            )
+        )
+    ]
     count = 0
-    today = datetime.now(UTC).date().isoformat()
+    today = now.date().isoformat()
     for start in range(0, len(ids), 20):
         batch = ids[start : start + 20]
         digest = hashlib.sha256(",".join(map(str, batch)).encode()).hexdigest()[:16]
         job = await ctx["redis"].enqueue_job(
-            "sync_recipes", batch, _queue_name=QUEUE, _job_id=f"manufacturing:eiv:{today}:{digest}"
+            "sync_recipes", batch, _queue_name=QUEUE, _job_id=f"manufacturing:due:{today}:{digest}"
         )
         count += job is not None
+    logger.info("Recipe planner: %s items due, %s batches queued", len(ids), count)
     return count
 
 

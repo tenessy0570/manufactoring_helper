@@ -2,6 +2,7 @@ import asyncio
 from collections.abc import Callable
 from datetime import UTC, datetime
 
+from app.core.freshness import MARKET_FRESHNESS, refresh_deadline
 from app.core.repository import UnitOfWork
 from app.domains.market.aggregation import PriceAggregator
 from app.domains.market.gateway import MarketGateway
@@ -30,7 +31,7 @@ class MarketService:
         return PricePage(
             hub=get_hub(query.hub_id),
             state=state,
-            stale=state is None or state.expires_at <= now,
+            stale=state is None or refresh_deadline(state.synced_at, MARKET_FRESHNESS) <= now,
             items=await self._repository.find(query, now),
             total=await self._repository.count(query, now),
             limit=query.limit,

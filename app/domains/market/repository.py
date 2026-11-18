@@ -5,6 +5,7 @@ from datetime import UTC, datetime
 from sqlalchemy import ColumnElement, delete, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.freshness import MARKET_FRESHNESS
 from app.domains.market.models import HubId, MarketPrice, MarketState, PriceQuery
 from app.domains.market.tables import MarketPriceTable, MarketStateTable
 
@@ -83,7 +84,7 @@ class SQLMarketRepository(MarketRepository):
             if present is not None:
                 conditions.append(column.is_not(None) if present else column.is_(None))
         if query.fresh_only:
-            conditions.append(table.expires_at > now)
+            conditions.append(table.synced_at > now - MARKET_FRESHNESS)
         return conditions
 
     async def find(self, query: PriceQuery, now: datetime) -> list[MarketPrice]:

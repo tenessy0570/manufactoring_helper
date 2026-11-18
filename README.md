@@ -167,7 +167,7 @@ Rens and Hek. `GET /api/v1/market/prices?hub_id=amarr` selects a hub; Jita is th
 Each hub has its own snapshot and freshness timestamps. Structure markets are not included.
 
 The worker checks all five hubs every 20 minutes (at :00, :20 and :40 UTC) and at startup, skipping snapshots until
-their ESI `Expires` time. `MARKET_CACHE_SECONDS` (default 300) caps the refresh interval and
+their ESI `Expires` time. `MARKET_CACHE_SECONDS` (default 300) caps the upstream cache TTL and
 provides a fallback for missing or malformed expiration headers. A failure in one hub does
 not stop the remaining hubs. Full regional order books are read page by page; best-price summaries and aggregated buy-price levels for the chosen station are retained;
 individual regional orders are not stored. Successful downloads replace that
@@ -190,7 +190,7 @@ Available combined filters:
 - `limit`, `offset`, ordered by type ID.
 
 Responses contain hub details, sync state, a `stale` flag, `items`, `total`, `limit` and `offset`.
-Prices remain visible when stale unless `fresh_only=true` is requested. An unsynced hub returns
+Prices are stale once 20 minutes have elapsed since snapshot collection. Prices remain visible when stale unless `fresh_only=true` is requested. An unsynced hub returns
 an empty page with `state=null` and `stale=true`. The catalog filters remain available separately
 at `/api/v1/catalog/items`; catalog metadata and market history are not part of this endpoint.
 
@@ -445,7 +445,7 @@ Pass `--browser` to specify another Chromium executable. The runner starts and s
 Legacy science/encryption values in API requests, queued jobs and saved profiles are ignored; they no longer create separate source plans or valuation keys. Existing default 5/4 cache keys are preserved.
 
 
-Refresh schedule: market orders every 20 minutes at :00, :20 and :40 UTC; regional-history planning daily at 12:15 UTC (19:15 Tomsk); invention valuation planning daily at 12:30 UTC (19:30 Tomsk). Startup also checks stale data. A valuation is retained until the next daily refresh boundary; market refreshes do not automatically reprice it. Explicit preparation of a new setting combination remains available. ESI expiry still marks market snapshots stale; polling less often does not change ESI freshness.
+Refresh schedule: market orders every 20 minutes at :00, :20 and :40 UTC; regional-history planning daily at 12:15 UTC (19:15 Tomsk); invention valuation planning daily at 12:30 UTC (19:30 Tomsk). Startup also checks stale data. A valuation is retained until the next daily refresh boundary; market refreshes do not automatically reprice it. Explicit preparation of a new setting combination remains available. ESI expiry controls download eligibility; displayed freshness follows our 20-minute market and 24-hour history policy.
 
 Daily valuation expiry is aligned to 12:30 UTC, rather than job-finish time plus 24 hours: otherwise queue delay can make the next daily planner skip a still-fresh result for another full day. Existing valuation expiry timestamps must be aligned during deployment. Latest checks: 314 passed, 1 skipped; Ruff, format and mypy passed.
 
@@ -525,3 +525,31 @@ Shopping blueprint search now uses an inline autocomplete listbox, replacing sep
 Invention shopping Copy buy list exports supply material names plus tab-separated whole quantities, newline-separated for EVE Multibuy paste. T1 BPC licensed runs excluded. Copy disabled until all names resolve; clipboard fallback/manual textarea available.
 
 Invention chance now accompanied by runs per successful T2 BPC in shopping summary/alternatives and opportunity detail alternatives. Shopping response exposes runs_per_copy and units_per_run from shared source plan.
+
+
+### Scheduled data freshness
+
+Display freshness is separate from upstream HTTP cache expiry. Market prices stay Fresh for
+20 minutes from snapshot collection; regional history stays Fresh for 24 hours from its sync.
+The ESI `Expires` timestamps remain unchanged and continue to govern background download
+eligibility. Source failures retain old timestamps, so they cannot make old data fresh again.
+
+Opportunity `stale` and `fresh_only` use the same inputs: product price, every material price
+in the selected procurement hub, regional history (including a saved empty history), recipe
+expiry, and the invention valuation deadline only when invention cost is included. Missing
+history is stale. Missing financial inputs continue to exclude candidates. Filtering happens
+before sorting/pagination; no separate history-expiry prefilter silently removes Fresh rows.
+
+Responses expose `fresh_until`, the earliest applicable deadline. The frontend checks it on
+its existing 30-second visible-page clock, so badges and open item warnings can become Stale
+without a new calculation. Displayed prices, row order and pagination remain the saved result;
+Show results fetches a new result. History charts, market API flags, invention shopping and
+production material estimates follow the same display freshness policy. No schema migration
+or new upstream requests are needed.
+
+
+Recipe scheduling selects missing/expired recipes and legacy recipes without EIV before creating
+jobs. Fresh recipes do not reserve a daily queue ID; otherwise an early skipped job could block
+refresh after the recipe expires later that day. The due-job namespace bypasses old skipped-job
+results. Market logs explicitly report each hub start and completion. Opportunity responses include
+`freshness_deadlines`; the Stale tooltip and item warning name the source that needs refreshing.

@@ -10,6 +10,12 @@ document.addEventListener('alpine:init', () => {
     requestSequence: 0, detailSequence: 0, appliedForm:null, appliedSettings:{}, returnFocus:null, profileNotice:'',
     hubs: [{id:'jita',name:'Jita'},{id:'amarr',name:'Amarr'},{id:'dodixie',name:'Dodixie'},{id:'rens',name:'Rens'},{id:'hek',name:'Hek'}],
     progressNow:Date.now(),
+    isStale(item){return !!item && (item.stale || (!!item.fresh_until && Date.parse(item.fresh_until)<=this.progressNow));},
+    staleExplanation(item){
+      const labels={recipe:'Manufacturing recipe',product_market:'Product market prices',material_market:'Material market prices',history:'Regional trading history',invention:'Invention estimate'};
+      const sources=Object.entries(item?.freshness_deadlines||{}).filter(([,date])=>Date.parse(date)<=this.progressNow).map(([key])=>labels[key]||key);
+      return sources.length?'Due for refresh: '+sources.join(', ')+'. Select Show results after the background update.':'Saved inputs are due for refresh. Select Show results after the background update.';
+    },
     timeAgo(value){if(!value)return 'not yet loaded';const stamp=new Date(value).getTime();if(!Number.isFinite(stamp))return 'not available';const minutes=Math.floor(Math.max(0,this.progressNow-stamp)/60000);return minutes<1?'less than a minute ago':Math.floor(minutes/60)+'h '+minutes%60+'m ago';},
     dataProgress:null,progressError:false,progressSequence:0,
     async loadProgress(){if(this.demo)return;const seq=++this.progressSequence;try{const result=await this.api('/health/data-progress?hub='+this.resultForm.hub_id);if(seq!==this.progressSequence)return;this.dataProgress=result;this.progressError=false;}catch(_){if(seq===this.progressSequence)this.progressError=true;}},

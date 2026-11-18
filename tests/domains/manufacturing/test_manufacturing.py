@@ -693,3 +693,82 @@ async def test_missing_eiv_is_visible_and_backfilled_without_waiting_for_ttl(
     assert updated.buy_broker_fee == updated.sell_broker_fee == 0
     assert updated.facility_tax == 1
     assert updated.system_cost_index == 2
+
+
+@pytest.mark.parametrize(
+    "expired_source", ["product", "material", "history", "missing_history", "recipe"]
+)
+async def test_candidate_badge_and_fresh_filter_share_schedule_rules(
+    session: AsyncSession, expired_source: str
+) -> None:
+    repository = await seed(session)
+    market = SQLMarketRepository(session)
+    recent = NOW - timedelta(minutes=19)
+    await market.replace(
+        market_state(),
+        [
+            price(10, sell_price="30", synced_at=recent, expires_at=NOW - timedelta(minutes=14)),
+            price(34, sell_price="3", synced_at=recent, expires_at=NOW - timedelta(minutes=14)),
+        ],
+    )
+    history = SQLHistoryRepository(session)
+    await history.replace(
+        history_state().model_copy(
+            update={"synced_at": NOW - timedelta(hours=23), "expires_at": NOW - timedelta(hours=1)}
+        ),
+        [],
+    )
+    service = ManufacturingService(repository, history, lambda: NOW)
+    query = ManufacturingQuery(type_ids=[10])
+    page = await service.opportunities(query)
+    assert not page.items[0].stale
+    assert page.items[0].fresh_until == NOW + timedelta(minutes=1)
+    assert (await service.opportunities(query.model_copy(update={"fresh_only": True}))).total == 1
+    if expired_source in ("product", "material"):
+        old = NOW - timedelta(minutes=20)
+        await market.replace(
+            market_state(),
+            [
+                price(
+                    10, sell_price="30", synced_at=old if expired_source == "product" else recent
+                ),
+                price(
+                    34, sell_price="3", synced_at=old if expired_source == "material" else recent
+                ),
+            ],
+        )
+    elif expired_source == "recipe":
+        await repository.save(recipe_state(expires_at=NOW))
+    else:
+        await history.replace(
+            history_state().model_copy(update={"synced_at": NOW - timedelta(days=1)}), []
+        )
+        if expired_source == "missing_history":
+            from sqlalchemy import delete
+
+            from app.domains.history.tables import HistoryStateTable
+
+            await session.execute(delete(HistoryStateTable))
+    page = await service.opportunities(query)
+    assert page.items[0].stale
+    assert page.items[0].fresh_until == NOW
+    assert (await service.opportunities(query.model_copy(update={"fresh_only": True}))).total == 0
+
+
+async def test_material_hub_freshness_does_not_use_product_hub_material_prices(
+    session: AsyncSession,
+) -> None:
+    repository = await seed(session)
+    await SQLMarketRepository(session).replace(
+        market_state("amarr"),
+        [
+            price(34, hub_id="amarr", synced_at=NOW - timedelta(minutes=20)),
+        ],
+    )
+    service = ManufacturingService(repository, SQLHistoryRepository(session), lambda: NOW)
+    assert not (await service.opportunities(ManufacturingQuery(type_ids=[10]))).items[0].stale
+    assert (
+        (await service.opportunities(ManufacturingQuery(type_ids=[10], material_hub_id="amarr")))
+        .items[0]
+        .stale
+    )

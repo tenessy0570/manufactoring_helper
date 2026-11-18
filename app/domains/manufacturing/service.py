@@ -2,6 +2,7 @@ from collections.abc import Callable
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 
+from app.core.freshness import HISTORY_FRESHNESS, MARKET_FRESHNESS, refresh_deadline
 from app.core.repository import UnitOfWork
 from app.domains.catalog.models import MASS_PRODUCTION_META_GROUP_IDS
 from app.domains.history.models import LiquidityItem, LiquidityQuery
@@ -79,6 +80,7 @@ class ManufacturingService:
             for value in MASS_PRODUCTION_META_GROUP_IDS
             if query.meta_group_ids is None or value in query.meta_group_ids
         ]
+        filters.fresh_only = False
         filters.limit, filters.offset = 500, 0
         candidates: list[LiquidityItem] = []
         while True:
@@ -142,6 +144,7 @@ class ManufacturingService:
             invention_option = None
             invention_complete = None
             invention_stale = False
+            invention_deadline = None
             if query.include_invention_cost and candidate.meta_group_id is None:
                 missing_invention += 1
                 invention_unavailable[candidate.type_id] = "unknown_meta_group"
@@ -163,6 +166,7 @@ class ManufacturingService:
                 invention_cost = cached.result.best.expected_cost_per_unit
                 invention_option = cached.result.best.plan.decryptor_name
                 invention_complete = cached.result.complete_pricing
+                invention_deadline = cached.expires_at
                 invention_stale = cached.expires_at <= now
                 invention_status = "stale" if invention_stale else "ready"
             calculated = calculate(
@@ -177,15 +181,22 @@ class ManufacturingService:
             if calculated is None:
                 missing_prices += 1
                 continue
-            stale = (
-                state.expires_at <= now
-                or invention_stale
-                or product.expires_at <= now
-                or any(
-                    quotes[material.type_id].expires_at <= now
-                    for material in state.recipe.materials
-                )
-            )
+            deadlines = {
+                "recipe": state.expires_at,
+                "product_market": refresh_deadline(product.synced_at, MARKET_FRESHNESS),
+                "material_market": min(
+                    refresh_deadline(quotes[m.type_id].synced_at, MARKET_FRESHNESS)
+                    for m in state.recipe.materials
+                ),
+                "history": refresh_deadline(candidate.synced_at, HISTORY_FRESHNESS)
+                if candidate.synced_at is not None
+                else now,
+            }
+            if invention_deadline is not None:
+                deadlines["invention"] = invention_deadline
+            fresh_until = min(deadlines.values())
+            stale_reasons = [source for source, deadline in deadlines.items() if deadline <= now]
+            stale = bool(stale_reasons)
             if query.fresh_only and stale:
                 continue
             is_buy = query.product_order_type == "buy"
@@ -267,6 +278,8 @@ class ManufacturingService:
                     rank_profit_per_day=rank_daily_profit,
                     demand_warnings=warnings,
                     stale=stale,
+                    fresh_until=fresh_until,
+                    freshness_deadlines=deadlines,
                 )
             )
         field = {

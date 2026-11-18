@@ -1,6 +1,7 @@
 from collections.abc import Callable
 from datetime import UTC, datetime, timedelta
 
+from app.core.freshness import HISTORY_FRESHNESS, refresh_deadline
 from app.core.repository import UnitOfWork
 from app.domains.history.gateway import HistoryGateway
 from app.domains.history.models import HistorySeries, HistoryState, LiquidityPage, LiquidityQuery
@@ -37,7 +38,7 @@ class HistoryService:
             hub=hub,
             type_id=type_id,
             state=state,
-            stale=state is None or state.expires_at <= now,
+            stale=state is None or refresh_deadline(state.synced_at, HISTORY_FRESHNESS) <= now,
             days=await self._repository.series(
                 hub.region_id,
                 type_id,

@@ -1,3 +1,4 @@
+from datetime import UTC, datetime, timedelta
 from typing import Any
 from unittest.mock import AsyncMock
 
@@ -6,16 +7,52 @@ from arq import Retry
 from dishka import Provider, Scope, make_async_container
 
 from app.domains.catalog.repository import ItemTypeRepository
+from app.domains.manufacturing.repository import ManufacturingRepository
 from app.domains.manufacturing.service import ManufacturingSyncService
 from app.workers import manufacturing as worker
 from tests.domains.catalog.test_catalog import item
+from tests.domains.manufacturing.test_manufacturing import recipe, recipe_state
 from tests.helpers import make_settings
+
+
+async def test_fresh_recipe_does_not_reserve_daily_job_before_it_expires() -> None:
+    now = datetime.now(UTC)
+    catalog = AsyncMock(spec=ItemTypeRepository)
+    catalog.find.return_value = [item(10)]
+    repository = AsyncMock(spec=ManufacturingRepository)
+    state = recipe_state(expires_at=now + timedelta(hours=1))
+    repository.recipes.return_value = {10: state}
+    provider = Provider(scope=Scope.REQUEST)
+    provider.provide(lambda: catalog, provides=ItemTypeRepository)
+    provider.provide(lambda: repository, provides=ManufacturingRepository)
+    container = make_async_container(provider)
+    redis = AsyncMock()
+    try:
+        context = {"container": container, "redis": redis}
+        assert await worker.enqueue_manufacturing(context) == 0
+        redis.enqueue_job.assert_not_awaited()
+        state.expires_at = now - timedelta(seconds=1)
+        assert await worker.enqueue_manufacturing(context) == 1
+        assert redis.enqueue_job.await_args.args == ("sync_recipes", [10])
+        redis.reset_mock()
+        state.expires_at = now + timedelta(hours=1)
+        state.recipe = recipe(estimated_item_value=None)
+        assert await worker.enqueue_manufacturing(context) == 1
+        redis.reset_mock()
+        state.recipe = None
+        assert await worker.enqueue_manufacturing(context) == 0
+        redis.enqueue_job.assert_not_awaited()
+    finally:
+        await container.close()
 
 
 async def test_queue_batches_and_deduplication() -> None:
     repository = AsyncMock(spec=ItemTypeRepository)
     repository.find.return_value = [item(number) for number in range(21)]
+    recipes = AsyncMock(spec=ManufacturingRepository)
+    recipes.recipes.return_value = {}
     provider = Provider(scope=Scope.REQUEST)
+    provider.provide(lambda: recipes, provides=ManufacturingRepository)
     provider.provide(lambda: repository, provides=ItemTypeRepository)
     container = make_async_container(provider)
     redis = AsyncMock()

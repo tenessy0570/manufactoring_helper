@@ -260,6 +260,7 @@ async def test_price_filters(session: AsyncSession, kwargs: dict[str, Any], ids:
                 sell_volume=40,
                 spread=None,
                 expires_at=NOW - timedelta(seconds=1),
+                synced_at=NOW - timedelta(minutes=20),
             ),
         ],
     )

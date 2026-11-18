@@ -7,6 +7,7 @@ from typing import Any
 from sqlalchemy import Numeric, Select, cast, delete, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.freshness import HISTORY_FRESHNESS
 from app.domains.catalog.tables import ItemTypeTable
 from app.domains.history.models import HistoryDay, HistoryState, LiquidityItem, LiquidityQuery
 from app.domains.history.tables import HistoryDayTable, HistoryStateTable
@@ -145,7 +146,7 @@ class SQLHistoryRepository(HistoryRepository):
                 totals.c.type_id.is_not(None) if query.has_history else totals.c.type_id.is_(None)
             )
         if query.fresh_only:
-            statement = statement.where(states.expires_at > now)
+            statement = statement.where(states.synced_at > now - HISTORY_FRESHNESS)
         return statement
 
     async def liquidity(

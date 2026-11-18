@@ -2,6 +2,7 @@ from datetime import UTC, datetime
 from decimal import ROUND_HALF_UP, Decimal
 from uuid import UUID, uuid4
 
+from app.core.freshness import MARKET_FRESHNESS, refresh_deadline
 from app.core.repository import UnitOfWork
 from app.domains.catalog.models import ItemTypeClause
 from app.domains.catalog.repository import ItemTypeRepository
@@ -186,7 +187,9 @@ class ProductionEstimateService:
                     )
                 amount += runs * material.quantity * price
                 assert quote is not None
-                stale = stale or quote.expires_at <= datetime.now(UTC)
+                stale = stale or refresh_deadline(
+                    quote.synced_at, MARKET_FRESHNESS
+                ) <= datetime.now(UTC)
             if data.material_order_type == "buy":
                 amount *= 1 + data.buy_broker_fee / 100
             description = (

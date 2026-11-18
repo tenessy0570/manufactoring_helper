@@ -9,6 +9,7 @@ from dishka import AsyncContainer
 
 from app.core.config import get_settings
 from app.core.di import create_container
+from app.core.freshness import MARKET_REFRESH_MINUTES
 from app.core.logging import configure_logging
 from app.domains.catalog.service import CatalogSyncService
 from app.domains.market.models import HUBS
@@ -46,7 +47,16 @@ async def sync_markets(ctx: dict[str, Any]) -> list[dict[str, Any]]:
         try:
             async with container() as scope:
                 service = await scope.get(MarketSyncService)
-                reports.append((await service.sync_if_stale(hub.hub_id)).model_dump())
+                logger.info("Market sync starting: %s", hub.name)
+                report = await service.sync_if_stale(hub.hub_id)
+                reports.append(report.model_dump())
+                logger.info(
+                    "Market sync complete: %s, skipped=%s, items=%s, pages=%s",
+                    hub.name,
+                    report.skipped,
+                    report.items,
+                    report.pages,
+                )
         except Exception:
             failures.append(hub.hub_id)
             logger.exception("Market sync failed for %s", hub.hub_id)
@@ -65,7 +75,7 @@ class WorkerSettings:
     )
     cron_jobs = (
         cron(sync_catalog, hour=4, minute=0, run_at_startup=True),
-        cron(sync_markets, minute={0, 20, 40}, run_at_startup=True),
+        cron(sync_markets, minute=set(range(0, 60, MARKET_REFRESH_MINUTES)), run_at_startup=True),
         cron(enqueue_history, hour=12, minute=15, run_at_startup=True),
         cron(enqueue_manufacturing, minute=20, run_at_startup=True),
         cron(enqueue_inventions, hour=12, minute=30, run_at_startup=True),

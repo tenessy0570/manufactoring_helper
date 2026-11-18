@@ -3,6 +3,13 @@ async function checkFrontendWorkflow() {
   const app = Alpine.$data(document.body);
   const check = (condition, message) => { if (!condition) throw new Error(message); };
   check(app.demo, 'Browser scenarios require sample mode');
+  const timeBefore=app.progressNow;
+  const clocked={stale:false,fresh_until:new Date(timeBefore+1000).toISOString()};
+  check(!app.isStale(clocked),'Fresh before deadline');
+  app.progressNow=timeBefore+1000;
+  check(app.isStale(clocked),'Badge expires at refresh deadline without another API call');
+  app.progressNow=timeBefore;
+
   check(!app.error && app.page.items.length > 0, 'Initial opportunities load');
   app.filtersOpen = true;
   await app.$nextTick();

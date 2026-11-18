@@ -1,6 +1,7 @@
 from datetime import UTC, datetime
 from decimal import ROUND_CEILING, Decimal
 
+from app.core.freshness import MARKET_FRESHNESS, refresh_deadline
 from app.domains.invention.models import (
     InventionSettings,
     ShoppingMaterial,
@@ -67,7 +68,9 @@ class ShoppingService:
                 else:
                     total += material.quantity * price
                     assert quote is not None
-                    result.stale = result.stale or quote.expires_at <= datetime.now(UTC)
+                    result.stale = result.stale or refresh_deadline(
+                        quote.synced_at, MARKET_FRESHNESS
+                    ) <= datetime.now(UTC)
             if not option.missing_prices:
                 option.estimated_cost = total
         priced = [option for option in result.options if option.estimated_cost is not None]

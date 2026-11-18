@@ -149,6 +149,8 @@ class Opportunity(ProfitCalculation):
     buy_demand_depth_available: bool | None = None
     demand_warnings: list[str] = Field(default_factory=list)
     stale: bool
+    fresh_until: datetime | None = None
+    freshness_deadlines: dict[str, datetime] = Field(default_factory=dict)
 
 
 class OpportunityPage(BaseModel):
