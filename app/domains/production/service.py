@@ -9,6 +9,7 @@ from app.domains.catalog.repository import ItemTypeRepository
 from app.domains.invention.shopping import ShoppingService, ceiling
 from app.domains.manufacturing.repository import ManufacturingRepository
 from app.domains.production.models import (
+    DecryptorEstimate,
     Entry,
     EntryInput,
     Estimate,
@@ -126,16 +127,31 @@ class ProductionEstimateService:
         production = await self.productions.get(user_id, production_id)
         if data.kind == "invention":
             plan = await self.shopping.plan(production.type_id, data.units, data.hub_id)
-            if plan.best is None:
-                raise ProductionError(
-                    409,
-                    "No priced invention plan. Prepare it in Invention shopping, then retry.",
+            selected = (
+                plan.best
+                if data.decryptor_id == "best"
+                else next(
+                    (option for option in plan.options if option.decryptor_id == data.decryptor_id),
+                    None,
                 )
-            assert plan.best.estimated_cost is not None
-            amount = plan.best.estimated_cost
+            )
+            if selected is None:
+                raise ProductionError(
+                    409 if data.decryptor_id == "best" else 422,
+                    "No priced invention plan. Prepare it in Invention shopping, then retry."
+                    if data.decryptor_id == "best"
+                    else "This decryptor is not available for this blueprint.",
+                )
+            if selected.estimated_cost is None:
+                raise ProductionError(
+                    409, "Prices for this decryptor option are missing. Try another option."
+                )
+            amount = selected.estimated_cost
             description = (
-                f"{data.units:,} units; {plan.best.decryptor_name or 'No decryptor'}; "
-                f"{plan.best.attempts} expected attempts. "
+                f"{data.units:,} units; {selected.decryptor_name or 'No decryptor'}; "
+                f"{selected.attempts} expected attempts; "
+                f"{selected.probability * 100:.1f}% chance; "
+                f"{selected.runs_per_copy} runs / T2 BPC. "
                 "Skills II/II/II; excludes T1 BPC costs."
             )
             return Estimate(
@@ -143,6 +159,21 @@ class ProductionEstimateService:
                 description=description,
                 stale=plan.stale,
                 complete_comparison=plan.complete_pricing,
+                selected_decryptor_id=selected.decryptor_id,
+                decryptor_options=[
+                    DecryptorEstimate(
+                        decryptor_id=option.decryptor_id,
+                        name=option.decryptor_name
+                        if option.decryptor_id is not None
+                        else "No decryptor",
+                        probability=option.probability,
+                        runs_per_copy=option.runs_per_copy,
+                        estimated_cost=option.estimated_cost,
+                        is_best=plan.best is not None
+                        and option.decryptor_id == plan.best.decryptor_id,
+                    )
+                    for option in plan.options
+                ],
             )
         state = (await self.market.recipes([production.type_id])).get(production.type_id)
         if state is None or state.recipe is None:

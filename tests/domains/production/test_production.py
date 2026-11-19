@@ -303,3 +303,75 @@ async def test_authenticated_api_ownership_and_sql_roundtrip(
         assert (await client.get(path)).status_code == 404
     await svc.repository.delete(first.id, uuid4())
     await container.close()
+
+
+async def test_invention_decryptor_override_and_best_batch_budget() -> None:
+    svc = service()
+    row = await svc.create(uuid4(), ProductionCreate(type_id=10))
+    market = AsyncMock(spec=ManufacturingRepository)
+    market.quotes.return_value = {
+        34: price(34, sell_price="100"),
+        34201: price(34201, sell_price="1"),
+    }
+    invention = AsyncMock(spec=InventionRepository)
+    now = datetime.now(UTC)
+    invention.plan.return_value = PlanState(
+        key=settings().plan_key,
+        synced_at=now,
+        expires_at=now + timedelta(days=1),
+        plans=[
+            plan(units_per_run=5000),
+            plan(
+                units_per_run=5000,
+                decryptor_id=34201,
+                decryptor_name="Accelerant",
+                probability="0.6",
+                runs_per_copy=20,
+                materials=[{"type_id": 34, "quantity": 2}, {"type_id": 34201, "quantity": 1}],
+            ),
+            plan(
+                units_per_run=5000,
+                decryptor_id=34202,
+                decryptor_name="Symmetry",
+                probability="0.7",
+                runs_per_copy=30,
+                materials=[{"type_id": 34, "quantity": 2}, {"type_id": 34202, "quantity": 1}],
+            ),
+        ],
+    )
+    estimator = ProductionEstimateService(svc, market, ShoppingService(invention, market))
+    data = EstimateInput(kind="invention", units=50001)
+    best = await estimator.estimate(row.user_id, row.id, data)
+    assert best.amount == 603
+    assert best.selected_decryptor_id == 34201
+    assert not best.complete_comparison
+    assert len(best.decryptor_options) == 3
+    assert [option.decryptor_id for option in best.decryptor_options if option.is_best] == [34201]
+    assert best.decryptor_options[-1].estimated_cost is None
+    manual = await estimator.estimate(
+        row.user_id, row.id, data.model_copy(update={"decryptor_id": None})
+    )
+    assert manual.amount == 1000
+    assert manual.selected_decryptor_id is None
+    assert "5 expected attempts" in manual.description
+    assert "10 runs / T2 BPC" in manual.description
+    small = await estimator.estimate(row.user_id, row.id, data.model_copy(update={"units": 1}))
+    assert small.selected_decryptor_id is None
+    assert small.amount == 600
+    forced = await estimator.estimate(
+        row.user_id, row.id, data.model_copy(update={"units": 1, "decryptor_id": 34201})
+    )
+    assert forced.amount == 603
+    for chosen, status in [(1, 422), (34202, 409)]:
+        with pytest.raises(ProductionError) as error:
+            await estimator.estimate(
+                row.user_id, row.id, data.model_copy(update={"decryptor_id": chosen})
+            )
+        assert error.value.status == status
+    assert (await svc.get(row.user_id, row.id)).entries == []
+
+
+@pytest.mark.parametrize("decryptor", [0, -1, "unknown"])
+def test_invalid_decryptor_is_rejected(decryptor: object) -> None:
+    with pytest.raises(ValidationError):
+        EstimateInput.model_validate({"kind": "invention", "units": 1, "decryptor_id": decryptor})

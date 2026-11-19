@@ -3,7 +3,7 @@ from decimal import Decimal
 from typing import Annotated, Literal
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, Field, computed_field
+from pydantic import BaseModel, ConfigDict, Field, PositiveInt, computed_field
 
 from app.domains.market.models import HubId
 
@@ -63,6 +63,7 @@ class Production(ProductionCreate):
 class EstimateInput(BaseModel):
     model_config = ConfigDict(extra="forbid")
     kind: Literal["invention", "materials", "manufacturing"]
+    decryptor_id: PositiveInt | Literal["best"] | None = "best"
     units: int = Field(ge=1, le=10**9)
     hub_id: HubId = "jita"
     material_order_type: Literal["buy", "sell"] = "sell"
@@ -71,8 +72,19 @@ class EstimateInput(BaseModel):
     system_cost_index: Decimal = Field(default=Decimal(0), ge=0, le=100, allow_inf_nan=False)
 
 
+class DecryptorEstimate(BaseModel):
+    decryptor_id: int | None
+    name: str
+    probability: Decimal
+    runs_per_copy: int
+    estimated_cost: Decimal | None
+    is_best: bool
+
+
 class Estimate(BaseModel):
     amount: Decimal
     description: str
     stale: bool = False
     complete_comparison: bool = True
+    decryptor_options: list[DecryptorEstimate] = Field(default_factory=list)
+    selected_decryptor_id: int | None = None
