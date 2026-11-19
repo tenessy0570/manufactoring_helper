@@ -1,5 +1,6 @@
 import logging
 from datetime import UTC, timedelta
+from functools import partial
 from typing import Any
 
 from arq import cron
@@ -9,7 +10,6 @@ from dishka import AsyncContainer
 
 from app.core.config import get_settings
 from app.core.di import create_container
-from app.core.freshness import MARKET_REFRESH_MINUTES
 from app.core.logging import configure_logging
 from app.domains.catalog.service import CatalogSyncService
 from app.domains.market.models import HUBS
@@ -17,6 +17,7 @@ from app.domains.market.service import MarketSyncService
 from app.workers.history import enqueue_history
 from app.workers.invention import enqueue_inventions
 from app.workers.manufacturing import enqueue_manufacturing
+from app.workers.refresh import with_retry_delay
 
 logger = logging.getLogger(__name__)
 
@@ -36,7 +37,12 @@ async def sync_catalog(ctx: dict[str, Any]) -> dict[str, Any]:
     container: AsyncContainer = ctx["container"]
     async with container() as scope:
         service = await scope.get(CatalogSyncService)
-        return (await service.sync_if_stale(ctx["catalog_max_age"])).model_dump()
+        result = await with_retry_delay(
+            ctx, "catalog", lambda: service.sync_if_stale(ctx["catalog_max_age"])
+        )
+        return (
+            result.model_dump() if result is not None else {"skipped": True, "retry_delayed": True}
+        )
 
 
 async def sync_markets(ctx: dict[str, Any]) -> list[dict[str, Any]]:
@@ -48,7 +54,12 @@ async def sync_markets(ctx: dict[str, Any]) -> list[dict[str, Any]]:
             async with container() as scope:
                 service = await scope.get(MarketSyncService)
                 logger.info("Market sync starting: %s", hub.name)
-                report = await service.sync_if_stale(hub.hub_id)
+                report = await with_retry_delay(
+                    ctx, f"market:{hub.hub_id}", partial(service.sync_if_stale, hub.hub_id)
+                )
+                if report is None:
+                    logger.info("Market sync delayed after failure: %s", hub.name)
+                    continue
                 reports.append(report.model_dump())
                 logger.info(
                     "Market sync complete: %s, skipped=%s, items=%s, pages=%s",
@@ -73,12 +84,14 @@ class WorkerSettings:
         enqueue_manufacturing,
         enqueue_inventions,
     )
-    cron_jobs = (
-        cron(sync_catalog, hour=4, minute=0, run_at_startup=True),
-        cron(sync_markets, minute=set(range(0, 60, MARKET_REFRESH_MINUTES)), run_at_startup=True),
-        cron(enqueue_history, hour=12, minute=15, run_at_startup=True),
-        cron(enqueue_manufacturing, minute=20, run_at_startup=True),
-        cron(enqueue_inventions, hour=12, minute=30, run_at_startup=True),
+    cron_jobs = tuple(
+        cron(
+            function,
+            minute=set(range(60)),
+            run_at_startup=True,
+            job_id=f"refresh:{function.__name__}",
+        )
+        for function in functions
     )
     on_startup = startup
     on_shutdown = shutdown

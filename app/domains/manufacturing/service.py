@@ -44,6 +44,7 @@ class ManufacturingSyncService:
         ):
             return False
         recipe = await self._gateway.fetch(type_id)
+        now = self._clock()
         state = RecipeState(
             type_id=type_id,
             recipe=recipe,

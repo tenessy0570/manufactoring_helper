@@ -190,7 +190,7 @@ async def test_expired_hub_is_refreshed() -> None:
         repository,
         gateway,
         AsyncMock(spec=SQLAlchemyUnitOfWork),
-        lambda: EXPIRES,
+        lambda: NOW + timedelta(minutes=20),
     )
     assert not (await service.sync_if_stale("jita")).skipped
     assert len(gateway.calls) == 2
@@ -375,3 +375,32 @@ async def test_buy_levels_aggregate_and_round_trip_without_raw_orders(
     stored = (await repository.find(PriceQuery(), NOW))[0]
     assert stored.buy_levels == result.buy_levels
     assert stored.buy_volume == result.buy_volume
+
+
+@pytest.mark.parametrize("minutes", [6, 19])
+async def test_restarted_market_service_waits_twenty_minutes_despite_esi_cache_expiry(
+    minutes: int,
+) -> None:
+    repository, gateway = FakeRepository(), FakeGateway()
+    await repository.replace(state(), [price()])
+    uow = AsyncMock(spec=SQLAlchemyUnitOfWork)
+    restarted = MarketSyncService(
+        repository, gateway, uow, lambda: NOW + timedelta(minutes=minutes)
+    )
+    assert (await restarted.sync_if_stale("jita")).skipped
+    assert gateway.calls == []
+    restarted = MarketSyncService(repository, gateway, uow, lambda: NOW + timedelta(minutes=20))
+    assert not (await restarted.sync_if_stale("jita")).skipped
+    assert repository.states["jita"].synced_at == NOW + timedelta(minutes=20)
+
+
+async def test_market_interval_starts_when_snapshot_is_complete() -> None:
+    repository, gateway = FakeRepository(), FakeGateway()
+    completed = NOW + timedelta(minutes=2)
+    times = iter([NOW, completed])
+    service = MarketSyncService(
+        repository, gateway, AsyncMock(spec=SQLAlchemyUnitOfWork), lambda: next(times)
+    )
+    await service.sync("jita")
+    assert repository.states["jita"].synced_at == completed
+    assert all(quote.synced_at == completed for quote in repository.prices["jita"])

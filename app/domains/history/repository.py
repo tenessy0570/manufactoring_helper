@@ -22,6 +22,9 @@ class HistoryRepository(ABC):
     async def replace(self, state: HistoryState, days: Sequence[HistoryDay]) -> None: ...
 
     @abstractmethod
+    async def due(self, region_id: int, type_ids: Sequence[int], now: datetime) -> set[int]: ...
+
+    @abstractmethod
     async def series(
         self, region_id: int, type_id: int, start: date, end: date
     ) -> list[HistoryDay]: ...
@@ -46,6 +49,20 @@ class SQLHistoryRepository(HistoryRepository):
             if value.tzinfo is None:
                 setattr(state, name, value.replace(tzinfo=UTC))
         return state
+
+    async def due(self, region_id: int, type_ids: Sequence[int], now: datetime) -> set[int]:
+        fresh: set[int] = set()
+        for start in range(0, len(type_ids), 500):
+            rows = await self._session.scalars(
+                select(HistoryStateTable.type_id).where(
+                    HistoryStateTable.region_id == region_id,
+                    HistoryStateTable.type_id.in_(type_ids[start : start + 500]),
+                    (HistoryStateTable.expires_at > now)
+                    | (HistoryStateTable.synced_at > now - HISTORY_FRESHNESS),
+                )
+            )
+            fresh.update(rows)
+        return set(type_ids) - fresh
 
     async def replace(self, state: HistoryState, days: Sequence[HistoryDay]) -> None:
         await self._session.execute(

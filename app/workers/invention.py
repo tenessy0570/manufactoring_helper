@@ -48,7 +48,7 @@ async def schedule_inventions(ctx: dict[str, Any], query: dict[str, Any] | None 
             if (
                 existing is not None
                 and existing.expires_at > now
-                and existing.status in ("ready", "unsupported")
+                and existing.status in ("ready", "unsupported", "error", "missing_prices")
             ):
                 continue
             await repository.ensure_request(

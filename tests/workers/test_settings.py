@@ -137,12 +137,30 @@ async def test_market_worker_isolates_hubs_and_continues_on_failure(fail_jita: b
 
 def test_owner_refresh_schedule() -> None:
     jobs = worker.WorkerSettings.cron_jobs
-    markets = next(j for j in jobs if j.name == "cron:sync_markets")
-    history = next(j for j in jobs if j.name == "cron:enqueue_history")
-    invention = next(j for j in jobs if j.name == "cron:enqueue_inventions")
-    assert markets.hour is None
-    assert markets.minute == {0, 20, 40}
-    assert history.hour == 12
-    assert history.minute == 15
-    assert invention.hour == 12
-    assert invention.minute == 30
+    assert len(jobs) == 5
+    for job in jobs:
+        assert job.hour is None
+        assert job.minute == set(range(60))
+        assert job.run_at_startup
+        assert job.keep_result_s == 0
+    assert len({job.job_id for job in jobs}) == 5
+
+
+async def test_hub_retry_delay_does_not_block_other_markets() -> None:
+    service = AsyncMock(spec=MarketSyncService)
+    service.sync_if_stale.side_effect = lambda hub: MarketSyncReport(hub_id=hub, items=1)
+    provider = Provider(scope=Scope.REQUEST)
+    provider.provide(lambda: service, provides=MarketSyncService)
+    container = make_async_container(provider)
+    redis = AsyncMock()
+    redis.exists.side_effect = lambda key: key == "refresh:retry:market:jita"
+    try:
+        assert len(await worker.sync_markets({"container": container, "redis": redis})) == 4
+        assert [call.args[0] for call in service.sync_if_stale.await_args_list] == [
+            "amarr",
+            "dodixie",
+            "rens",
+            "hek",
+        ]
+    finally:
+        await container.close()

@@ -54,7 +54,11 @@ class MarketSyncService:
 
     async def sync_if_stale(self, hub_id: HubId) -> MarketSyncReport:
         state = await self._repository.state(hub_id)
-        if state is not None and state.expires_at > self._clock():
+        if (
+            state is not None
+            and max(state.expires_at, refresh_deadline(state.synced_at, MARKET_FRESHNESS))
+            > self._clock()
+        ):
             return MarketSyncReport(hub_id=hub_id, skipped=True, items=state.items)
         return await self.sync(hub_id)
 
@@ -93,7 +97,10 @@ class MarketSyncService:
                 expires_at = min(expires_at, batch.expires_at)
                 for order in batch.orders:
                     aggregator.add(order)
+        synced_at = self._clock()
         prices = aggregator.finish(expires_at)
+        for price in prices:
+            price.synced_at = synced_at
         state = MarketState(
             hub_id=hub_id, synced_at=synced_at, expires_at=expires_at, items=len(prices)
         )

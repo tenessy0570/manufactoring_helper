@@ -35,7 +35,7 @@ async def enqueue_manufacturing(ctx: dict[str, Any]) -> int:
         )
         recipes = await (await scope.get(ManufacturingRepository)).recipes(ids)
     now = datetime.now(UTC)
-    ids = [
+    due = {
         type_id
         for type_id in ids
         if (
@@ -46,17 +46,19 @@ async def enqueue_manufacturing(ctx: dict[str, Any]) -> int:
                 and recipes[type_id].recipe.estimated_item_value is None
             )
         )
-    ]
+    }
     count = 0
-    today = now.date().isoformat()
     for start in range(0, len(ids), 20):
-        batch = ids[start : start + 20]
-        digest = hashlib.sha256(",".join(map(str, batch)).encode()).hexdigest()[:16]
+        group = ids[start : start + 20]
+        batch = [type_id for type_id in group if type_id in due]
+        if not batch:
+            continue
+        digest = hashlib.sha256(",".join(map(str, group)).encode()).hexdigest()[:16]
         job = await ctx["redis"].enqueue_job(
-            "sync_recipes", batch, _queue_name=QUEUE, _job_id=f"manufacturing:due:{today}:{digest}"
+            "sync_recipes", batch, _queue_name=QUEUE, _job_id=f"manufacturing:rolling:{digest}"
         )
         count += job is not None
-    logger.info("Recipe planner: %s items due, %s batches queued", len(ids), count)
+    logger.info("Recipe planner: %s items due, %s batches queued", len(due), count)
     return count
 
 
@@ -98,7 +100,7 @@ class ManufacturingWorkerSettings:
     on_shutdown = shutdown
     max_jobs = 1
     max_tries = 3
-    keep_result = 86400
+    keep_result = 300
     job_timeout = 900
     timezone = UTC
 

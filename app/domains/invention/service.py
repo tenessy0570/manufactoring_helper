@@ -48,7 +48,11 @@ class InventionService:
             ttl_seconds=60,
         )
         request = InventionRequest.model_validate(cached)
-        return InventionView(request=request, stale=request.expires_at <= self._clock())
+        return InventionView(
+            request=request,
+            stale=request.status not in ("ready", "unsupported")
+            or request.expires_at <= self._clock(),
+        )
 
     async def prepare(self, settings: InventionSettings) -> InventionView:
         view = await self.view(settings)
@@ -94,6 +98,7 @@ class InventionSyncService:
         plan = await self._repository.plan(settings.plan_key)
         if plan is None or plan.expires_at <= now:
             plans = await self._gateway.fetch(settings)
+            now = self._clock()
             plan = PlanState(
                 key=settings.plan_key,
                 plans=plans,
@@ -111,10 +116,8 @@ class InventionSyncService:
         )
         quotes = await self._manufacturing.quotes(settings.hub_id, material_ids)
         result = price_plans(plan.plans, quotes, settings)
-        # Valuation refresh follows the daily policy, independently of ESI page expiry.
-        expires_at = now.astimezone(UTC).replace(hour=12, minute=30, second=0, microsecond=0)
-        if expires_at <= now:
-            expires_at += timedelta(days=1)
+        now = self._clock()
+        expires_at = now + timedelta(days=1)
         status = (
             "ready"
             if result.best is not None
@@ -122,6 +125,8 @@ class InventionSyncService:
             if plan.plans
             else "unsupported"
         )
+        if status == "missing_prices":
+            expires_at = now + timedelta(minutes=5)
         request = InventionRequest(
             key=settings.key,
             settings=settings,
@@ -145,6 +150,6 @@ class InventionSyncService:
             key=settings.key, settings=settings, updated_at=now, expires_at=now
         )
         request.status, request.error_type = "error", error_type
-        request.updated_at, request.expires_at = now, now
+        request.expires_at = now + timedelta(minutes=5)
         await self._repository.save_request(request)
         await self._uow.commit()

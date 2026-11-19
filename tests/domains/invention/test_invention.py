@@ -253,10 +253,20 @@ async def test_source_is_cached_across_hubs_and_repricing_never_refetches(
     assert result.result.best is not None
     assert result.result.best.expected_cost_per_unit == 40
     assert result.result.price_fingerprint != first.result.price_fingerprint
-    await later.record_error(settings(), "ConnectionError")
+    failure_clock = NOW + timedelta(days=1, hours=1)
+    error_service = InventionSyncService(
+        repository,
+        gateway,
+        manufacturing,
+        SQLAlchemyUnitOfWork(session),
+        clock=lambda: failure_clock,
+    )
+    await error_service.record_error(settings(), "ConnectionError")
     failed = (await repository.requests([settings().key]))[settings().key]
     assert failed.status == "error"
     assert failed.result == result.result
+    assert failed.updated_at == result.updated_at
+    assert failed.expires_at == failure_clock + timedelta(minutes=5)
 
 
 async def test_empty_and_missing_price_states(session: AsyncSession) -> None:
@@ -476,7 +486,7 @@ async def test_daily_valuation_does_not_repeat_when_market_quotes_expire(
         repository, gateway, manufacturing, SQLAlchemyUnitOfWork(session), clock=lambda: NOW
     )
     first = await service.sync(settings())
-    assert first.expires_at == NOW.replace(hour=12, minute=30)
+    assert first.expires_at == NOW + timedelta(days=1)
     later = InventionSyncService(
         repository,
         gateway,
@@ -489,7 +499,7 @@ async def test_daily_valuation_does_not_repeat_when_market_quotes_expire(
     gateway.fetch.assert_awaited_once()
 
 
-async def test_valuation_expires_at_next_daily_refresh_not_after_job_finish(
+async def test_valuation_expires_24_hours_after_completion(
     session: AsyncSession,
 ) -> None:
     repository = SQLInventionRepository(session)
@@ -505,7 +515,7 @@ async def test_valuation_expires_at_next_daily_refresh_not_after_job_finish(
         clock=lambda: NOW.replace(hour=12, minute=33),
     )
     result = await service.sync(settings())
-    assert result.expires_at == (NOW + timedelta(days=1)).replace(hour=12, minute=30)
+    assert result.expires_at == (NOW + timedelta(days=1)).replace(hour=12, minute=33)
 
 
 async def test_migration_merges_fee_variants_and_reuses_tax_free_cache_without_source_calls(

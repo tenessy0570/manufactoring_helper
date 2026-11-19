@@ -133,6 +133,8 @@ async def test_migration_and_upsert_on_postgres() -> None:
                 await history.replace(history_state(region=10000043), [day(volume=100)])
                 await session.commit()
                 assert await history.state(10000002, 10) == history_state()
+                assert await history.due(10000002, [10, 999], NOW + timedelta(hours=23)) == {999}
+                assert await history.due(10000002, [10], NOW + timedelta(days=1)) == {10}
                 values, total = await history.liquidity(LiquidityQuery(days=2, type_ids=[10]), NOW)
                 assert total == 1
                 assert values[0].daily_isk_volume == 205

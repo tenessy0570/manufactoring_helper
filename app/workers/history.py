@@ -14,6 +14,7 @@ from app.core.di import create_container
 from app.core.logging import configure_logging
 from app.domains.catalog.models import MASS_PRODUCTION_META_GROUP_IDS, ItemTypeClause
 from app.domains.catalog.repository import ItemTypeRepository
+from app.domains.history.repository import HistoryRepository
 from app.domains.history.service import HistorySyncService
 from app.domains.market.models import HUBS
 
@@ -33,17 +34,22 @@ async def enqueue_history(ctx: dict[str, Any]) -> int:
             )
         )
     count = 0
-    today = datetime.now(UTC).date().isoformat()
-    for region_id in sorted({hub.region_id for hub in HUBS}):
+    now = datetime.now(UTC)
+    for region_id in dict.fromkeys(hub.region_id for hub in HUBS):
+        async with container() as scope:
+            due = await (await scope.get(HistoryRepository)).due(region_id, ids, now)
         for start in range(0, len(ids), BATCH_SIZE):
-            batch = ids[start : start + BATCH_SIZE]
-            digest = hashlib.sha256(",".join(map(str, batch)).encode()).hexdigest()[:16]
+            group = ids[start : start + BATCH_SIZE]
+            batch = [type_id for type_id in group if type_id in due]
+            if not batch:
+                continue
+            digest = hashlib.sha256(",".join(map(str, group)).encode()).hexdigest()[:16]
             job = await ctx["redis"].enqueue_job(
                 "sync_history_batch",
                 region_id,
                 batch,
                 _queue_name=HISTORY_QUEUE,
-                _job_id=f"history:{today}:{region_id}:{digest}",
+                _job_id=f"history:rolling:{region_id}:{digest}",
             )
             count += job is not None
     return count
@@ -84,7 +90,7 @@ class HistoryWorkerSettings:
     on_shutdown = shutdown
     max_jobs = 2
     max_tries = 3
-    keep_result = 86400
+    keep_result = 300
     job_timeout = 900
     timezone = UTC
 

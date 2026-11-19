@@ -66,13 +66,19 @@ class HistorySyncService:
     async def sync_if_stale(self, region_id: int, type_id: int) -> bool:
         state = await self._repository.state(region_id, type_id)
         now = self._clock()
-        if state is not None and state.expires_at > now:
+        if (
+            state is not None
+            and max(state.expires_at, refresh_deadline(state.synced_at, HISTORY_FRESHNESS)) > now
+        ):
             return False
         downloaded = await self._gateway.fetch(region_id, type_id)
         # Ignore incomplete current-day data; averages always use completed UTC days.
         days = [day for day in downloaded.days if day.date < now.date()]
         state = HistoryState(
-            region_id=region_id, type_id=type_id, synced_at=now, expires_at=downloaded.expires_at
+            region_id=region_id,
+            type_id=type_id,
+            synced_at=self._clock(),
+            expires_at=downloaded.expires_at,
         )
         try:
             await self._repository.replace(state, days)

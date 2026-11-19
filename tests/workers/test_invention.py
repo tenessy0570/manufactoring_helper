@@ -103,3 +103,28 @@ async def test_worker_lifecycle_and_configuration(monkeypatch: pytest.MonkeyPatc
     assert calls[0]["queue_name"] == "arq:invention"
     assert calls[0]["keep_result"] == 0
     assert calls[0]["redis_settings"].host == config.redis_host
+
+
+async def test_planner_respects_persisted_failure_retry_deadline() -> None:
+    repository = AsyncMock(spec=InventionRepository)
+    catalog = AsyncMock(spec=ItemTypeRepository)
+    queue = AsyncMock(spec=InventionQueue)
+    uow = AsyncMock(spec=UnitOfWork)
+    catalog.find.return_value = [item(10)]
+    repository.active_settings.return_value = []
+    failed = request(status="error", expires_at=datetime.now(UTC) + timedelta(minutes=5))
+    repository.requests.return_value = {settings().key: failed}
+    provider = Provider(scope=Scope.REQUEST)
+    provider.provide(lambda: repository, provides=InventionRepository)
+    provider.provide(lambda: catalog, provides=ItemTypeRepository)
+    provider.provide(lambda: queue, provides=InventionQueue)
+    provider.provide(lambda: uow, provides=UnitOfWork)
+    container = make_async_container(provider)
+    try:
+        assert await worker.schedule_inventions({"container": container}) == 0
+        queue.enqueue.assert_not_awaited()
+        failed.expires_at = datetime.now(UTC) - timedelta(seconds=1)
+        queue.enqueue.return_value = True
+        assert await worker.schedule_inventions({"container": container}) == 1
+    finally:
+        await container.close()

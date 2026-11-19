@@ -1,5 +1,5 @@
 from collections.abc import AsyncIterator, Sequence
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta
 from decimal import Decimal
 from typing import Any
 from unittest.mock import AsyncMock
@@ -152,6 +152,9 @@ class FakeRepository(HistoryRepository):
     async def state(self, region_id: int, type_id: int) -> HistoryState | None:
         return self.current
 
+    async def due(self, region_id: int, type_ids: Sequence[int], now: datetime) -> set[int]:
+        return set(type_ids)
+
     async def replace(self, snapshot: HistoryState, days: Sequence[HistoryDay]) -> None:
         self.current, self.days = snapshot, list(days)
 
@@ -263,3 +266,35 @@ async def test_history_missing_type_is_cached_but_other_404_errors_propagate(bod
             else:
                 with pytest.raises(HttpStatusError):
                     await gateway.fetch(REGION, 406)
+
+
+async def test_history_due_and_restarted_sync_follow_saved_daily_timestamp(
+    session: AsyncSession,
+) -> None:
+    repository = SQLHistoryRepository(session)
+    await repository.replace(
+        state().model_copy(update={"expires_at": NOW + timedelta(hours=1)}), []
+    )
+    await session.commit()
+    async with AsyncSession(session.bind) as second:
+        restored = SQLHistoryRepository(second)
+        gateway = AsyncMock(spec=HistoryGateway)
+        gateway.fetch.return_value = HistoryDownload(days=[], expires_at=NOW + timedelta(days=2))
+        almost = NOW + timedelta(hours=23, minutes=59)
+        assert await restored.due(REGION, [10, 20], almost) == {20}
+        assert await restored.due(REGION + 1, [10], almost) == {10}
+        assert await restored.due(REGION, [], almost) == set()
+        service = HistorySyncService(
+            restored, gateway, SQLAlchemyUnitOfWork(second), lambda: almost
+        )
+        assert not await service.sync_if_stale(REGION, 10)
+        gateway.fetch.assert_not_awaited()
+        deadline = NOW + timedelta(days=1)
+        assert await restored.due(REGION, [10], deadline) == {10}
+        service = HistorySyncService(
+            restored, gateway, SQLAlchemyUnitOfWork(second), lambda: deadline
+        )
+        assert await service.sync_if_stale(REGION, 10)
+        saved = await restored.state(REGION, 10)
+        assert saved is not None
+        assert saved.synced_at == deadline

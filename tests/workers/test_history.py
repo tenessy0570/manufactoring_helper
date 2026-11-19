@@ -6,6 +6,7 @@ from arq import Retry
 from dishka import Provider, Scope, make_async_container
 
 from app.domains.catalog.repository import ItemTypeRepository
+from app.domains.history.repository import HistoryRepository
 from app.domains.history.service import HistorySyncService
 from app.workers import history as worker
 from tests.domains.catalog.test_catalog import item
@@ -15,7 +16,10 @@ from tests.helpers import make_settings
 async def test_enqueue_batches_are_unique_and_use_separate_queue() -> None:
     repository = AsyncMock(spec=ItemTypeRepository)
     repository.find.return_value = [item(number) for number in range(21)]
+    history = AsyncMock(spec=HistoryRepository)
+    history.due.return_value = set(range(21))
     provider = Provider(scope=Scope.REQUEST)
+    provider.provide(lambda: history, provides=HistoryRepository)
     provider.provide(lambda: repository, provides=ItemTypeRepository)
     container = make_async_container(provider)
     redis = AsyncMock()
@@ -34,6 +38,16 @@ async def test_enqueue_batches_are_unique_and_use_separate_queue() -> None:
     redis.enqueue_job.return_value = None
     assert await worker.enqueue_history(ctx) == 0
     assert [call.kwargs["_job_id"] for call in redis.enqueue_job.await_args_list] == first_ids
+    history.due.return_value = {20}
+    redis.reset_mock()
+    redis.enqueue_job.return_value = object()
+    assert await worker.enqueue_history(ctx) == 5
+    assert all(call.args[2] == [20] for call in redis.enqueue_job.await_args_list)
+    assert {call.kwargs["_job_id"] for call in redis.enqueue_job.await_args_list} <= set(first_ids)
+    history.due.return_value = set()
+    redis.reset_mock()
+    assert await worker.enqueue_history(ctx) == 0
+    redis.enqueue_job.assert_not_awaited()
     repository.find.return_value = []
     redis.reset_mock()
     assert await worker.enqueue_history(ctx) == 0
