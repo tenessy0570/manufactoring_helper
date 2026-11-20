@@ -1,5 +1,6 @@
 from datetime import datetime
 from enum import StrEnum
+from typing import Literal
 
 from pydantic import BaseModel
 
@@ -32,3 +33,18 @@ class DataProgress(BaseModel):
     t2_items: int
     market_items: int
     market_updated_at: datetime | None
+
+
+class SourceFreshness(BaseModel):
+    source: str
+    oldest_at: datetime | None
+    newest_at: datetime | None
+    cached: int
+    fresh: int
+    status: Literal["fresh", "partial", "stale", "missing"]
+
+
+class FreshnessReport(BaseModel):
+    hub_id: str
+    checked_at: datetime
+    sources: list[SourceFreshness]

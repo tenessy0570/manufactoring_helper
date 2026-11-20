@@ -74,6 +74,10 @@ def test_full_runs_tax_daily_throughput_and_legacy_snapshot() -> None:
     assert demand.profit == Decimal("-445.5")
     assert demand.daily_profit == Decimal("-40.5")
     assert demand.average_price == Decimal("95.05")
+    capped = estimate_buy_demand(quote, calculated, query, max_units=20)
+    assert capped.units == 20
+    assert capped.revenue == 1905
+    assert capped.profit == Decimal("-85.5")
     quote.buy_levels = None
     legacy = estimate_buy_demand(quote, calculated, query)
     assert not legacy.depth_available

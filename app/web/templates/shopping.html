@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Invention shopping - EVE Manufacturing</title><link rel="stylesheet" href="/static/app.css"><link rel="stylesheet" href="/static/navigation.css"><script defer src="/static/shopping.js"></script><script defer src="/static/vendor/alpine.min.js"></script></head>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Invention shopping - EVE Manufacturing</title><link rel="stylesheet" href="/static/app.css"><link rel="stylesheet" href="/static/navigation.css"><script defer src="/static/shopping.js"></script><script defer src="/static/freshness.js"></script><script defer src="/static/vendor/alpine.min.js"></script></head>
 <body x-data="shoppingApp">{% set active_page = "shopping" %}{% include "navigation.html" %}
 <main class="workspace"><div class="content"><div class="page-heading"><div><h1>Invention shopping</h1><p>Plan datacores, decryptors and T1 blueprint-copy runs for your desired T2 output.</p></div></div>
 <section class="market-panel shopping-panel" style="padding:22px"><form @submit.prevent="calculate()"><div class="filter-grid">

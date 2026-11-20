@@ -119,6 +119,10 @@ def main() -> None:
                 if(a.browserProfile||a.form.category!=='Rigs')throw Error('Delete changed filters');
                 }finally{window.confirm=original;}return 'PASS: profile deletion';})()""")
             )
+            profile_controls = (ROOT / "tests/frontend/profile_controls_scenarios.js").read_text(
+                encoding="utf-8"
+            )
+            print(evaluate(profile_controls + "\ncheckProfileControls()"))
             for width, label in ((1440, "desktop"), (390, "mobile")):
                 call(
                     "Emulation.setDeviceMetricsOverride",
@@ -248,19 +252,61 @@ def main() -> None:
                 print(
                     evaluate(
                         "if(document.documentElement.scrollWidth>innerWidth+1)"
-                        "throw Error('Production overflow'); 'PASS: production layout'"
+                        "throw Error('Production overflow'); window.scrollTo(0,0);"
+                        "'PASS: production layout'"
                     )
                 )
                 shot = call("Page.captureScreenshot", {"format": "png"})["result"]["data"]
                 (Path(tempfile.gettempdir()) / f"eve-production-{width}.png").write_bytes(
                     base64.b64decode(shot)
                 )
-            for path in ("/", "/invention-shopping", "/production-history", "/account"):
+            call("Page.navigate", {"url": url + "/blueprint-calculator"})
+            time.sleep(1)
+            calculator_scenarios = (ROOT / "tests/frontend/calculator_scenarios.js").read_text(
+                encoding="utf-8"
+            )
+            print(evaluate(calculator_scenarios + "\ncheckCalculatorWorkflow()"))
+            for width in (1440, 390):
+                call(
+                    "Emulation.setDeviceMetricsOverride",
+                    {"width": width, "height": 1100, "deviceScaleFactor": 1, "mobile": False},
+                )
+                time.sleep(0.2)
+                print(
+                    evaluate(
+                        "if(document.documentElement.scrollWidth>innerWidth+1)"
+                        "throw Error('Calculator overflow');'PASS: calculator layout'"
+                    )
+                )
+                evaluate("window.scrollTo(0,0)")
+                shot = call("Page.captureScreenshot", {"format": "png"})["result"]["data"]
+                (Path(tempfile.gettempdir()) / f"eve-calculator-{width}.png").write_bytes(
+                    base64.b64decode(shot)
+                )
+            freshness_scenarios = (ROOT / "tests/frontend/freshness_scenarios.js").read_text(
+                encoding="utf-8"
+            )
+            print(evaluate(freshness_scenarios + "\ncheckFreshnessHeader()"))
+            for path in (
+                "/",
+                "/blueprint-calculator",
+                "/invention-shopping",
+                "/production-history",
+                "/account",
+            ):
                 call("Page.navigate", {"url": url + path})
                 time.sleep(0.5)
                 print(
                     evaluate("""(()=>{
                     const nav=document.querySelector('.site-navigation');
+                    if(!document.querySelector('.freshness-header'))
+                        throw Error('Missing shared freshness header');
+                    const help=document.querySelector('.workspace-help');
+                    if(help){
+                        help.open=true;help.dispatchEvent(new KeyboardEvent('keydown',
+                            {key:'Escape',bubbles:true}));
+                        if(help.open)throw Error('Help did not close');
+                    }
                     if(nav.querySelectorAll('[aria-current=page]').length!==1)
                         throw Error('Missing active navigation');
                     for(const href of ['/','/invention-shopping','/production-history','/account'])

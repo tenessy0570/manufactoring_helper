@@ -15,7 +15,9 @@ from tests.helpers import make_settings
 
 async def test_enqueue_batches_are_unique_and_use_separate_queue() -> None:
     repository = AsyncMock(spec=ItemTypeRepository)
-    repository.find.return_value = [item(number) for number in range(21)]
+    repository.find.return_value = [
+        item(number, meta_group_id=[1, 2, 3, 4, 5, 6, None][number % 7]) for number in range(21)
+    ]
     history = AsyncMock(spec=HistoryRepository)
     history.due.return_value = set(range(21))
     provider = Provider(scope=Scope.REQUEST)
@@ -27,7 +29,11 @@ async def test_enqueue_batches_are_unique_and_use_separate_queue() -> None:
     ctx = {"container": container, "redis": redis}
     assert await worker.enqueue_history(ctx) == 10
     assert repository.find.await_args is not None
-    assert repository.find.await_args.args[0].meta_group_ids == [1, 2]
+    assert repository.find.await_args.args[0].meta_group_ids is None
+    assert repository.find.await_args.args[0].is_active is True
+    assert {value for call in redis.enqueue_job.await_args_list for value in call.args[2]} == set(
+        range(21)
+    )
     first_ids = [call.kwargs["_job_id"] for call in redis.enqueue_job.await_args_list]
     assert len(set(first_ids)) == 10
     assert all(

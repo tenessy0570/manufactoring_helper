@@ -97,6 +97,7 @@ class WorkerSettings:
     on_shutdown = shutdown
     timezone = UTC
     max_jobs = 1
+    keep_result = 0
     job_timeout = 3600
 
 

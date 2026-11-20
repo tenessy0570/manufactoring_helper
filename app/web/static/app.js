@@ -1,8 +1,9 @@
 /* Local application state; all monetary calculations remain on the server. */
 document.addEventListener('alpine:init', () => {
   Alpine.data('manufacturingApp', () => ({
+    calculator:document.body.dataset.calculator==='true',blueprint:{type_id:'',name:''},blueprintMatches:[],blueprintOpen:false,blueprintIndex:-1,blueprintSequence:0,blueprintSearching:false,blueprintSearchDone:false,appliedBlueprintId:0,
     demo: new URLSearchParams(location.search).get('demo') === '1', loading: false,
-    filtersOpen: true, error: '', profileId: '', profiles: [], profileSettings: {},
+    deletingProfile:false,filtersOpen: true, error: '', profileId: '', profiles: [], profileSettings: {},
     historyData:null,historyLoading:false,historyError:'',historyHoverText:'',
     materialNames:{},materialNamesLoading:false,materialNamesMessage:'',preparingMarket:false,preparationMessage:'',
     profileSaveOpen:false,profileName:'',profileError:'',profileWarning:'',storageWarning:'',
@@ -14,9 +15,9 @@ document.addEventListener('alpine:init', () => {
     staleExplanation(item){
       const labels={recipe:'Manufacturing recipe',product_market:'Product market prices',material_market:'Material market prices',history:'Regional trading history',invention:'Invention estimate'};
       const sources=Object.entries(item?.freshness_deadlines||{}).filter(([,date])=>Date.parse(date)<=this.progressNow).map(([key])=>labels[key]||key);
-      return sources.length?'Due for refresh: '+sources.join(', ')+'. Select Show results after the background update.':'Saved inputs are due for refresh. Select Show results after the background update.';
+      return sources.length?'Due for refresh: '+sources.join(', ')+'. Select '+(this.calculator?'Calculate profit':'Show results')+' after the background update.':'Saved inputs are due for refresh. Select '+(this.calculator?'Calculate profit':'Show results')+' after the background update.';
     },
-    timeAgo(value){if(!value)return 'not yet loaded';const stamp=new Date(value).getTime();if(!Number.isFinite(stamp))return 'not available';const minutes=Math.floor(Math.max(0,this.progressNow-stamp)/60000);return minutes<1?'less than a minute ago':Math.floor(minutes/60)+'h '+minutes%60+'m ago';},
+    timeAgo(value){if(!value)return 'not yet loaded';const stamp=new Date(value).getTime();if(!Number.isFinite(stamp))return 'not available';const minutes=Math.floor(Math.max(0,this.progressNow-stamp)/60000);return minutes<1?'less than a minute ago':(minutes>=1440?Math.floor(minutes/1440)+'d ':'')+Math.floor(minutes%1440/60)+'h '+minutes%60+'m ago';},
     dataProgress:null,progressError:false,progressSequence:0,
     async loadProgress(){if(this.demo)return;const seq=++this.progressSequence;try{const result=await this.api('/health/data-progress?hub='+this.resultForm.hub_id);if(seq!==this.progressSequence)return;this.dataProgress=result;this.progressError=false;}catch(_){if(seq===this.progressSequence)this.progressError=true;}},
     hiddenColumns:[], columnOptions:[{id:'cost',label:'Cost / unit'},{id:'profit',label:'Profit / unit'},{id:'demand',label:'Profit on demand'},{id:'margin',label:'Margin'},{id:'daily',label:'Profit / day'},{id:'turnover',label:'Regional turnover / day'},{id:'data',label:'Data freshness'}],
@@ -24,7 +25,7 @@ document.addEventListener('alpine:init', () => {
     form: {}, page: {items:[],total:0,offset:0,limit:25},
     defaults() {return {search:'',hub_id:'jita',material_hub_id:'',tech:'',category:'',
       material_order_type:'sell',product_order_type:'sell',buy_demand_tolerance_pct:'5',min_profit:'',min_margin:'',min_daily_isk_volume:'',
-      production_lines:'1',days:'30',sales_tax:'0',buy_broker_fee:'0',sell_broker_fee:'0',facility_tax:'0',system_cost_index:'0',
+      manufacturing_runs:'1',production_lines:'1',days:'30',sales_tax:'0',buy_broker_fee:'0',sell_broker_fee:'0',facility_tax:'0',system_cost_index:'0',
       min_product_volume:'',include_invention_cost:false,fresh_only:false,require_full_run_demand:false,
       rank_by:'profit_per_day',limit:'25'};},
     async init() {
@@ -34,6 +35,7 @@ document.addEventListener('alpine:init', () => {
       this.$watch('hiddenColumns', () => this.saveSettings());
       this.$watch('form', () => this.saveSettings());
       this.$watch('filtersOpen', () => this.saveSettings());
+      this.$watch('blueprint',()=>this.saveSettings());
       window.addEventListener('pagehide', () => this.saveSettings());
       const initialForm=JSON.stringify(this.form);
       if (!this.demo) {
@@ -41,15 +43,15 @@ document.addEventListener('alpine:init', () => {
           const result = await this.api('/api/v1/profiles'); this.profiles = [...this.profiles,...result.items];
           if (restored) {
             if(!this.profiles.some(p=>p.id===this.profileId))this.profileId='';
-          } else if(JSON.stringify(this.form)===initialForm) {
+          } else if(!this.calculator&&JSON.stringify(this.form)===initialForm) {
             const chosen = this.profiles.find(p => p.is_default);
             if (chosen) {this.profileId=chosen.id; this.setProfile(chosen);}
           }
         } catch (_) { this.profileWarning='Server profiles could not be loaded. Browser profiles and custom filters are still available.'; }
       }
-      await this.load();
+      if(!this.calculator||this.blueprint.type_id)await this.load();
     },
-    storageKey() {return 'eve-manufacturing.settings.v1.'+(this.demo?'demo':'live');},
+    storageKey() {return 'eve-manufacturing.settings.v1.'+(this.calculator?'calculator.':'')+(this.demo?'demo':'live');},
     restoreSettings() {
       try {
         const saved=JSON.parse(localStorage.getItem(this.storageKey()));
@@ -65,6 +67,7 @@ document.addEventListener('alpine:init', () => {
         else if(form.category==='Ship and Module Modifications')form.category='Rigs';
         else if(form.category==='Ship Equipment')form.category='Modules';
         this.hiddenColumns=Array.isArray(saved.hiddenColumns)?saved.hiddenColumns.filter(id=>this.columnOptions.some(c=>c.id===id)):[];
+        if(this.calculator&&Number.isInteger(Number(saved.blueprint?.type_id))&&Number(saved.blueprint.type_id)>0&&typeof saved.blueprint.name==='string')this.blueprint={type_id:Number(saved.blueprint.type_id),name:saved.blueprint.name};
         this.form=form;
         this.profileSettings=saved.profileSettings && typeof saved.profileSettings==='object' && !Array.isArray(saved.profileSettings)?saved.profileSettings:{};
         this.profileId=typeof saved.profileId==='string'?saved.profileId:'';
@@ -75,7 +78,7 @@ document.addEventListener('alpine:init', () => {
     },
     saveSettings() {
       try {
-        localStorage.setItem(this.storageKey(),JSON.stringify({version:1,hiddenColumns:this.hiddenColumns,form:this.form,profileSettings:this.profileSettings,profileId:this.profileId,filtersOpen:this.filtersOpen}));
+        localStorage.setItem(this.storageKey(),JSON.stringify({version:1,blueprint:this.calculator?this.blueprint:undefined,hiddenColumns:this.hiddenColumns,form:this.form,profileSettings:this.profileSettings,profileId:this.profileId,filtersOpen:this.filtersOpen}));
       } catch (_) { this.storageWarning='Browser storage is unavailable. Changes will work, but may not survive a page reload.'; }
     },
     browserProfilesKey(){return this.storageKey()+'.profiles';},
@@ -122,6 +125,8 @@ document.addEventListener('alpine:init', () => {
       else if(form.category==='Rigs')values.is_rig=true;
       else if(form.category==='Modules'){values.categories=['Ship Equipment'];values.is_rig=false;}
       else if(form.category)values.categories=[form.category];
+      if(this.calculator){const allowed=['manufacturing_runs','hub_id','material_hub_id','material_order_type','product_order_type','sales_tax','buy_broker_fee','sell_broker_fee','facility_tax','system_cost_index','include_invention_cost','buy_demand_tolerance_pct'];for(const key of Object.keys(values))if(!allowed.includes(key))delete values[key];}
+      if(!this.calculator)delete values.manufacturing_runs;
       values.offset=offset;
       for (const [key,value] of Object.entries(values)) {
         if (value===null || value===undefined || value==='') continue;
@@ -148,7 +153,19 @@ document.addEventListener('alpine:init', () => {
     },
     async resetFilters() {this.profileId='';this.profileSettings={};this.form=this.defaults();await this.load(false,0);},
     get resultForm(){return this.appliedForm||this.form;},
-    get hasChanges(){return this.appliedForm!==null && (JSON.stringify(this.form)!==JSON.stringify(this.appliedForm)||JSON.stringify(this.profileSettings)!==JSON.stringify(this.appliedSettings));},
+    get hasChanges(){return this.appliedForm!==null && (JSON.stringify(this.form)!==JSON.stringify(this.appliedForm)||JSON.stringify(this.profileSettings)!==JSON.stringify(this.appliedSettings)||(this.calculator&&Number(this.blueprint.type_id)!==this.appliedBlueprintId));},
+    get selectedProfile(){return this.profiles.find(p=>p.id===this.profileId);},
+    async deleteProfile(){
+      const profile=this.selectedProfile;if(!profile||this.deletingProfile)return;
+      if(profile.browser){this.deleteBrowserProfile();return;}
+      if(!confirm('Delete profile "'+profile.name+'"? Current settings will be kept.'))return;
+      this.deletingProfile=true;this.error='';
+      try{await this.api('/api/v1/profiles/'+encodeURIComponent(profile.id),{method:'DELETE'});
+        this.profiles=this.profiles.filter(p=>p.id!==profile.id);
+        this.profileId='';this.profileNotice='Profile deleted. Current settings kept.';this.saveSettings();
+        try{const result=await this.api('/api/v1/profiles');this.profiles=[...this.profiles.filter(p=>p.browser),...result.items];}catch(_){this.profileWarning='Profile deleted. Reload to refresh the remaining server profiles.';}
+      }catch(error){this.error=error.message;}finally{this.deletingProfile=false;}
+    },
     get browserProfile(){return this.profiles.find(p=>p.id===this.profileId&&p.browser);},
     updateBrowserProfile(){
       const previous=this.browserProfile;if(!previous)return;
@@ -166,19 +183,26 @@ document.addEventListener('alpine:init', () => {
       this.profiles=next;this.profileId='';this.profileNotice='Profile deleted. Current filters kept.';this.saveSettings();
     },
     async load(useApplied=false, offset=this.page.offset) {
+      if(this.calculator&&!this.blueprint.type_id){this.error='Choose a blueprint from the suggestions.';return;}
+      const typeId=this.calculator?Number(useApplied&&this.appliedBlueprintId?this.appliedBlueprintId:this.blueprint.type_id):0;
       this.saveSettings();
       const queryForm=JSON.parse(JSON.stringify(useApplied&&this.appliedForm?this.appliedForm:this.form));
       const querySettings=JSON.parse(JSON.stringify(useApplied&&this.appliedForm?this.appliedSettings:this.profileSettings));
       const seq=++this.requestSequence; this.loading=true; this.error='';
       try {
         let result;
-        if(this.demo) result=this.demoPage(queryForm,offset); else result=await this.api('/api/v1/manufacturing/opportunities?'+this.params(queryForm,querySettings,offset));
+        if(this.demo) result=this.demoPage(queryForm,offset); else result=await this.api((this.calculator?'/api/v1/manufacturing/calculator/'+typeId:'/api/v1/manufacturing/opportunities')+'?'+this.params(queryForm,querySettings,offset));
         if(seq!==this.requestSequence)return;
-        this.closeItem();this.page=result;this.appliedForm=queryForm;this.appliedSettings=querySettings;
-        this.loadProgress();
+        this.closeItem();this.page=result;this.appliedForm=queryForm;this.appliedSettings=querySettings;this.appliedBlueprintId=typeId;
+        if(this.calculator)await this.loadMaterialNames();else this.loadProgress();
       } catch(error) {if(seq===this.requestSequence){this.error=error.message;}}
       finally {if(seq===this.requestSequence)this.loading=false;}
     },
+    invalidateBlueprint(){this.blueprint.type_id='';this.blueprintMatches=[];this.blueprintIndex=-1;this.blueprintOpen=true;this.blueprintSearching=false;this.blueprintSearchDone=false;this.blueprintSequence++;this.requestSequence++;this.loading=false;},
+    async searchBlueprint(force=false){const seq=++this.blueprintSequence;const name=this.blueprint.name.trim().replace(/\s+blueprint$/i,'').trim();if(name.length<2||(this.blueprint.type_id&&!force))return;this.blueprintSearching=true;this.blueprintSearchDone=false;try{const params=new URLSearchParams({search:name,limit:50});const data=await this.api('/api/v1/catalog/items?'+params);if(seq===this.blueprintSequence){this.blueprintMatches=data.items;this.blueprintSearchDone=true;this.blueprintIndex=-1;}}catch(error){if(seq===this.blueprintSequence)this.error=error.message;}finally{if(seq===this.blueprintSequence)this.blueprintSearching=false;}},
+    chooseBlueprint(item){this.requestSequence++;this.loading=false;this.blueprintSequence++;this.blueprintSearching=false;this.blueprint={type_id:item.type_id,name:item.name+' Blueprint'};this.blueprintOpen=false;this.blueprintIndex=-1;this.error='';this.saveSettings();},
+    async reopenBlueprint(){if(this.blueprint.name.trim().length<2)return;this.blueprintOpen=true;if(!this.blueprintSearchDone||!this.blueprintMatches.length)await this.searchBlueprint(true);},
+    blueprintKey(event){if(event.key==='Control'){if(!event.repeat)this.reopenBlueprint();return;}if(['ArrowDown','ArrowUp'].includes(event.key)){event.preventDefault();this.blueprintOpen=true;if(!this.blueprintMatches.length)return;this.blueprintIndex=event.key==='ArrowDown'?Math.min(this.blueprintMatches.length-1,this.blueprintIndex+1):Math.max(0,this.blueprintIndex-1);this.$nextTick(()=>document.getElementById('calculator-option-'+this.blueprintIndex)?.scrollIntoView({block:'nearest'}));}else if(event.key==='Enter'&&this.blueprintOpen&&this.blueprintMatches.length){event.preventDefault();this.chooseBlueprint(this.blueprintMatches[Math.max(0,this.blueprintIndex)]);}else if(['Escape','Tab'].includes(event.key)){this.blueprintOpen=false;}},
     nextPage(){this.load(true,this.page.offset+this.page.limit);},
     previousPage(){this.load(true,Math.max(0,this.page.offset-this.page.limit));},
     get missingCount(){return (this.page.missing_recipes||0)+(this.page.missing_prices||0)+(this.page.missing_invention||0)+(this.page.missing_job_costs||0);},
@@ -231,7 +255,7 @@ document.addEventListener('alpine:init', () => {
     materialName(id){return this.materialNames[id]||(this.materialNamesLoading?'Loading name...':'Name unavailable');},
     async loadMaterialNames(){
       const seq=this.detailSequence;
-      const ids=[...new Set((this.selected?.materials||[]).map(m=>m.type_id))].filter(id=>!this.materialNames[id]);
+      const ids=[...new Set((this.selected?.materials||(this.calculator?this.page.items[0]?.materials:[])||[]).map(m=>m.type_id))].filter(id=>!this.materialNames[id]);
       this.materialNamesMessage='';
       if(this.demo){this.materialNames={...this.materialNames,34:'Tritanium'};return;}
       if(!ids.length)return;
@@ -257,7 +281,7 @@ document.addEventListener('alpine:init', () => {
     async prepareMarketInvention(){
       if(this.demo||this.preparingMarket)return;
       this.preparingMarket=true;this.preparationMessage='';
-      try{await this.api('/api/v1/invention/prepare?'+this.inventionParams(),{method:'POST'});this.preparationMessage='Invention preparation queued for this material market and pricing choice. Select Show results after the background calculation finishes.';}
+      try{await this.api((this.calculator?'/api/v1/invention/'+this.appliedBlueprintId+'/prepare':'/api/v1/invention/prepare')+'?'+this.inventionParams(),{method:'POST'});this.preparationMessage='Invention preparation queued for this material market and pricing choice. Select Show results after the background calculation finishes.';}
       catch(_){this.preparationMessage='Could not request invention preparation. Please try again.';}
       finally{this.preparingMarket=false;}
     },
@@ -292,6 +316,7 @@ document.addEventListener('alpine:init', () => {
       let items=seeds.map((s,i)=>({_category:i===2?'Rigs':[1,3].includes(i)?'Drones':i===4?'Ammunition & Charges':'Modules',name:s[0],type_id:s[1],meta_group_id:s[2],total_cost_per_unit:String(s[3]),material_cost_per_unit:String(s[3]*0.96),job_cost_per_unit:String(s[3]*0.04),profit_per_unit:String(s[4]),margin_pct:String(s[5]),rank_profit_per_day:String(s[6]),profit_per_day:String(s[6]*1.2),daily_isk_volume:String(s[7]),units:1,seconds:'7200',revenue_per_unit:String(s[3]+s[4]),invention_required:s[2]===2,invention_included:false,invention_cost_per_unit:'0',sales_tax_per_unit:'0',sales_broker_fee_per_unit:'0',procurement_broker_fee_per_unit:'0',stale:i===5,demand_warnings:i===4?['single_buy_order_at_best']:[],product_volume_at_price:100,full_runs_at_buy_price:100,production_limit_units:100,profit_at_current_buy_price:String(s[4]*100),materials:[{type_id:34,quantity:100,price:String(s[3]*0.96/100),cost:String(s[3]*0.96)}]}));
       if(form.product_order_type!=='buy')items.forEach(i=>{i.profit_at_current_buy_price=null;i.production_limit_units=null;i.full_runs_at_buy_price=null;});
       items=items.filter(i=>(!form.category||form.category==='__profile__'||i._category===form.category)&&(!form.min_daily_isk_volume||Number(i.daily_isk_volume)>=Number(form.min_daily_isk_volume))&&(!form.min_product_volume||i.product_volume_at_price>=Number(form.min_product_volume))&&(!form.search||i.name.toLowerCase().includes(form.search.toLowerCase()))&&(!form.tech||i.meta_group_id===Number(form.tech))&&(!form.min_profit||Number(i.profit_per_unit)>=Number(form.min_profit))&&(!form.min_margin||Number(i.margin_pct)>=Number(form.min_margin))&&(!form.fresh_only||!i.stale));
+      if(this.calculator)items=items.filter(item=>item.type_id===Number(this.blueprint.type_id));
       const rank={profit_per_day:'rank_profit_per_day',margin:'margin_pct',profit:'profit_per_unit',demand_profit:'profit_at_current_buy_price'}[form.rank_by];items.sort((a,b)=>(a[rank]===null)-(b[rank]===null)||Number(b[rank])-Number(a[rank])||a.type_id-b.type_id);
       return {items:items.slice(offset,offset+Number(form.limit)),total:items.length,offset:offset,limit:Number(form.limit)};
     }

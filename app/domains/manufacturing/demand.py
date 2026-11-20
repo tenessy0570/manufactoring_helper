@@ -9,7 +9,10 @@ from app.domains.market.models import BuyPriceLevel, MarketPrice
 
 
 def estimate_buy_demand(
-    product: MarketPrice, calculated: ProfitCalculation, query: ManufacturingQuery
+    product: MarketPrice,
+    calculated: ProfitCalculation,
+    query: ManufacturingQuery,
+    max_units: int | None = None,
 ) -> BuyDemandEstimate:
     best = product.buy_price
     if best is None:
@@ -25,6 +28,9 @@ def estimate_buy_demand(
     )
     volume = sum(level.volume for level in levels)
     units = volume // calculated.units * calculated.units
+
+    if max_units is not None:
+        units = min(units, max_units)
 
     def proceeds(quantity: Decimal) -> Decimal:
         remaining, revenue = quantity, Decimal(0)
@@ -49,6 +55,7 @@ def estimate_buy_demand(
         else sum(level.order_count or 0 for level in levels)
     )
     return BuyDemandEstimate(
+        revenue=proceeds(Decimal(units)),
         volume=volume,
         order_count=count,
         full_runs=units // calculated.units,

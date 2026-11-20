@@ -1,8 +1,15 @@
 import asyncio
 from collections.abc import Sequence
+from datetime import UTC, datetime
 
 from app.domains.health.checks import HealthCheck
-from app.domains.health.models import ComponentHealth, DataProgress, HealthReport, HealthStatus
+from app.domains.health.models import (
+    ComponentHealth,
+    DataProgress,
+    FreshnessReport,
+    HealthReport,
+    HealthStatus,
+)
 from app.domains.health.repository import ProgressRepository
 from app.domains.market.models import HubId
 
@@ -37,3 +44,6 @@ class ProgressService:
 
     async def snapshot(self, hub: HubId) -> DataProgress:
         return await self._repository.snapshot(hub)
+
+    async def freshness(self, hub: HubId) -> FreshnessReport:
+        return await self._repository.freshness(hub, datetime.now(UTC))

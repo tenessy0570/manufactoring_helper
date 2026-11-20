@@ -145,9 +145,22 @@ async def test_whole_site_gate_roles_csrf_and_cookie(service: AccountService) ->
     async with httpx.AsyncClient(
         transport=httpx.ASGITransport(app), base_url="http://test"
     ) as client:
-        for path in ("/", "/invention-shopping", "/account", "/admin", "/docs", "/openapi.json"):
+        for path in (
+            "/",
+            "/blueprint-calculator",
+            "/invention-shopping",
+            "/account",
+            "/admin",
+            "/docs",
+            "/openapi.json",
+        ):
             assert (await client.get(path)).status_code == 303
-        for path in ("/api/v1/catalog/items", "/health/data-progress", "/api/v1/accounts/users"):
+        for path in (
+            "/api/v1/catalog/items",
+            "/api/v1/manufacturing/calculator/10",
+            "/health/data-progress",
+            "/api/v1/accounts/users",
+        ):
             assert (await client.get(path)).status_code == 401
         assert (await client.get("/login")).status_code == 200
         assert (await client.get("/health/live")).status_code == 200

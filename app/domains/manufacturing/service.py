@@ -13,7 +13,10 @@ from app.domains.manufacturing.calculation import calculate
 from app.domains.manufacturing.demand import estimate_buy_demand
 from app.domains.manufacturing.gateway import IndustryGateway
 from app.domains.manufacturing.models import (
+    BatchCalculation,
     CalculationInput,
+    CalculatorPage,
+    CalculatorQuery,
     ManufacturingQuery,
     Opportunity,
     OpportunityPage,
@@ -67,20 +70,105 @@ class ManufacturingService:
         history: HistoryRepository,
         clock: Callable[[], datetime] = lambda: datetime.now(UTC),
         invention: InventionRepository | None = None,
+        sync: ManufacturingSyncService | None = None,
     ) -> None:
         self._repository, self._history, self._clock = repository, history, clock
         self._invention = invention
+        self._sync = sync
 
-    async def opportunities(self, query: ManufacturingQuery) -> OpportunityPage:
+    async def calculator(self, type_id: int, query: CalculatorQuery) -> CalculatorPage:
+        if self._sync is not None:
+            await self._sync.sync_if_stale(type_id)
+        settings = {
+            "hub_id",
+            "material_hub_id",
+            "material_order_type",
+            "product_order_type",
+            "sales_tax",
+            "broker_fee",
+            "buy_broker_fee",
+            "sell_broker_fee",
+            "facility_tax",
+            "system_cost_index",
+            "job_cost_per_run",
+            "include_invention_cost",
+            "buy_demand_tolerance_pct",
+            "production_lines",
+            "days",
+        }
+        calculation_query = ManufacturingQuery(
+            **query.model_dump(include=settings), type_ids=[type_id], limit=1
+        )
+        page = await self.opportunities(calculation_query, restrict_to_mass_production=False)
+        result = CalculatorPage(**page.model_dump())
+        if not page.items:
+            return result
+        item = page.items[0]
+        runs = query.manufacturing_runs
+        units = item.units * runs
+        covered_units = units
+        gross: Decimal | None = item.revenue_per_unit * units
+        if query.product_order_type == "buy":
+            products = await self._repository.quotes(query.hub_id, [type_id])
+            demand = estimate_buy_demand(products[type_id], item, calculation_query, units)
+            covered_units = demand.units
+            gross = demand.revenue if covered_units == units else None
+        sales_tax = gross * query.sales_tax / 100 if gross is not None else None
+        sales_broker = (
+            gross * query.sell_broker_fee / 100
+            if gross is not None and query.product_order_type == "sell"
+            else Decimal(0)
+            if gross is not None
+            else None
+        )
+        net = (
+            gross - sales_tax - sales_broker
+            if gross is not None and sales_tax is not None and sales_broker is not None
+            else None
+        )
+        total = item.total_cost_per_unit * units
+        profit = net - total if net is not None else None
+        material_cost = item.material_cost_per_unit * units
+        result.batch = BatchCalculation(
+            runs=runs,
+            units=units,
+            materials=[
+                m.model_copy(update={"quantity": m.quantity * runs, "cost": m.cost * runs})
+                for m in item.materials
+            ],
+            material_cost=material_cost,
+            base_job_cost=item.base_job_cost_per_unit * units,
+            facility_tax=item.facility_tax_per_unit * units,
+            system_cost=item.system_cost_per_unit * units,
+            job_cost=item.job_cost_per_unit * units,
+            invention_cost=item.invention_cost_per_unit * units,
+            procurement_broker_fee=item.procurement_broker_fee_per_unit * units,
+            total_cost=total,
+            gross_revenue=gross,
+            sales_tax=sales_tax,
+            sales_broker_fee=sales_broker,
+            net_revenue=net,
+            profit=profit,
+            margin_pct=profit / material_cost * 100
+            if profit is not None and material_cost
+            else None,
+            covered_units=covered_units,
+        )
+        return result
+
+    async def opportunities(
+        self, query: ManufacturingQuery, *, restrict_to_mass_production: bool = True
+    ) -> OpportunityPage:
         now = self._clock()
         filters = LiquidityQuery.model_validate(
             query.model_dump(include=set(LiquidityQuery.model_fields))
         )
-        filters.meta_group_ids = [
-            value
-            for value in MASS_PRODUCTION_META_GROUP_IDS
-            if query.meta_group_ids is None or value in query.meta_group_ids
-        ]
+        if restrict_to_mass_production:
+            filters.meta_group_ids = [
+                value
+                for value in MASS_PRODUCTION_META_GROUP_IDS
+                if query.meta_group_ids is None or value in query.meta_group_ids
+            ]
         filters.fresh_only = False
         filters.limit, filters.offset = 500, 0
         candidates: list[LiquidityItem] = []

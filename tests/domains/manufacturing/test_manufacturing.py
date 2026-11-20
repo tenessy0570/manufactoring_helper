@@ -15,11 +15,12 @@ from dishka import Provider, Scope, make_async_container
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
 
 from app.core.orm import Base
-from app.core.repository import SQLAlchemyUnitOfWork
+from app.core.repository import SQLAlchemyUnitOfWork, UnitOfWork
 from app.domains.catalog.repository import SQLItemTypeRepository
 from app.domains.history.repository import SQLHistoryRepository
 from app.domains.manufacturing.calculation import calculate
 from app.domains.manufacturing.gateway import (
+    AmbiguousRecipeError,
     EverefIndustryGateway,
     IndustryClient,
     IndustryGateway,
@@ -27,6 +28,7 @@ from app.domains.manufacturing.gateway import (
 )
 from app.domains.manufacturing.models import (
     CalculationInput,
+    CalculatorQuery,
     ManufacturingQuery,
     Material,
     Recipe,
@@ -35,6 +37,7 @@ from app.domains.manufacturing.models import (
 from app.domains.manufacturing.repository import ManufacturingRepository, SQLManufacturingRepository
 from app.domains.manufacturing.service import ManufacturingService, ManufacturingSyncService
 from app.domains.market.repository import SQLMarketRepository
+from app.infrastructure.http import HttpStatusError
 from app.main import create_app
 from tests.domains.catalog.test_catalog import NOW, item
 from tests.domains.history.test_history import day
@@ -368,6 +371,82 @@ async def test_api_defaults_and_validation(session: AsyncSession) -> None:
         )
         assert taxed.status_code == 200, taxed.text
         assert taxed.json()["items"][0]["profit_per_unit"] == "7.60"
+        for settings in [
+            {},
+            {"sales_tax": "10", "sell_broker_fee": "3", "facility_tax": "1"},
+            {"product_order_type": "buy", "buy_demand_tolerance_pct": "5", "production_lines": "3"},
+            {"material_hub_id": "amarr", "material_order_type": "buy"},
+            {"include_invention_cost": "true"},
+        ]:
+            reference = await client.get(
+                "/api/v1/manufacturing/opportunities",
+                params={
+                    **settings,
+                    "type_ids": 10,
+                    "limit": 1,
+                },
+            )
+            single = await client.get("/api/v1/manufacturing/calculator/10", params=settings)
+            assert single.status_code == 200
+            assert {
+                key: value for key, value in single.json().items() if key != "batch"
+            } == reference.json()
+        scoped = await client.get(
+            "/api/v1/manufacturing/calculator/10",
+            params={
+                "type_ids": 20,
+                "exclude_type_ids": 10,
+                "search": "other",
+                "offset": 100,
+            },
+        )
+        assert [row["type_id"] for row in scoped.json()["items"]] == [10]
+        batch_response = await client.get(
+            "/api/v1/manufacturing/calculator/10",
+            params={
+                "manufacturing_runs": 3,
+                "min_profit": 999999,
+                "min_margin": 999999,
+                "fresh_only": "true",
+                "sales_tax": 10,
+            },
+        )
+        batch = batch_response.json()["batch"]
+        assert batch["runs"] == 3
+        assert batch["units"] == 6
+        assert batch["materials"][0]["quantity"] == 30
+        assert Decimal(batch["material_cost"]) == 90
+        assert Decimal(batch["total_cost"]) == 102
+        assert Decimal(batch["gross_revenue"]) == 180
+        assert Decimal(batch["net_revenue"]) == 162
+        assert Decimal(batch["profit"]) == 60
+        assert Decimal(batch["margin_pct"]) == Decimal(60) / 90 * 100
+        negative = await client.get(
+            "/api/v1/manufacturing/calculator/10",
+            params={"manufacturing_runs": 2, "sales_tax": 100, "min_profit": 0},
+        )
+        assert Decimal(negative.json()["batch"]["profit"]) == -68
+        for runs, tax in ((1, 10), (1000000, 0), (1, 100)):
+            buy = await client.get(
+                "/api/v1/manufacturing/calculator/10",
+                params={"manufacturing_runs": runs, "product_order_type": "buy", "sales_tax": tax},
+            )
+            bought = buy.json()["batch"]
+            if bought["covered_units"] < bought["units"]:
+                assert bought["profit"] is None
+                assert bought["net_revenue"] is None
+            else:
+                assert Decimal(bought["gross_revenue"]) > 0
+                assert Decimal(bought["net_revenue"]) == Decimal(bought["gross_revenue"]) * (
+                    1 - Decimal(tax) / 100
+                )
+        for runs in (0, -1, 1000000001):
+            assert (
+                await client.get(
+                    "/api/v1/manufacturing/calculator/10", params={"manufacturing_runs": runs}
+                )
+            ).status_code == 422
+        assert (await client.get("/api/v1/manufacturing/calculator/0")).status_code == 422
         for field in ("buy_broker_fee", "sell_broker_fee", "facility_tax", "system_cost_index"):
             assert (
                 await client.get("/api/v1/manufacturing/opportunities", params={field: "101"})
@@ -772,3 +851,78 @@ async def test_material_hub_freshness_does_not_use_product_hub_material_prices(
         .items[0]
         .stale
     )
+
+
+async def test_manual_calculator_accepts_non_mass_production_blueprint(
+    session: AsyncSession,
+) -> None:
+    await SQLItemTypeRepository(session).upsert_many([item(60, meta_group_id=3)])
+    repository = SQLManufacturingRepository(session)
+    await repository.save(recipe_state(60))
+    await SQLMarketRepository(session).replace(
+        market_state(), [price(60, sell_price="30"), price(34, sell_price="3")]
+    )
+    service = ManufacturingService(repository, SQLHistoryRepository(session), lambda: NOW)
+    assert (await service.opportunities(ManufacturingQuery(type_ids=[60]))).items == []
+    result = await service.calculator(60, CalculatorQuery(manufacturing_runs=2))
+    assert result.items[0].type_id == 60
+    assert result.batch is not None
+    assert result.batch.units == 4
+    assert result.batch.profit == 52
+
+
+@pytest.mark.parametrize("initial", ["missing", "expired", "legacy"])
+async def test_calculator_refreshes_selected_recipe_and_reuses_fresh_cache(
+    session: AsyncSession, initial: str
+) -> None:
+    repository = await seed(session)
+    if initial == "missing":
+        type_id = 30
+    else:
+        type_id = 10
+        state = recipe_state(
+            recipe=recipe(estimated_item_value=None) if initial == "legacy" else recipe(),
+            expires_at=NOW - timedelta(seconds=1) if initial == "expired" else EXPIRES,
+        )
+        await repository.save(state)
+    gateway = AsyncMock(spec=IndustryGateway)
+    gateway.fetch.return_value = recipe(type_id=type_id)
+    sync = ManufacturingSyncService(
+        repository, gateway, AsyncMock(spec=UnitOfWork), clock=lambda: NOW
+    )
+    service = ManufacturingService(
+        repository, SQLHistoryRepository(session), lambda: NOW, sync=sync
+    )
+    query = CalculatorQuery(facility_tax=Decimal(1), system_cost_index=Decimal(2))
+    result = await service.calculator(type_id, query)
+    if type_id == 10:
+        assert result.batch is not None
+        assert result.batch.facility_tax == 1
+        assert result.batch.system_cost == 2
+    assert (await repository.recipes([type_id]))[type_id].recipe == recipe(type_id=type_id)
+    await service.calculator(type_id, query)
+    gateway.fetch.assert_awaited_once_with(type_id)
+
+
+@pytest.mark.parametrize(
+    ("error", "status"),
+    [
+        (AmbiguousRecipeError("ambiguous"), 409),
+        (HttpStatusError(503, "https://test"), 503),
+        (httpx.ConnectError("offline"), 503),
+    ],
+)
+async def test_calculator_refresh_errors_are_actionable(error: Exception, status: int) -> None:
+    service = AsyncMock(spec=ManufacturingService)
+    service.calculator.side_effect = error
+    provider = Provider(scope=Scope.REQUEST)
+    provider.provide(lambda: service, provides=ManufacturingService)
+    container = make_async_container(provider)
+    app = create_app(container=container, settings=make_settings(), require_login=False)
+    async with httpx.AsyncClient(
+        transport=httpx.ASGITransport(app), base_url="http://test"
+    ) as client:
+        response = await client.get("/api/v1/manufacturing/calculator/10")
+        assert response.status_code == status
+        assert response.json()["detail"]
+    await container.close()

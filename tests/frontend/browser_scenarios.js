@@ -14,7 +14,7 @@ async function checkFrontendWorkflow() {
   app.filtersOpen = true;
   await app.$nextTick();
   check([...document.querySelectorAll('[x-model^="form."]')].every(
-    control => control.closest('form')?.id === 'opportunity-filters'
+    control => control.form?.id === 'opportunity-filters'
   ), 'All filters belong to one form');
 
   const columnsButton=document.querySelector('[aria-controls="column-options"]');

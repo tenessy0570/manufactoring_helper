@@ -18,6 +18,11 @@ async def home(request: Request) -> HTMLResponse:
     return templates.TemplateResponse(request=request, name="index.html")
 
 
+@router.get("/blueprint-calculator", response_class=HTMLResponse)
+async def blueprint_calculator(request: Request) -> HTMLResponse:
+    return templates.TemplateResponse(request=request, name="calculator.html")
+
+
 @router.get("/ui/status", response_class=HTMLResponse)
 async def status(request: Request, service: FromDishka[HealthService]) -> HTMLResponse:
     report = await service.readiness()

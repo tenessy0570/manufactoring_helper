@@ -187,6 +187,7 @@ class CalculationInput(BaseModel):
 
 
 class BuyDemandEstimate(BaseModel):
+    revenue: Decimal = Decimal(0)
     volume: int
     order_count: int | None
     full_runs: int
@@ -196,3 +197,32 @@ class BuyDemandEstimate(BaseModel):
     min_price: Decimal | None
     average_price: Decimal | None
     depth_available: bool
+
+
+class CalculatorQuery(ManufacturingQuery):
+    manufacturing_runs: int = Field(default=1, ge=1, le=1_000_000_000)
+
+
+class BatchCalculation(BaseModel):
+    runs: int
+    units: int
+    materials: list[MaterialCost]
+    material_cost: Decimal
+    base_job_cost: Decimal
+    facility_tax: Decimal
+    system_cost: Decimal
+    job_cost: Decimal
+    invention_cost: Decimal
+    procurement_broker_fee: Decimal
+    total_cost: Decimal
+    gross_revenue: Decimal | None
+    sales_tax: Decimal | None
+    sales_broker_fee: Decimal | None
+    net_revenue: Decimal | None
+    profit: Decimal | None
+    margin_pct: Decimal | None
+    covered_units: int
+
+
+class CalculatorPage(OpportunityPage):
+    batch: BatchCalculation | None = None

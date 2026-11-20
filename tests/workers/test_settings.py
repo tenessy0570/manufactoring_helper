@@ -102,6 +102,7 @@ def test_worker_launch_uses_configured_redis(monkeypatch: pytest.MonkeyPatch) ->
     assert calls[0]["redis_settings"].host == "queue"
     assert calls[0]["redis_settings"].port == 6380
     assert calls[0]["max_jobs"] == 1
+    assert calls[0]["keep_result"] == 0
     assert calls[0]["cron_jobs"][0].run_at_startup
 
 

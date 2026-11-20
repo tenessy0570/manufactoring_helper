@@ -48,7 +48,9 @@ async def test_fresh_recipe_does_not_reserve_daily_job_before_it_expires() -> No
 
 async def test_queue_batches_and_deduplication() -> None:
     repository = AsyncMock(spec=ItemTypeRepository)
-    repository.find.return_value = [item(number) for number in range(21)]
+    repository.find.return_value = [
+        item(number, meta_group_id=[1, 2, 3, 4, 5, 6, None][number % 7]) for number in range(21)
+    ]
     recipes = AsyncMock(spec=ManufacturingRepository)
     recipes.recipes.return_value = {}
     provider = Provider(scope=Scope.REQUEST)
@@ -59,7 +61,11 @@ async def test_queue_batches_and_deduplication() -> None:
     ctx = {"container": container, "redis": redis}
     assert await worker.enqueue_manufacturing(ctx) == 2
     assert repository.find.await_args is not None
-    assert repository.find.await_args.args[0].meta_group_ids == [1, 2]
+    assert repository.find.await_args.args[0].meta_group_ids is None
+    assert repository.find.await_args.args[0].is_active is True
+    assert {value for call in redis.enqueue_job.await_args_list for value in call.args[1]} == set(
+        range(21)
+    )
     ids = [call.kwargs["_job_id"] for call in redis.enqueue_job.await_args_list]
     assert len(set(ids)) == 2
     assert all(

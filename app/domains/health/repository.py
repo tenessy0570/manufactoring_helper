@@ -1,10 +1,12 @@
 from abc import ABC, abstractmethod
+from datetime import UTC, datetime, timedelta
+from typing import Any
 
-from sqlalchemy import func, select
+from sqlalchemy import and_, case, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.domains.catalog.tables import ItemTypeTable
-from app.domains.health.models import DataProgress
+from app.domains.health.models import DataProgress, FreshnessReport, SourceFreshness
 from app.domains.history.tables import HistoryStateTable
 from app.domains.invention.tables import InventionRequestTable
 from app.domains.manufacturing.tables import RecipeTable
@@ -13,6 +15,9 @@ from app.domains.market.tables import MarketStateTable
 
 
 class ProgressRepository(ABC):
+    @abstractmethod
+    async def freshness(self, hub: HubId, now: datetime) -> FreshnessReport: ...
+
     @abstractmethod
     async def snapshot(self, hub: HubId) -> DataProgress: ...
 
@@ -76,3 +81,83 @@ class SQLProgressRepository(ProgressRepository):
             market_items=market.items if market else 0,
             market_updated_at=market.synced_at if market else None,
         )
+
+    async def freshness(self, hub: HubId, now: datetime) -> FreshnessReport:
+        sources = []
+        specifications: list[tuple[str, Any, Any, Any, list[Any]]] = [
+            (
+                "market",
+                MarketStateTable,
+                MarketStateTable.synced_at,
+                MarketStateTable.synced_at > now - timedelta(minutes=20),
+                [MarketStateTable.hub_id == hub],
+            ),
+            (
+                "history",
+                HistoryStateTable,
+                HistoryStateTable.synced_at,
+                HistoryStateTable.synced_at > now - timedelta(days=1),
+                [HistoryStateTable.region_id == get_hub(hub).region_id],
+            ),
+            (
+                "recipes",
+                RecipeTable,
+                RecipeTable.synced_at,
+                and_(
+                    RecipeTable.expires_at > now,
+                    or_(
+                        RecipeTable.recipe.is_(None),
+                        RecipeTable.recipe["estimated_item_value"].as_string().is_not(None),
+                    ),
+                ),
+                [],
+            ),
+            (
+                "invention",
+                InventionRequestTable,
+                InventionRequestTable.updated_at,
+                InventionRequestTable.expires_at > now,
+                [
+                    InventionRequestTable.status == "ready",
+                    InventionRequestTable.result.is_not(None),
+                    InventionRequestTable.settings["hub_id"].as_string() == hub,
+                    InventionRequestTable.settings["order_type"].as_string() == "sell",
+                ],
+            ),
+        ]
+        for name, table, stamp, fresh_condition, conditions in specifications:
+            row = (
+                await self._session.execute(
+                    select(
+                        func.count(),
+                        func.min(stamp),
+                        func.max(stamp),
+                        func.sum(case((fresh_condition, 1), else_=0)),
+                    )
+                    .select_from(table)
+                    .where(*conditions)
+                )
+            ).one()
+            count, oldest, newest, fresh = row
+            fresh = fresh or 0
+            sources.append(
+                SourceFreshness(
+                    source=name,
+                    cached=count,
+                    fresh=fresh,
+                    oldest_at=oldest.replace(tzinfo=UTC)
+                    if oldest and oldest.tzinfo is None
+                    else oldest,
+                    newest_at=newest.replace(tzinfo=UTC)
+                    if newest and newest.tzinfo is None
+                    else newest,
+                    status="missing"
+                    if not count
+                    else "fresh"
+                    if fresh == count
+                    else "partial"
+                    if fresh
+                    else "stale",
+                )
+            )
+        return FreshnessReport(hub_id=hub, checked_at=now, sources=sources)

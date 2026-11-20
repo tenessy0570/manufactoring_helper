@@ -12,7 +12,7 @@ from dishka import AsyncContainer
 from app.core.config import get_settings
 from app.core.di import create_container
 from app.core.logging import configure_logging
-from app.domains.catalog.models import MASS_PRODUCTION_META_GROUP_IDS, ItemTypeClause
+from app.domains.catalog.models import ItemTypeClause
 from app.domains.catalog.repository import ItemTypeRepository
 from app.domains.manufacturing.gateway import AmbiguousRecipeError
 from app.domains.manufacturing.repository import ManufacturingRepository
@@ -27,12 +27,7 @@ async def enqueue_manufacturing(ctx: dict[str, Any]) -> int:
     container: AsyncContainer = ctx["container"]
     async with container() as scope:
         repository = await scope.get(ItemTypeRepository)
-        ids = sorted(
-            item.type_id
-            for item in await repository.find(
-                ItemTypeClause(meta_group_ids=list(MASS_PRODUCTION_META_GROUP_IDS))
-            )
-        )
+        ids = sorted(item.type_id for item in await repository.find(ItemTypeClause()))
         recipes = await (await scope.get(ManufacturingRepository)).recipes(ids)
     now = datetime.now(UTC)
     due = {

@@ -37,8 +37,9 @@ class ManufacturingProvider(Provider):
         repository: ManufacturingRepository,
         history: HistoryRepository,
         invention: InventionRepository,
+        sync: ManufacturingSyncService,
     ) -> ManufacturingService:
-        return ManufacturingService(repository, history, invention=invention)
+        return ManufacturingService(repository, history, invention=invention, sync=sync)
 
     @provide(scope=Scope.REQUEST)
     def sync_service(

@@ -9,8 +9,10 @@ from tests.helpers import make_settings
     "path",
     [
         "/",
+        "/blueprint-calculator",
         "/static/app.css",
         "/static/app.js",
+        "/static/calculator.css",
         "/static/vendor/alpine.min.js",
         "/static/vendor/htmx.min.js",
     ],
@@ -23,6 +25,12 @@ async def test_interface_and_bundled_assets_are_available(path: str) -> None:
     if path == "/":
         assert '<html lang="en">' in response.text
         assert "Find your next build" in response.text
+    if path == "/blueprint-calculator":
+        assert 'id="calculator-form"' in response.text
+        assert "Manufacturing runs" in response.text
+        assert "Manufacturing output" in response.text
+        assert "Min. margin" not in response.text
+        assert "Rows per page" not in response.text
 
 
 async def test_interface_requires_configured_authentication() -> None:

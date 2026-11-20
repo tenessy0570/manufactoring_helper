@@ -101,6 +101,9 @@ class SQLHistoryRepository(HistoryRepository):
         history, states, items = HistoryDayTable, HistoryStateTable, ItemTypeTable
         region = get_hub(query.hub_id).region_id
         start, end = now.date() - timedelta(days=query.days), now.date() - timedelta(days=1)
+        conditions = [history.region_id == region, history.date >= start, history.date <= end]
+        if query.type_ids is not None:
+            conditions.append(history.type_id.in_(query.type_ids))
         totals = (
             select(
                 history.type_id.label("type_id"),
@@ -113,7 +116,7 @@ class SQLHistoryRepository(HistoryRepository):
                 ),
                 func.max(history.date).label("latest_trade_date"),
             )
-            .where(history.region_id == region, history.date >= start, history.date <= end)
+            .where(*conditions)
             .group_by(history.type_id)
             .subquery()
         )
