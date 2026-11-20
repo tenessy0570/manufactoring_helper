@@ -123,7 +123,23 @@ def main() -> None:
                 encoding="utf-8"
             )
             print(evaluate(profile_controls + "\ncheckProfileControls()"))
-            for width, label in ((1440, "desktop"), (390, "mobile")):
+            evaluate("""(()=>{const a=Alpine.$data(document.body);
+                a.filtersOpen=false;a.saveSettings();})()""")
+            call("Page.reload", {"ignoreCache": True})
+            time.sleep(1)
+            print(
+                evaluate("""(async()=>{const a=Alpine.$data(document.body);
+                if(a.filtersOpen)throw Error('Collapsed filters not restored');
+                document.querySelector('[aria-controls="opportunity-filters"]').click();
+                await a.$nextTick();return 'PASS: filters reopen after reload';})()""")
+            )
+            for width, label in (
+                (1920, "wide"),
+                (1440, "desktop"),
+                (1399, "medium"),
+                (1100, "tablet"),
+                (390, "mobile"),
+            ):
                 call(
                     "Emulation.setDeviceMetricsOverride",
                     {
@@ -139,7 +155,25 @@ def main() -> None:
                     label,
                     evaluate("""(()=>{
                     if(document.documentElement.scrollWidth>innerWidth+1)throw Error('Overflow');
-                    return 'PASS: no page overflow';})()"""),
+                    const groups=[...document.querySelectorAll(
+                        '#opportunity-filters .filter-group')];
+                    for(let i=0;i<groups.length;i++){
+                        const a=groups[i].getBoundingClientRect();
+                        if(!a.height)throw Error('Filters not expanded for layout check');
+                        for(const other of groups.slice(i+1)){
+                            const b=other.getBoundingClientRect();
+                            if(Math.min(a.right,b.right)-Math.max(a.left,b.left)>1 &&
+                               Math.min(a.bottom,b.bottom)-Math.max(a.top,b.top)>1)
+                                throw Error('Filter groups overlap');
+                        }
+                        for(const input of groups[i].querySelectorAll('input,select')){
+                            if(!input.getBoundingClientRect().height)continue;
+                            const r=input.getBoundingClientRect();
+                            if(r.left<a.left-1||r.right>a.right+1)
+                                throw Error('Filter input escapes its group');
+                        }
+                    }
+                    return 'PASS: no overflow or overlapping filters';})()"""),
                 )
                 shot = call("Page.captureScreenshot", {"format": "png"})["result"]["data"]
                 path = Path(tempfile.gettempdir()) / f"eve-final-{label}.png"
