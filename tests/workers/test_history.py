@@ -8,6 +8,7 @@ from dishka import Provider, Scope, make_async_container
 from app.domains.catalog.repository import ItemTypeRepository
 from app.domains.history.repository import HistoryRepository
 from app.domains.history.service import HistorySyncService
+from app.domains.trading.repository import TradingRepository
 from app.workers import history as worker
 from tests.domains.catalog.test_catalog import item
 from tests.helpers import make_settings
@@ -19,9 +20,12 @@ async def test_enqueue_batches_are_unique_and_use_separate_queue() -> None:
         item(number, meta_group_id=[1, 2, 3, 4, 5, 6, None][number % 7]) for number in range(21)
     ]
     history = AsyncMock(spec=HistoryRepository)
-    history.due.return_value = set(range(21))
+    history.due.return_value = set(range(21)) | {99}
+    market = AsyncMock(spec=TradingRepository)
+    market.market_type_ids.return_value = [99]
     provider = Provider(scope=Scope.REQUEST)
     provider.provide(lambda: history, provides=HistoryRepository)
+    provider.provide(lambda: market, provides=TradingRepository)
     provider.provide(lambda: repository, provides=ItemTypeRepository)
     container = make_async_container(provider)
     redis = AsyncMock()
@@ -33,7 +37,7 @@ async def test_enqueue_batches_are_unique_and_use_separate_queue() -> None:
     assert repository.find.await_args.args[0].is_active is True
     assert {value for call in redis.enqueue_job.await_args_list for value in call.args[2]} == set(
         range(21)
-    )
+    ) | {99}
     first_ids = [call.kwargs["_job_id"] for call in redis.enqueue_job.await_args_list]
     assert len(set(first_ids)) == 10
     assert all(
@@ -55,6 +59,7 @@ async def test_enqueue_batches_are_unique_and_use_separate_queue() -> None:
     assert await worker.enqueue_history(ctx) == 0
     redis.enqueue_job.assert_not_awaited()
     repository.find.return_value = []
+    market.market_type_ids.return_value = []
     redis.reset_mock()
     assert await worker.enqueue_history(ctx) == 0
     redis.enqueue_job.assert_not_awaited()

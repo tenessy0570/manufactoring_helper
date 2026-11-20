@@ -10,6 +10,10 @@ from tests.helpers import make_settings
     [
         "/",
         "/blueprint-calculator",
+        "/interhub-trading",
+        "/static/trading.js",
+        "/static/history-chart.js",
+        "/static/trading.css",
         "/static/app.css",
         "/static/app.js",
         "/static/calculator.css",

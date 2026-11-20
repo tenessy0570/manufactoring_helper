@@ -17,6 +17,7 @@ from app.domains.catalog.repository import ItemTypeRepository
 from app.domains.history.repository import HistoryRepository
 from app.domains.history.service import HistorySyncService
 from app.domains.market.models import HUBS
+from app.domains.trading.repository import TradingRepository
 
 logger = logging.getLogger(__name__)
 HISTORY_QUEUE = "arq:history"
@@ -27,7 +28,9 @@ async def enqueue_history(ctx: dict[str, Any]) -> int:
     container: AsyncContainer = ctx["container"]
     async with container() as scope:
         repository = await scope.get(ItemTypeRepository)
-        ids = sorted(item.type_id for item in await repository.find(ItemTypeClause()))
+        catalogue_ids = {item.type_id for item in await repository.find(ItemTypeClause())}
+        market_ids = await (await scope.get(TradingRepository)).market_type_ids()
+        ids = sorted(catalogue_ids | set(market_ids))
     count = 0
     now = datetime.now(UTC)
     for region_id in dict.fromkeys(hub.region_id for hub in HUBS):

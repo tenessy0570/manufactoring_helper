@@ -64,3 +64,8 @@ async def admin_page(request: Request) -> HTMLResponse:
 @router.get("/production-history", response_class=HTMLResponse)
 async def production_history(request: Request) -> HTMLResponse:
     return templates.TemplateResponse(request=request, name="production.html")
+
+
+@router.get("/interhub-trading", response_class=HTMLResponse)
+async def interhub_trading(request: Request) -> HTMLResponse:
+    return templates.TemplateResponse(request=request, name="trading.html")

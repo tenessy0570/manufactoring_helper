@@ -110,6 +110,19 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
+  trading-worker:
+    build: .
+    restart: unless-stopped
+    command: ["python", "-m", "app.workers.trading"]
+    env_file: .env
+    environment:
+      POSTGRES_HOST: postgres
+      REDIS_HOST: redis
+    depends_on:
+      api:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
 
 volumes:
   postgres_data:

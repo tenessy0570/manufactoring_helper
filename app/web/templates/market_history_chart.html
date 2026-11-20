@@ -1,0 +1,19 @@
+      <p x-show="historyLoading" role="status">Loading trading history...</p>
+      <p x-show="historyError" role="status" x-text="historyError"></p><button type="button" class="text-button" x-show="historyError" @click="loadHistory()">Retry history</button>
+      <template x-if="historyData"><div><p class="muted" x-show="historyData.stale">This saved history is due for refresh.</p><p x-show="!historyData.days.length">No recorded trades in the selected period. Background history loading may still be pending.</p>
+      <template x-if="historyData.days.length"><div>
+      <figure class="history-chart combined-history">
+        <figcaption class="history-legend"><span class="history-price-key"><i class="price-swatch" aria-hidden="true"></i>Average price (ISK/unit, left)</span><span class="history-volume-key"><i class="volume-swatch" aria-hidden="true"></i>Traded volume (units/day, right)</span></figcaption>
+        <div class="combined-plot">
+          <div class="combined-axis price-axis"><span x-text="chartMoney(historyChart('average').max)"></span><span x-text="chartMoney((historyChart('average').max + historyChart('average').min) / 2)"></span><span x-text="chartMoney(historyChart('average').min)"></span></div>
+          <svg viewBox="0 0 600 160" preserveAspectRatio="none" role="img" aria-label="Regional daily average price as a line and traded volume as bars, using separate axes" @pointermove="inspectHistory($event)" @pointerdown="inspectHistory($event)">
+            <path d="M0,10H600 M0,80H600 M0,150H600" stroke="#34414b" stroke-dasharray="3 4" fill="none"></path>
+            <path :d="historyChart('volume').path" fill="#527c91" fill-opacity="0.5"></path>
+            <path :d="historyChart('average').path" fill="none" stroke="#7cdeb0" stroke-width="2.5" vector-effect="non-scaling-stroke"></path>
+          </svg>
+          <div class="combined-axis volume-axis"><span x-text="chartMoney(historyChart('volume').max)"></span><span x-text="chartMoney(historyChart('volume').max / 2)"></span><span>0</span></div>
+        </div>
+        <div class="history-dates combined-dates"><span x-text="historyChart('average').first"></span><span x-text="historyChart('average').last"></span></div>
+      </figure><p class="muted" x-text="historyHoverText || 'Point at a chart to inspect a trading day. Exact daily values are also available below.'"></p>
+      <details><summary>Daily history values</summary><div class="table-wrap"><table><thead><tr><th>Date (UTC)</th><th>Average price (ISK)</th><th>Units traded</th></tr></thead><tbody><template x-for="day in historyData.days" :key="day.date"><tr><td x-text="day.date"></td><td x-text="fullMoney(day.average)"></td><td x-text="Number(day.volume).toLocaleString('en-US')"></td></tr></template></tbody></table></div></details>
+      </div></template></div></template>

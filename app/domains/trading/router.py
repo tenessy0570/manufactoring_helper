@@ -1,0 +1,16 @@
+from typing import Annotated
+
+from dishka.integrations.fastapi import DishkaRoute, FromDishka
+from fastapi import APIRouter, Query
+
+from app.domains.trading.models import TradingPage, TradingQuery
+from app.domains.trading.service import TradingService
+
+router = APIRouter(prefix="/api/v1/trading", tags=["trading"], route_class=DishkaRoute)
+
+
+@router.get("/opportunities")
+async def opportunities(
+    service: FromDishka[TradingService], query: Annotated[TradingQuery, Query()]
+) -> TradingPage:
+    return await service.opportunities(query)

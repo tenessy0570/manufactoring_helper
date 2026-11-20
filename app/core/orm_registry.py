@@ -13,3 +13,4 @@ from app.domains.market.tables import MarketStateTable as MarketStateTable
 from app.domains.production.tables import ProductionTable as ProductionTable
 from app.domains.profiles.tables import ProfileDefaultTable as ProfileDefaultTable
 from app.domains.profiles.tables import ProfileTable as ProfileTable
+from app.domains.trading.tables import TradeMetadataTable as TradeMetadataTable

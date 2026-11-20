@@ -317,6 +317,70 @@ def main() -> None:
                 (Path(tempfile.gettempdir()) / f"eve-calculator-{width}.png").write_bytes(
                     base64.b64decode(shot)
                 )
+            evaluate("""localStorage.setItem('eve.interhub.settings.v1',JSON.stringify({
+                source_hub:'jita',destination_hub:'amarr',sales_tax:'3'}));
+                localStorage.removeItem('eve.interhub.settings.v2');""")
+            call("Page.navigate", {"url": url + "/interhub-trading"})
+            time.sleep(1)
+            trading_scenarios = (ROOT / "tests/frontend/trading_scenarios.js").read_text(
+                encoding="utf-8"
+            )
+            print(evaluate(trading_scenarios + "\ncheckTradingWorkflow()"))
+            for width in (1920, 1440, 390):
+                call(
+                    "Emulation.setDeviceMetricsOverride",
+                    {
+                        "width": width,
+                        "height": 1100,
+                        "deviceScaleFactor": 1,
+                        "mobile": False,
+                    },
+                )
+                time.sleep(0.2)
+                print(
+                    evaluate("""(()=>{
+                    if(document.documentElement.scrollWidth>innerWidth+1)
+                        throw Error('Trading page overflow');
+                    window.scrollTo(0,document.body.scrollHeight);
+                    const action=document.querySelector('[form="trade-filters"]');
+                    const r=action.getBoundingClientRect();
+                    if(r.top<0||r.bottom>innerHeight)throw Error('Trade action is hidden');
+                    window.scrollTo(0,0);return 'PASS: trading layout and sticky action';})()""")
+                )
+                shot = call("Page.captureScreenshot", {"format": "png"})["result"]["data"]
+                (Path(tempfile.gettempdir()) / f"eve-trading-{width}.png").write_bytes(
+                    base64.b64decode(shot)
+                )
+            print(
+                evaluate("""(async()=>{const a=Alpine.$data(document.body);
+                a.historyItem={...a.page.items[0]};
+                const fixture=JSON.parse(sessionStorage.getItem('tradingHistoryFixture'));
+                a.historyData={...fixture,days:fixture.days.sort((x,y)=>x.date.localeCompare(y.date))};
+                await a.$nextTick();a.$refs.historyDialog.showModal();
+                return 'PASS: sale history layout opened';})()""")
+            )
+            time.sleep(0.2)
+            print(
+                evaluate("""(()=>{const d=Alpine.$data(document.body).$refs.historyDialog;
+                if(d.scrollWidth>d.clientWidth+1||d.getBoundingClientRect().right>innerWidth)
+                    throw Error('Sale history dialog overflow');
+                if(!d.querySelector('svg')||!d.querySelector('svg').getBoundingClientRect().width)
+                    throw Error('Sale history chart not visible');
+                return 'PASS: mobile sale history chart fits';})()""")
+            )
+            shot = call("Page.captureScreenshot", {"format": "png"})["result"]["data"]
+            (Path(tempfile.gettempdir()) / "eve-trading-history-mobile.png").write_bytes(
+                base64.b64decode(shot)
+            )
+            evaluate("Alpine.$data(document.body).closeHistory()")
+            call("Page.reload", {"ignoreCache": True})
+            time.sleep(1)
+            print(
+                evaluate("""(()=>{const a=Alpine.$data(document.body);
+                if('hauling_per_m3' in a.form||a.form.sales_tax!=='2'||a.columnVisible('purchase'))
+                    throw Error('Trade settings lost on reload');
+                return 'PASS: trading page reload';})()""")
+            )
             freshness_scenarios = (ROOT / "tests/frontend/freshness_scenarios.js").read_text(
                 encoding="utf-8"
             )
@@ -324,6 +388,7 @@ def main() -> None:
             for path in (
                 "/",
                 "/blueprint-calculator",
+                "/interhub-trading",
                 "/invention-shopping",
                 "/production-history",
                 "/account",

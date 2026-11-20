@@ -11,6 +11,7 @@ from app.domains.manufacturing.providers import ManufacturingProvider
 from app.domains.market.providers import MarketProvider
 from app.domains.production.providers import ProductionProvider
 from app.domains.profiles.providers import ProfileProvider
+from app.domains.trading.providers import TradingProvider
 
 
 def create_container(settings: Settings, *extra_providers: Provider) -> AsyncContainer:
@@ -26,6 +27,7 @@ def create_container(settings: Settings, *extra_providers: Provider) -> AsyncCon
         HealthProvider(),
         AccountProvider(),
         ProductionProvider(),
+        TradingProvider(),
         *extra_providers,
         context={Settings: settings},
     )

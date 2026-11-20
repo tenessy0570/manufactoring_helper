@@ -148,6 +148,7 @@ async def test_whole_site_gate_roles_csrf_and_cookie(service: AccountService) ->
         for path in (
             "/",
             "/blueprint-calculator",
+            "/interhub-trading",
             "/invention-shopping",
             "/account",
             "/admin",
@@ -158,6 +159,7 @@ async def test_whole_site_gate_roles_csrf_and_cookie(service: AccountService) ->
         for path in (
             "/api/v1/catalog/items",
             "/api/v1/manufacturing/calculator/10",
+            "/api/v1/trading/opportunities",
             "/health/data-progress",
             "/api/v1/accounts/users",
         ):

@@ -1,6 +1,7 @@
 /* Local application state; all monetary calculations remain on the server. */
 document.addEventListener('alpine:init', () => {
   Alpine.data('manufacturingApp', () => ({
+    ...window.marketHistoryChartMethods,
     calculator:document.body.dataset.calculator==='true',blueprint:{type_id:'',name:''},blueprintMatches:[],blueprintOpen:false,blueprintIndex:-1,blueprintSequence:0,blueprintSearching:false,blueprintSearchDone:false,appliedBlueprintId:0,
     demo: new URLSearchParams(location.search).get('demo') === '1', loading: false,
     deletingProfile:false,filtersOpen: true, error: '', profileId: '', profiles: [], profileSettings: {},
@@ -231,25 +232,6 @@ document.addEventListener('alpine:init', () => {
         this.historyData={...data,days:[...data.days].sort((a,b)=>a.date.localeCompare(b.date))};
       }catch(_){if(seq===this.detailSequence)this.historyError='Trading history could not be loaded. Your cost calculations are still available.';}
       finally{if(seq===this.detailSequence)this.historyLoading=false;}
-    },
-    historyChart(metric){
-      const days=(this.historyData?.days||[]).filter(d=>Number.isFinite(Number(d[metric])));
-      if(!days.length)return {path:'',min:0,max:0,first:'',last:''};
-      const values=days.map(d=>Number(d[metric])),low=metric==='volume'?0:Math.min(...values),high=Math.max(...values),padding=metric==='volume'?0:Math.max((high-low)*0.05,high*0.01,1),min=Math.max(0,low-padding),max=Math.max(min+1,high+padding);
-      const first=Date.parse(days[0].date),last=Date.parse(days.at(-1).date),span=Math.max(86400000,last-first);
-      let previous=null;
-      const path=days.map(d=>{const time=Date.parse(d.date),x=last===first?300:10+(time-first)/span*580,y=150-(Number(d[metric])-min)/(max-min)*140;
-        if(metric==='volume'){const w=Math.max(1,Math.min(12,580/(span/86400000+1)*0.7));return 'M'+(x-w/2)+',150V'+y+'h'+w+'V150Z';}
-        if(days.length===1)return 'M297,'+y+'L303,'+y;
-        const command=previous===null||time-previous>86400000?'M':'L';previous=time;return command+x+','+y;
-      }).join(' ');
-      return {path,min,max,first:days[0].date,last:days.at(-1).date};
-    },
-    inspectHistory(event){
-      const days=this.historyData?.days||[];if(!days.length)return;
-      const rect=event.currentTarget.getBoundingClientRect(),ratio=Math.max(0,Math.min(1,(event.clientX-rect.left)/rect.width)),first=Date.parse(days[0].date),last=Date.parse(days.at(-1).date),target=first+(last-first)*ratio;
-      const day=days.reduce((a,b)=>Math.abs(Date.parse(a.date)-target)<Math.abs(Date.parse(b.date)-target)?a:b);
-      this.historyHoverText=day.date+' | '+this.fullMoney(day.average)+' ISK average | '+Number(day.volume).toLocaleString('en-US')+' units traded';
     },
     fullMoney(value){if(value===null||value===undefined||!Number.isFinite(Number(value)))return 'Not available';return new Intl.NumberFormat('en-US',{maximumFractionDigits:2}).format(Number(value));},
     materialName(id){return this.materialNames[id]||(this.materialNamesLoading?'Loading name...':'Name unavailable');},
