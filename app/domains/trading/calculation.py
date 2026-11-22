@@ -48,7 +48,23 @@ def calculate_trade(
         stale = True
         if query.fresh_only:
             return None
-    quantity = source.sell_volume if query.purchase_side == "sell" else query.max_units
+    if query.purchase_side == "sell" and source.sell_levels is None:
+        warnings.append("Only best-price sell stock is available until the next market refresh.")
+    purchase_levels = sorted(
+        (
+            level
+            for level in (
+                source.sell_levels or [BuyPriceLevel(price=purchase, volume=source.sell_volume)]
+            )
+            if level.price <= purchase * (1 + query.sell_price_range / 100)
+        ),
+        key=lambda level: level.price,
+    )
+    quantity = (
+        sum(level.volume for level in purchase_levels)
+        if query.purchase_side == "sell"
+        else query.max_units
+    )
     if query.purchase_side == "buy":
         warnings.append(
             "Purchase buy orders must fill first; quantity is a scenario, not available stock."
@@ -63,9 +79,10 @@ def calculate_trade(
     quantity = min(caps) if caps else None
     demand = None
     revenue = None
+    levels: list[BuyPriceLevel] = []
     if query.sale_side == "buy":
-        levels = destination.buy_levels
-        if levels is None:
+        levels = destination.buy_levels or []
+        if destination.buy_levels is None:
             levels = [BuyPriceLevel(price=sale, volume=destination.buy_volume)]
             warnings.append("Only best-price buy demand is available in this saved snapshot.")
         levels = sorted(
@@ -90,9 +107,19 @@ def calculate_trade(
                     break
     elif quantity is not None:
         revenue = sale * quantity
+    depth_investment = None
+    if query.purchase_side == "sell" and quantity is not None:
+        destinations = (
+            levels if query.sale_side == "buy" else [BuyPriceLevel(price=sale, volume=quantity)]
+        )
+        quantity, depth_investment, revenue = match_depth(
+            purchase_levels, destinations, quantity, sale_rate, query.max_investment
+        )
     if quantity is not None and quantity <= 0:
         return None
     investment = cost * quantity if quantity is not None else None
+    if depth_investment is not None:
+        investment = depth_investment
     net_revenue = revenue * (1 - sale_rate / 100) if revenue is not None else None
     batch_profit = (
         net_revenue - investment if net_revenue is not None and investment is not None else None
@@ -129,7 +156,9 @@ def calculate_trade(
         batch_revenue=net_revenue,
         batch_profit=batch_profit,
         average_sale_price=revenue / quantity if revenue is not None and quantity else None,
-        source_stock=source.sell_volume if query.purchase_side == "sell" else None,
+        source_stock=sum(level.volume for level in purchase_levels)
+        if query.purchase_side == "sell"
+        else None,
         destination_demand=demand,
         source_updated_at=source.synced_at,
         destination_updated_at=destination.synced_at,
@@ -137,3 +166,38 @@ def calculate_trade(
         instant_trade=query.purchase_side == "sell" and query.sale_side == "buy",
         warnings=warnings,
     )
+
+
+def match_depth(
+    purchases: list[BuyPriceLevel],
+    sales: list[BuyPriceLevel],
+    cap: int,
+    sale_rate: Decimal,
+    budget: Decimal | None,
+) -> tuple[int, Decimal, Decimal]:
+    quantity, spent, revenue = 0, Decimal(0), Decimal(0)
+    index, available = 0, 0
+    for purchase in purchases:
+        remaining = purchase.volume
+        while remaining > 0 and quantity < cap:
+            if available == 0:
+                if index >= len(sales):
+                    return quantity, spent, revenue
+                available = sales[index].volume
+                index += 1
+                if available == 0:
+                    continue
+            sale = sales[index - 1].price
+            if sale * (1 - sale_rate / 100) <= purchase.price:
+                return quantity, spent, revenue
+            taken = min(remaining, available, cap - quantity)
+            if budget is not None:
+                taken = min(taken, int((budget - spent) // purchase.price))
+            if taken <= 0:
+                return quantity, spent, revenue
+            quantity += taken
+            spent += purchase.price * taken
+            revenue += sale * taken
+            remaining -= taken
+            available -= taken
+    return quantity, spent, revenue

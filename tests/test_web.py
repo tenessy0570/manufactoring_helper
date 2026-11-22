@@ -11,6 +11,7 @@ from tests.helpers import make_settings
         "/",
         "/blueprint-calculator",
         "/interhub-trading",
+        "/static/cargo.js",
         "/static/trading.js",
         "/static/history-chart.js",
         "/static/trading.css",
@@ -45,3 +46,11 @@ async def test_interface_requires_configured_authentication() -> None:
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
         response = await client.get("/")
     assert response.status_code == 401
+
+
+async def test_cargo_page_and_api_temporarily_disabled() -> None:
+    app = create_app(settings=make_settings(), require_login=False)
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        assert (await client.get("/cargo-planner")).status_code == 404
+        assert (await client.post("/api/v1/trading/cargo", json={})).status_code == 404
+        assert "/cargo-planner" not in (await client.get("/")).text

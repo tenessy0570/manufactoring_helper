@@ -1,7 +1,7 @@
 {% macro icon(name) -%}
 <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">
 {% if name == 'opportunities' %}<path d="M3 17l6-6 4 4 8-10M15 5h6v6M3 21h18"/>
-{% elif name == 'trading' %}<path d="M3 7h17m-4-4l4 4-4 4M21 17H4m4-4l-4 4 4 4"/>
+{% elif name in ['trading','cargo'] %}<path d="M3 7h17m-4-4l4 4-4 4M21 17H4m4-4l-4 4 4 4"/>
 {% elif name == 'calculator' %}<rect x="5" y="2" width="14" height="20" rx="2"/><path d="M8 6h8M8 11h1m3 0h1m3 0h1M8 15h1m3 0h1m3 0h1M8 19h1m3 0h1m3 0h1"/>
 {% elif name == 'shopping' %}<path d="M9 3h6M10 3v6l-6 10a1 1 0 001 2h14a1 1 0 001-2L14 9V3M8 14h8"/>
 {% elif name == 'production' %}<rect x="5" y="5" width="14" height="16" rx="2"/><path d="M9 5V3h6v2M9 10h6M9 14h6M9 18h4"/>
@@ -11,7 +11,7 @@
 {% elif name == 'menu' %}<path d="M4 6h16M4 12h16M4 18h16"/>
 {% endif %}</svg>
 {%- endmacro %}
-{% set page_names = {'opportunities':'Opportunities','trading':'Interhub trading','calculator':'Blueprint calculator','shopping':'Invention shopping','production':'Production history','account':'My account','admin':'User administration'} %}
+{% set page_names = {'opportunities':'Opportunities','cargo':'Cargo planner','trading':'Interhub trading','calculator':'Blueprint calculator','shopping':'Invention shopping','production':'Production history','account':'My account','admin':'User administration'} %}
 <aside class="sidebar site-navigation" x-data="{menuOpen:false}" :class="{'navigation-open':menuOpen}" {% if active_page in ['opportunities','calculator'] %}:inert="selected !== null"{% endif %} @click.outside="menuOpen=false" @keydown.escape="if(menuOpen){menuOpen=false;$refs.navToggle.focus()}">
   <div class="navigation-header">
     <a class="brand" href="/" aria-label="EVE Manufacturing home"><span class="brand-mark">E</span><span>EVE<span class="brand-sub">MANUFACTURING</span></span></a>

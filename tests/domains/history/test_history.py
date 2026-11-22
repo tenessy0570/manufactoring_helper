@@ -250,7 +250,13 @@ async def test_gateway_decimal_expiry_and_duplicate_dates(expires: str | None) -
 
 
 @pytest.mark.parametrize(
-    "body", [{"error": "Type not found!"}, {"error": "Unknown route"}, "invalid"]
+    "body",
+    [
+        {"error": "Type not found!"},
+        {"error": "Unknown route"},
+        "invalid",
+        {"error": "Type not tradable on market!"},
+    ],
 )
 async def test_history_missing_type_is_cached_but_other_404_errors_propagate(body: object) -> None:
     from app.infrastructure.http import HttpStatusError
@@ -258,8 +264,10 @@ async def test_history_missing_type_is_cached_but_other_404_errors_propagate(bod
     async with httpx.AsyncClient(base_url="https://test") as http:
         gateway = EsiHistoryGateway(EsiClient(http, 1, 0, lambda: "2026-11-16"), clock=lambda: NOW)
         with respx.mock:
-            respx.get(f"https://test/markets/{REGION}/history/").respond(404, json=body)
-            if body == {"error": "Type not found!"}:
+            respx.get(f"https://test/markets/{REGION}/history/").respond(
+                400 if body == {"error": "Type not tradable on market!"} else 404, json=body
+            )
+            if body in ({"error": "Type not found!"}, {"error": "Type not tradable on market!"}):
                 result = await gateway.fetch(REGION, 406)
                 assert result.days == []
                 assert result.expires_at == EXPIRES

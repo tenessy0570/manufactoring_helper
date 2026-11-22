@@ -12,6 +12,7 @@ class PriceAggregator:
         self._synced_at = synced_at
         self._expires_at = expires_at
         self._prices: dict[int, MarketPrice] = {}
+        self._sell_levels: dict[int, dict[Decimal, BuyPriceLevel]] = {}
         self._buy_levels: dict[int, dict[Decimal, BuyPriceLevel]] = {}
 
     def add(self, order: MarketOrder) -> None:
@@ -46,6 +47,9 @@ class PriceAggregator:
                 price.buy_volume += order.volume_remain
                 price.buy_orders_at_best = (price.buy_orders_at_best or 0) + 1
         else:
+            levels = self._sell_levels.setdefault(order.type_id, {})
+            level = levels.setdefault(order.price, BuyPriceLevel(price=order.price, volume=0))
+            level.volume += order.volume_remain
             price.sell_order_count = (price.sell_order_count or 0) + 1
             if price.sell_price is None or order.price < price.sell_price:
                 price.sell_price, price.sell_volume = order.price, order.volume_remain
@@ -57,6 +61,8 @@ class PriceAggregator:
     def finish(self, expires_at: datetime) -> list[MarketPrice]:
         for price in self._prices.values():
             price.expires_at = expires_at
+            sells = self._sell_levels.get(price.type_id, {})
+            price.sell_levels = [sells[value] for value in sorted(sells)]
             levels = self._buy_levels.get(price.type_id, {})
             price.buy_levels = [levels[value] for value in sorted(levels, reverse=True)]
             if price.buy_price is not None and price.sell_price is not None:

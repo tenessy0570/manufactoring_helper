@@ -55,6 +55,7 @@ class MarketPrice(BaseModel):
     hub_id: HubId
     type_id: int
     buy_levels: list[BuyPriceLevel] | None = None
+    sell_levels: list[BuyPriceLevel] | None = None
     buy_price: Decimal | None = None
     sell_price: Decimal | None = None
     buy_volume: int = 0

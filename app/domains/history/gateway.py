@@ -31,12 +31,15 @@ class EsiHistoryGateway(HistoryGateway):
                 "GET", f"/markets/{region_id}/history/", params={"type_id": type_id}
             )
         except HttpStatusError as error:
-            if error.status_code == 404 and error.response is not None:
+            if error.status_code in (400, 404) and error.response is not None:
                 try:
                     payload = error.response.json()
                 except ValueError:
                     payload = None
-                if payload == {"error": "Type not found!"}:
+                if (error.status_code == 404 and payload == {"error": "Type not found!"}) or (
+                    error.status_code == 400
+                    and payload == {"error": "Type not tradable on market!"}
+                ):
                     return HistoryDownload(
                         days=[], expires_at=self._clock() + timedelta(seconds=self._ttl)
                     )

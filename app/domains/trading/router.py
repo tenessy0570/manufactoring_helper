@@ -14,3 +14,9 @@ async def opportunities(
     service: FromDishka[TradingService], query: Annotated[TradingQuery, Query()]
 ) -> TradingPage:
     return await service.opportunities(query)
+
+
+# Temporarily disabled pending Cargo planner redesign.
+# @router.post("/cargo")
+# async def cargo_plan(service: FromDishka[CargoService], query: CargoQuery) -> CargoResult:
+#     return await service.plan(query)

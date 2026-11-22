@@ -13,6 +13,7 @@ class MarketPriceTable(Base):
 
     hub_id: Mapped[str] = mapped_column(primary_key=True)
     type_id: Mapped[int] = mapped_column(primary_key=True)
+    sell_levels: Mapped[list[dict[str, Any]] | None] = mapped_column(JSON(none_as_null=True))
     buy_levels: Mapped[list[dict[str, Any]] | None] = mapped_column(JSON(none_as_null=True))
     buy_price: Mapped[Decimal | None] = mapped_column(Numeric(24, 2))
     sell_price: Mapped[Decimal | None] = mapped_column(Numeric(24, 2))

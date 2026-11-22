@@ -69,3 +69,9 @@ async def production_history(request: Request) -> HTMLResponse:
 @router.get("/interhub-trading", response_class=HTMLResponse)
 async def interhub_trading(request: Request) -> HTMLResponse:
     return templates.TemplateResponse(request=request, name="trading.html")
+
+
+# Temporarily disabled pending Cargo planner redesign.
+# @router.get("/cargo-planner", response_class=HTMLResponse)
+# async def cargo_planner(request: Request) -> HTMLResponse:
+#     return templates.TemplateResponse(request=request, name="cargo.html")

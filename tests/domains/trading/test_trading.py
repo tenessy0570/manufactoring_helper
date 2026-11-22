@@ -623,3 +623,32 @@ async def test_spike_sql_seven_completed_traded_days_median_and_destination() ->
         normal = await repo.turnover(TradingQuery(), [42], NOW)
         assert normal[(10000043, 42)].median_price is None
     await engine.dispose()
+
+
+def test_sell_depth_actual_budget_profitability_and_range() -> None:
+    data = trade()
+    data.source.sell_levels = [
+        BuyPriceLevel(price=Decimal(100), volume=2),
+        BuyPriceLevel(price=Decimal(105), volume=10),
+        BuyPriceLevel(price=Decimal(106), volume=50),
+    ]
+    result = calculate_trade(data, TradingQuery(), NOW)
+    assert result is not None
+    assert result.quantity == 12
+    assert result.investment == 1250
+    assert result.batch_profit == 495
+    limited = calculate_trade(data, TradingQuery(max_investment=Decimal(410)), NOW)
+    assert limited is not None
+    assert limited.quantity == 4
+    assert limited.investment == 410
+    best = calculate_trade(data, TradingQuery(sell_price_range=Decimal(0)), NOW)
+    assert best is not None
+    assert best.quantity == 2
+    data.destination.buy_levels = [
+        BuyPriceLevel(price=Decimal(150), volume=1),
+        BuyPriceLevel(price=Decimal(104), volume=100),
+    ]
+    stopped = calculate_trade(data, TradingQuery(buy_price_range=Decimal(100)), NOW)
+    assert stopped is not None
+    assert stopped.quantity == 2
+    assert stopped.batch_profit == 54

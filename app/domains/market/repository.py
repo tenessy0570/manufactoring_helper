@@ -48,7 +48,10 @@ class SQLMarketRepository(MarketRepository):
         for start in range(0, len(prices), 100):
             self._session.add_all(
                 MarketPriceTable(
-                    **price.model_dump(exclude={"buy_levels"}),
+                    **price.model_dump(exclude={"buy_levels", "sell_levels"}),
+                    sell_levels=None
+                    if price.sell_levels is None
+                    else [level.model_dump(mode="json") for level in price.sell_levels],
                     buy_levels=None
                     if price.buy_levels is None
                     else [level.model_dump(mode="json") for level in price.buy_levels],

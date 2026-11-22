@@ -29,6 +29,7 @@ class TradingQuery(BaseModel):
     buy_broker_fee: Decimal = Field(default=Decimal(0), ge=0, le=100, allow_inf_nan=False)
     sell_broker_fee: Decimal = Field(default=Decimal(0), ge=0, le=100, allow_inf_nan=False)
     sales_tax: Decimal = Field(default=Decimal(0), ge=0, le=100, allow_inf_nan=False)
+    sell_price_range: Decimal = Field(default=Decimal(5), ge=0, le=100, allow_inf_nan=False)
     buy_price_range: Decimal = Field(default=Decimal(5), ge=0, le=100, allow_inf_nan=False)
     history_days: int = Field(default=30, ge=1, le=365)
     filter_daily_turnover: bool = False
@@ -146,3 +147,56 @@ class TradeTurnover(BaseModel):
     region_id: int
     daily_isk_volume: Decimal
     updated_at: datetime
+
+
+class CargoQuery(BaseModel):
+    filter_daily_turnover: bool = False
+    min_daily_isk_volume: Decimal | None = Field(default=None, ge=0, allow_inf_nan=False)
+    history_days: int = Field(default=30, ge=1, le=365)
+    sale_side: Literal["buy", "sell"] = "buy"
+    source_hub: HubId
+    destination_hub: HubId | None = None
+    cargo_m3: Decimal = Field(gt=0, le=1000000000, allow_inf_nan=False)
+    budget: Decimal | None = Field(default=None, gt=0, le=1000000000000000, allow_inf_nan=False)
+    sales_tax: Decimal = Field(default=Decimal(0), ge=0, le=100, allow_inf_nan=False)
+    sell_price_range: Decimal = Field(default=Decimal(5), ge=0, le=100, allow_inf_nan=False)
+    buy_price_range: Decimal = Field(default=Decimal(5), ge=0, le=100, allow_inf_nan=False)
+    route_mode: RouteMode = "safe"
+    fresh_only: bool = False
+
+    @model_validator(mode="after")
+    def different_hubs(self) -> "CargoQuery":
+        if self.source_hub == self.destination_hub:
+            raise ValueError("Choose two different hubs")
+        return self
+
+
+class CargoLine(BaseModel):
+    type_id: int
+    name: str
+    quantity: int
+    cargo_m3: Decimal
+    investment: Decimal
+    revenue: Decimal
+    profit: Decimal
+
+
+class CargoPlan(BaseModel):
+    margin_pct: Decimal = Decimal(0)
+    destination_hub: HubId
+    jumps: int
+    highsec: bool
+    items: list[CargoLine]
+    cargo_m3: Decimal
+    investment: Decimal
+    revenue: Decimal
+    profit: Decimal
+    optimal: bool
+    stale: bool
+
+
+class CargoResult(BaseModel):
+    plans: list[CargoPlan]
+    skipped_routes: int
+    missing_volume: int
+    partial_depth: bool

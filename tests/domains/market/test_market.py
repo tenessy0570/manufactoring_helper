@@ -357,6 +357,9 @@ async def test_buy_levels_aggregate_and_round_trip_without_raw_orders(
         order(is_buy_order=True, price="100", volume_remain=1),
         order(is_buy_order=True, price="95", volume_remain=60),
         order(is_buy_order=True, price="94.99", volume_remain=200),
+        order(is_buy_order=False, price="110", volume_remain=2),
+        order(is_buy_order=False, price="105", volume_remain=3),
+        order(is_buy_order=False, price="110", volume_remain=4),
         order(is_buy_order=True, price="10000", volume_remain=999, location_id=123),
     ]:
         aggregator.add(entry)
@@ -373,6 +376,12 @@ async def test_buy_levels_aggregate_and_round_trip_without_raw_orders(
     await repository.replace(state(), [result])
     await session.commit()
     stored = (await repository.find(PriceQuery(), NOW))[0]
+    assert stored.sell_levels == result.sell_levels
+    assert stored.sell_levels is not None
+    assert [(v.price, v.volume) for v in stored.sell_levels] == [
+        (Decimal(105), 3),
+        (Decimal(110), 6),
+    ]
     assert stored.buy_levels == result.buy_levels
     assert stored.buy_volume == result.buy_volume
 
