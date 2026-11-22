@@ -3,6 +3,7 @@
 from app.domains.accounts.tables import SessionTable as SessionTable
 from app.domains.accounts.tables import UserTable as UserTable
 from app.domains.catalog.tables import ItemTypeTable as ItemTypeTable
+from app.domains.exclusions import tables as _exclusions  # noqa: F401
 from app.domains.history.tables import HistoryDayTable as HistoryDayTable
 from app.domains.history.tables import HistoryStateTable as HistoryStateTable
 from app.domains.invention.tables import InventionPlanTable as InventionPlanTable

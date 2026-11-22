@@ -12,6 +12,7 @@ from app.domains.accounts.middleware import SessionAuthMiddleware
 from app.domains.accounts.router import router as account_router
 from app.domains.accounts.service import AccountError
 from app.domains.catalog.router import router as catalog_router
+from app.domains.exclusions.router import router as exclusions_router
 from app.domains.health.router import router as health_router
 from app.domains.history.router import router as history_router
 from app.domains.invention.router import router as invention_router
@@ -46,6 +47,7 @@ def create_app(
     app.include_router(profile_router)
     app.include_router(production_router)
     app.include_router(trading_router)
+    app.include_router(exclusions_router)
     app.include_router(web_router)
     app.mount("/static", StaticFiles(directory=str(WEB_ROOT / "static")), name="static")
     if require_login:

@@ -29,8 +29,32 @@ document.addEventListener('alpine:init', () => {
       manufacturing_runs:'1',production_lines:'1',days:'30',sales_tax:'0',buy_broker_fee:'0',sell_broker_fee:'0',facility_tax:'0',system_cost_index:'0',
       min_product_volume:'',include_invention_cost:false,fresh_only:false,require_full_run_demand:false,
       rank_by:'profit_per_day',limit:'25'};},
+    excludedItems:[],exclusionsOpen:false,excludedPage:0,
+    get excludedPageItems(){return this.excludedItems.slice(this.excludedPage*25,this.excludedPage*25+25);},
+    get excludedPages(){return Math.max(1,Math.ceil(this.excludedItems.length/25));},
+    get visibleItems(){return this.page.items.filter(item=>!this.excludedItems.some(v=>v.type_id===item.type_id));},
+    exclusionsKey(){return 'eve.opportunities.excluded.v1.'+(document.body.dataset.userId||'preview')+(this.demo?'.demo':'');},
+    exclusionsQueue:Promise.resolve(),
+    usesServerExclusions(){return !this.demo&&document.body.dataset.userId&&document.body.dataset.userId!=='preview';},
+    async readExclusions(){
+      let legacy=[];try{const saved=JSON.parse(localStorage.getItem(this.exclusionsKey()));if(Array.isArray(saved))legacy=saved.filter(v=>Number.isInteger(v.type_id)&&v.type_id>0&&typeof v.name==='string').slice(0,1000);}catch(_){}
+      if(!this.usesServerExclusions()){this.excludedItems=legacy;return;}
+      try{const data=await this.api('/api/v1/opportunity-exclusions');this.excludedItems=data.items;
+        if(legacy.length){const merged=[...new Map([...data.items,...legacy].map(v=>[v.type_id,v])).values()].slice(0,1000);const saved=await this.api('/api/v1/opportunity-exclusions',{method:'PUT',body:JSON.stringify({items:merged}),headers:{'Content-Type':'application/json'}});this.excludedItems=saved.items;localStorage.removeItem(this.exclusionsKey());}
+      }catch(_){this.storageWarning='Could not load saved exclusions. Reload to retry.';}
+    },
+    async changeExclusions(next){
+      this.excludedPage=Math.min(this.excludedPage,Math.max(0,Math.ceil(next.length/25)-1));
+      if(!this.usesServerExclusions()){try{localStorage.setItem(this.exclusionsKey(),JSON.stringify(next));this.excludedItems=next;}catch(_){this.storageWarning='Could not save excluded items.';}return;}
+      this.excludedItems=next;
+      this.exclusionsQueue=this.exclusionsQueue.catch(()=>{}).then(async()=>{try{await this.api('/api/v1/opportunity-exclusions',{method:'PUT',body:JSON.stringify({items:next}),headers:{'Content-Type':'application/json'}});}catch(_){this.storageWarning='Could not save exclusions. Reload before making further changes.';}});
+      await this.exclusionsQueue;
+    },
+    async excludeItem(item){if(this.excludedItems.some(v=>v.type_id===item.type_id))return;if(this.excludedItems.length>=1000){this.storageWarning='You can exclude up to 1000 items.';return;}await this.changeExclusions([...this.excludedItems,{type_id:item.type_id,name:item.name}]);},
+    async restoreItem(typeId){await this.changeExclusions(this.excludedItems.filter(v=>v.type_id!==typeId));},
     async init() {
       this.form = this.defaults();
+      if(!this.calculator)await this.readExclusions();
       this.profiles=this.readBrowserProfiles();
       const restored=this.restoreSettings();
       this.$watch('hiddenColumns', () => this.saveSettings());
@@ -128,6 +152,7 @@ document.addEventListener('alpine:init', () => {
       else if(form.category)values.categories=[form.category];
       if(this.calculator){const allowed=['manufacturing_runs','hub_id','material_hub_id','material_order_type','product_order_type','sales_tax','buy_broker_fee','sell_broker_fee','facility_tax','system_cost_index','include_invention_cost','buy_demand_tolerance_pct'];for(const key of Object.keys(values))if(!allowed.includes(key))delete values[key];}
       if(!this.calculator)delete values.manufacturing_runs;
+      if(!this.calculator)values.exclude_type_ids=[...new Set([...(values.exclude_type_ids||[]),...this.excludedItems.map(v=>v.type_id)])];
       values.offset=offset;
       for (const [key,value] of Object.entries(values)) {
         if (value===null || value===undefined || value==='') continue;
@@ -298,6 +323,7 @@ document.addEventListener('alpine:init', () => {
       let items=seeds.map((s,i)=>({_category:i===2?'Rigs':[1,3].includes(i)?'Drones':i===4?'Ammunition & Charges':'Modules',name:s[0],type_id:s[1],meta_group_id:s[2],total_cost_per_unit:String(s[3]),material_cost_per_unit:String(s[3]*0.96),job_cost_per_unit:String(s[3]*0.04),profit_per_unit:String(s[4]),margin_pct:String(s[5]),rank_profit_per_day:String(s[6]),profit_per_day:String(s[6]*1.2),daily_isk_volume:String(s[7]),units:1,seconds:'7200',revenue_per_unit:String(s[3]+s[4]),invention_required:s[2]===2,invention_included:false,invention_cost_per_unit:'0',sales_tax_per_unit:'0',sales_broker_fee_per_unit:'0',procurement_broker_fee_per_unit:'0',stale:i===5,demand_warnings:i===4?['single_buy_order_at_best']:[],product_volume_at_price:100,full_runs_at_buy_price:100,production_limit_units:100,profit_at_current_buy_price:String(s[4]*100),materials:[{type_id:34,quantity:100,price:String(s[3]*0.96/100),cost:String(s[3]*0.96)}]}));
       if(form.product_order_type!=='buy')items.forEach(i=>{i.profit_at_current_buy_price=null;i.production_limit_units=null;i.full_runs_at_buy_price=null;});
       items=items.filter(i=>(!form.category||form.category==='__profile__'||i._category===form.category)&&(!form.min_daily_isk_volume||Number(i.daily_isk_volume)>=Number(form.min_daily_isk_volume))&&(!form.min_product_volume||i.product_volume_at_price>=Number(form.min_product_volume))&&(!form.search||i.name.toLowerCase().includes(form.search.toLowerCase()))&&(!form.tech||i.meta_group_id===Number(form.tech))&&(!form.min_profit||Number(i.profit_per_unit)>=Number(form.min_profit))&&(!form.min_margin||Number(i.margin_pct)>=Number(form.min_margin))&&(!form.fresh_only||!i.stale));
+      if(!this.calculator)items=items.filter(item=>!this.excludedItems.some(v=>v.type_id===item.type_id));
       if(this.calculator)items=items.filter(item=>item.type_id===Number(this.blueprint.type_id));
       const rank={profit_per_day:'rank_profit_per_day',margin:'margin_pct',profit:'profit_per_unit',demand_profit:'profit_at_current_buy_price'}[form.rank_by];items.sort((a,b)=>(a[rank]===null)-(b[rank]===null)||Number(b[rank])-Number(a[rank])||a.type_id-b.type_id);
       return {items:items.slice(offset,offset+Number(form.limit)),total:items.length,offset:offset,limit:Number(form.limit)};

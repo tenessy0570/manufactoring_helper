@@ -4,6 +4,7 @@ from app.core.config import Settings
 from app.core.di.providers import InfrastructureProvider
 from app.domains.accounts.providers import AccountProvider
 from app.domains.catalog.providers import CatalogProvider
+from app.domains.exclusions.providers import ExclusionProvider
 from app.domains.health.providers import HealthProvider
 from app.domains.history.providers import HistoryProvider
 from app.domains.invention.providers import InventionProvider
@@ -28,6 +29,7 @@ def create_container(settings: Settings, *extra_providers: Provider) -> AsyncCon
         AccountProvider(),
         ProductionProvider(),
         TradingProvider(),
+        ExclusionProvider(),
         *extra_providers,
         context={Settings: settings},
     )

@@ -119,6 +119,32 @@ def main() -> None:
                 if(a.browserProfile||a.form.category!=='Rigs')throw Error('Delete changed filters');
                 }finally{window.confirm=original;}return 'PASS: profile deletion';})()""")
             )
+            print(
+                evaluate("""(async()=>{const a=Alpine.$data(document.body),load=a.load;
+                let reloads=0;a.load=async()=>{reloads++;};
+                try{await a.excludeItem({type_id:2048,name:'Damage Control II'});
+                if(reloads)throw Error('Exclusion restarted calculation');
+                if(!a.params().getAll('exclude_type_ids').includes('2048'))
+                    throw Error('Excluded item missing from server query');
+                a.excludedItems=[];a.readExclusions();
+                if(!a.excludedItems.some(v=>v.type_id===2048))throw Error('Exclusions not saved');
+                await a.restoreItem(2048);
+                if(reloads)throw Error('Restore restarted calculation');
+                if(a.params().getAll('exclude_type_ids').includes('2048'))
+                    throw Error('Restore failed');
+                a.excludedItems=Array.from({length:51},(_,i)=>({type_id:i+1,name:'Item '+i}));
+a.excludedPage=0;await a.$nextTick();
+if(document.querySelectorAll('.excluded-row').length!==25)
+throw Error('Excluded page size');
+a.excludedPage=2;await a.$nextTick();
+if(document.querySelectorAll('.excluded-row').length!==1)
+throw Error('Excluded last page size');
+await a.restoreItem(51);
+if(a.excludedPage!==1)throw Error('Excluded page not clamped');
+await a.changeExclusions([]);
+return 'PASS: exclude, persist, restore and 25-item pagination';
+                }finally{a.load=load;}})()""")
+            )
             profile_controls = (ROOT / "tests/frontend/profile_controls_scenarios.js").read_text(
                 encoding="utf-8"
             )
