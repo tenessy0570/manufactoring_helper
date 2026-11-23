@@ -12,7 +12,7 @@ from app.domains.invention.models import (
     InventionPlan,
     InventionSettings,
 )
-from app.domains.manufacturing.gateway import IndustryClient
+from app.domains.manufacturing.gateway import IndustryClient, duration_seconds
 from app.infrastructure.http import HttpStatusError
 
 # Public IndustryCostInput skill parameters; all relevant science skills share the supplied level.
@@ -59,6 +59,7 @@ ENCRYPTION_SKILLS = tuple(
 
 
 class InventionResponse(BaseModel):
+    time: str | None = None
     product_id: int
     blueprint_id: int
     probability: Decimal = Field(gt=0, le=1)
@@ -118,6 +119,9 @@ class EverefInventionGateway(InventionGateway):
             if entry is None or entry.product_id != invented_id:
                 raise ValueError("Unexpected invention blueprint")
             return InventionPlan(
+                seconds_per_attempt=duration_seconds(entry.time) / entry.runs
+                if entry.time
+                else None,
                 decryptor_id=decryptor_id,
                 decryptor_name=name,
                 source_blueprint_id=entry.blueprint_id,

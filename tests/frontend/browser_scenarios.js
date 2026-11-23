@@ -83,11 +83,11 @@ async function checkFrontendWorkflow() {
     check(!app.historyChart('volume').path.includes('NaN'),'Zero volume produces finite bars');
   }finally{app.demo=true;app.api=historyApi;app.historyData=savedHistory;}
 
-  check(app.demandDuration({seconds:'7200',full_runs_at_buy_price:100}) === '6d 1h 36m', 'One-line time uses full runs and Industry V / Advanced Industry III');
+  check(app.demandDuration({seconds:'7200',full_runs_at_buy_price:100}) === '8d 8h 0m', 'One-line time uses cached duration without applying skills twice');
   check(app.demandDuration({seconds:'7200',full_runs_at_buy_price:0}) === '0s', 'No complete runs takes zero time');
   check(app.demandDuration({seconds:'7200',full_runs_at_buy_price:null}) === 'Not available', 'Sell pricing does not invent a demand duration');
   app.appliedForm.production_lines='3';
-  check(app.demandDuration({seconds:'7200',full_runs_at_buy_price:100}) === '2d 1h 30m', 'Parallel lines round up full runs on busiest line');
+  check(app.demandDuration({seconds:'7200',full_runs_at_buy_price:100}) === '2d 20h 0m', 'Parallel lines round up full runs on busiest line');
   app.appliedForm.production_lines='1';
   check(app.duration(59.9) === '1m 0s', 'Duration rounds across minute boundaries');
   check(app.$refs.dialog.querySelector('.material-name').textContent.includes('Tritanium'), 'Materials have readable names');

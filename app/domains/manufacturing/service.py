@@ -10,7 +10,7 @@ from app.domains.history.repository import HistoryRepository
 from app.domains.invention.models import InventionSettings
 from app.domains.invention.repository import InventionRepository
 from app.domains.manufacturing.calculation import calculate
-from app.domains.manufacturing.demand import estimate_buy_demand
+from app.domains.manufacturing.demand import estimate_buy_demand, invention_daily_profit
 from app.domains.manufacturing.gateway import IndustryGateway
 from app.domains.manufacturing.models import (
     BatchCalculation,
@@ -203,7 +203,8 @@ class ManufacturingService:
         }
         invention_results = (
             await self._invention.requests([value.key for value in invention_settings.values()])
-            if query.include_invention_cost and self._invention is not None
+            if (query.include_invention_cost or query.include_invention_time)
+            and self._invention is not None
             else {}
         )
         results: list[Opportunity] = []
@@ -228,17 +229,22 @@ class ManufacturingService:
             if product is None:
                 missing_prices += 1
                 continue
+            invention_plan = None
             invention_cost = Decimal(0)
             invention_status = "not_requested" if candidate.meta_group_id == 2 else "not_required"
             invention_option = None
             invention_complete = None
             invention_stale = False
             invention_deadline = None
-            if query.include_invention_cost and candidate.meta_group_id is None:
+            if (
+                query.include_invention_cost or query.include_invention_time
+            ) and candidate.meta_group_id is None:
                 missing_invention += 1
                 invention_unavailable[candidate.type_id] = "unknown_meta_group"
                 continue
-            if query.include_invention_cost and candidate.meta_group_id == 2:
+            if (
+                query.include_invention_cost or query.include_invention_time
+            ) and candidate.meta_group_id == 2:
                 cached = invention_results.get(invention_settings[candidate.type_id].key)
                 if (
                     cached is None
@@ -252,7 +258,13 @@ class ManufacturingService:
                         "not_requested" if cached is None else cached.status
                     )
                     continue
-                invention_cost = cached.result.best.expected_cost_per_unit
+                invention_plan = cached.result.best.plan
+                if (query.include_invention_time) and invention_plan.seconds_per_attempt is None:
+                    missing_invention += 1
+                    invention_unavailable[candidate.type_id] = "time_pending"
+                    continue
+                if query.include_invention_cost:
+                    invention_cost = cached.result.best.expected_cost_per_unit
                 invention_option = cached.result.best.plan.decryptor_name
                 invention_complete = cached.result.complete_pricing
                 invention_deadline = cached.expires_at
@@ -297,9 +309,62 @@ class ManufacturingService:
             production_limit = demand.units if demand else None
             demand_profit = demand.profit if demand else None
             limited_daily_profit = demand.daily_profit if demand else None
+            if (
+                query.include_invention_time
+                and demand is not None
+                and invention_plan is not None
+                and demand.full_runs
+            ):
+                daily_without_invention = demand.daily_profit
+                total_daily = invention_daily_profit(
+                    demand.profit,
+                    demand.full_runs,
+                    calculated.seconds,
+                    invention_plan.runs_per_copy,
+                    invention_plan.probability,
+                    invention_plan.seconds_per_attempt or Decimal(0),
+                    query.production_lines,
+                    query.invention_slots,
+                    cap_to_day=False,
+                )
+                production_daily = invention_daily_profit(
+                    demand.profit,
+                    demand.full_runs,
+                    calculated.seconds,
+                    invention_plan.runs_per_copy,
+                    invention_plan.probability,
+                    Decimal(0),
+                    query.production_lines,
+                    query.invention_slots,
+                    cap_to_day=False,
+                )
+                if production_daily > 0 and total_daily > 0:
+                    slowdown = min(Decimal(1), total_daily / production_daily)
+                    effective = calculated.model_copy(
+                        update={"seconds": calculated.seconds / slowdown}
+                    )
+                    limited_daily_profit = min(
+                        daily_without_invention,
+                        estimate_buy_demand(product, effective, query).daily_profit,
+                    )
+                else:
+                    limited_daily_profit = daily_without_invention
             rank_daily_profit = (
                 calculated.profit_per_day if limited_daily_profit is None else limited_daily_profit
             )
+            if query.include_invention_time and not is_buy and invention_plan is not None:
+                expected_invention_seconds = (
+                    (invention_plan.seconds_per_attempt or Decimal(0))
+                    / invention_plan.probability
+                    / invention_plan.runs_per_copy
+                    / query.invention_slots
+                )
+                production_seconds_per_run = calculated.seconds / query.production_lines
+                rank_daily_profit = (
+                    calculated.profit_per_day
+                    * production_seconds_per_run
+                    / (production_seconds_per_run + expected_invention_seconds)
+                )
             warnings: list[str] = []
             if is_buy:
                 if order_count is None or orders_at_price is None:

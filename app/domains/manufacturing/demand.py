@@ -1,4 +1,4 @@
-from decimal import Decimal
+from decimal import ROUND_CEILING, Decimal
 
 from app.domains.manufacturing.models import (
     BuyDemandEstimate,
@@ -61,8 +61,34 @@ def estimate_buy_demand(
         full_runs=units // calculated.units,
         units=units,
         profit=profit(Decimal(units)),
-        daily_profit=profit(min(Decimal(units), calculated.units * 86400 / calculated.seconds)),
+        daily_profit=profit(
+            min(
+                Decimal(units),
+                calculated.units * 86400 * query.production_lines / calculated.seconds,
+            )
+        ),
         min_price=levels[-1].price if levels else None,
         average_price=proceeds(Decimal(units)) / units if units else None,
         depth_available=product.buy_levels is not None,
     )
+
+
+def invention_daily_profit(
+    profit: Decimal,
+    runs: int,
+    production_seconds: Decimal,
+    runs_per_copy: int,
+    probability: Decimal,
+    attempt_seconds: Decimal,
+    production_lines: int,
+    invention_slots: int,
+    cap_to_day: bool = True,
+) -> Decimal:
+    copies = (Decimal(runs) / runs_per_copy).to_integral_value(rounding=ROUND_CEILING)
+    attempts = copies / probability
+    invention_time = max(attempt_seconds, attempts * attempt_seconds / invention_slots)
+    production_time = (Decimal(runs) / production_lines).to_integral_value(
+        rounding=ROUND_CEILING
+    ) * production_seconds
+    rate = Decimal(86400) / (invention_time + production_time)
+    return profit * (min(Decimal(1), rate) if cap_to_day else rate)

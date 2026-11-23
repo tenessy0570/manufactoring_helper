@@ -80,5 +80,5 @@ def calculate(data: CalculationInput, query: ManufacturingQuery) -> ProfitCalcul
         revenue_per_unit=revenue,
         profit_per_unit=profit,
         margin_pct=profit / material_cost * 100,
-        profit_per_day=profit * recipe.units * 86400 / seconds,
+        profit_per_day=profit * recipe.units * 86400 * query.production_lines / seconds,
     )

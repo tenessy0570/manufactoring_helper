@@ -36,6 +36,8 @@ class ManufacturingQuery(LiquidityQuery):
     def discard_legacy_skill_settings(cls, value: Any) -> Any:
         if isinstance(value, dict):
             value = dict(value)
+            if value.get("invention_slots") in (None, ""):
+                value["invention_slots"] = 1
             if value.get("production_lines") in (None, ""):
                 value["production_lines"] = 1
             if value.get("buy_demand_tolerance_pct") in (None, ""):
@@ -59,6 +61,8 @@ class ManufacturingQuery(LiquidityQuery):
         return value
 
     buy_demand_tolerance_pct: Decimal = Field(default=Decimal(5), ge=0, le=100, allow_inf_nan=False)
+    include_invention_time: bool = False
+    invention_slots: int = Field(default=1, ge=1, le=1000)
     production_lines: int = Field(default=1, ge=1, le=1000)
     include_invention_cost: bool = False
     material_order_type: Literal["buy", "sell"] = "sell"
