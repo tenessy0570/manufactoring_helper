@@ -58,6 +58,12 @@ ENCRYPTION_SKILLS = tuple(
 )
 
 
+class CopyingResponse(BaseModel):
+    product_id: int
+    runs: Decimal = Field(gt=0)
+    time: str
+
+
 class InventionResponse(BaseModel):
     time: str | None = None
     product_id: int
@@ -118,7 +124,14 @@ class EverefInventionGateway(InventionGateway):
             entry = entries.get(str(invented_id))
             if entry is None or entry.product_id != invented_id:
                 raise ValueError("Unexpected invention blueprint")
+            copy_data = data.get("copying", {}).get(str(entry.blueprint_id))
+            copying = CopyingResponse.model_validate(copy_data) if copy_data else None
+            if copying is not None and copying.product_id != entry.blueprint_id:
+                raise ValueError("Unexpected copying blueprint")
             return InventionPlan(
+                copying_seconds_per_run=duration_seconds(copying.time) / copying.runs
+                if copying is not None
+                else None,
                 seconds_per_attempt=duration_seconds(entry.time) / entry.runs
                 if entry.time
                 else None,

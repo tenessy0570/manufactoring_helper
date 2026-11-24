@@ -83,6 +83,7 @@ async function checkFrontendWorkflow() {
     check(!app.historyChart('volume').path.includes('NaN'),'Zero volume produces finite bars');
   }finally{app.demo=true;app.api=historyApi;app.historyData=savedHistory;}
 
+  check(app.demandDuration({seconds:'7200',full_runs_at_buy_price:100,demand_duration_seconds:'90000'}) === '1d 1h 0m', 'Batch duration uses server total including preparation');
   check(app.demandDuration({seconds:'7200',full_runs_at_buy_price:100}) === '8d 8h 0m', 'One-line time uses cached duration without applying skills twice');
   check(app.demandDuration({seconds:'7200',full_runs_at_buy_price:0}) === '0s', 'No complete runs takes zero time');
   check(app.demandDuration({seconds:'7200',full_runs_at_buy_price:null}) === 'Not available', 'Sell pricing does not invent a demand duration');

@@ -61,6 +61,7 @@ class ManufacturingQuery(LiquidityQuery):
         return value
 
     buy_demand_tolerance_pct: Decimal = Field(default=Decimal(5), ge=0, le=100, allow_inf_nan=False)
+    include_copying_time: bool = False
     include_invention_time: bool = False
     invention_slots: int = Field(default=1, ge=1, le=1000)
     production_lines: int = Field(default=1, ge=1, le=1000)
@@ -127,6 +128,7 @@ class ProfitCalculation(BaseModel):
 
 
 class Opportunity(ProfitCalculation):
+    demand_duration_seconds: Decimal | None = None
     type_id: int
     name: str
     blueprint_id: int

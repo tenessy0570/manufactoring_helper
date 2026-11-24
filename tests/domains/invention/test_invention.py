@@ -343,6 +343,8 @@ async def test_gateway_normalizes_scaled_attempts_and_fails_atomically() -> None
         with respx.mock:
             route = respx.get("https://test/v1/industry/cost").respond(200, json=fixture)
             plans = await gateway.fetch(settings(type_id=2456))
+            assert plans[0].copying_seconds_per_run is not None
+            assert abs(plans[0].copying_seconds_per_run - Decimal(153)) < Decimal("0.01")
             assert len(plans) == 9
             assert plans[0].materials[0].quantity == 1
             assert plans[0].source_blueprint_id == 2455

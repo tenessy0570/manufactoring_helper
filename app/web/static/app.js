@@ -26,7 +26,7 @@ document.addEventListener('alpine:init', () => {
     form: {}, page: {items:[],total:0,offset:0,limit:25},
     defaults() {return {search:'',hub_id:'jita',material_hub_id:'',tech:'',category:'',
       material_order_type:'sell',product_order_type:'sell',buy_demand_tolerance_pct:'5',min_profit:'',min_margin:'',min_daily_isk_volume:'',
-      include_invention_time:false,invention_slots:'1',manufacturing_runs:'1',production_lines:'1',days:'30',sales_tax:'0',buy_broker_fee:'0',sell_broker_fee:'0',facility_tax:'0',system_cost_index:'0',
+      include_copying_time:false,include_invention_time:false,invention_slots:'1',manufacturing_runs:'1',production_lines:'1',days:'30',sales_tax:'0',buy_broker_fee:'0',sell_broker_fee:'0',facility_tax:'0',system_cost_index:'0',
       min_product_volume:'',include_invention_cost:false,fresh_only:false,require_full_run_demand:false,
       rank_by:'profit_per_day',limit:'25'};},
     excludedItems:[],exclusionsOpen:false,excludedPage:0,
@@ -278,7 +278,7 @@ document.addEventListener('alpine:init', () => {
     demandTolerance(){const value=this.resultForm.buy_demand_tolerance_pct;return value===undefined||value===null||value===''?5:Number(value);},
     demandWarning(code){return {single_buy_order:'Only one buy order is available. Its removal could eliminate this selling opportunity.',single_buy_order_at_best:'Only one order offers the best buy price. The displayed profit may disappear when it fills.',buy_order_count_unknown:'The number of buy orders is unknown. Check available demand before building.',insufficient_buy_volume_for_one_run:'Buy orders within your selected price range cannot absorb one full production run.'}[code]||'Check the available buy demand before building.';},
     productionLines(){return Number(this.resultForm.production_lines)||1;},
-    demandDuration(item){const runs=item.full_runs_at_buy_price,seconds=Number(item.seconds);if(runs===null||runs===undefined||!Number.isFinite(seconds)||seconds<=0)return 'Not available';return this.duration(seconds*Math.ceil(runs/this.productionLines()));},
+    demandDuration(item){if(item.demand_duration_seconds!==null&&item.demand_duration_seconds!==undefined)return this.duration(item.demand_duration_seconds);const runs=item.full_runs_at_buy_price,seconds=Number(item.seconds);if(runs===null||runs===undefined||!Number.isFinite(seconds)||seconds<=0)return 'Not available';return this.duration(seconds*Math.ceil(runs/this.productionLines()));},
     duration(seconds){const n=Number(seconds);if(!Number.isFinite(n)||n<0)return 'Not available';const total=Math.ceil(n),d=Math.floor(total/86400),h=Math.floor(total%86400/3600),m=Math.floor(total%3600/60),s=total%60;return d?(d+'d '+h+'h '+m+'m'):h?(h+'h '+m+'m'):m?(m+'m '+s+'s'):s+'s';},
     inventionStatus(view){
       if(!view?.request)return 'No calculation is prepared for this market and pricing choice. Select Prepare calculation to queue it.';

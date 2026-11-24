@@ -52,6 +52,7 @@ class InventionMaterial(BaseModel):
 
 
 class InventionPlan(BaseModel):
+    copying_seconds_per_run: Decimal | None = Field(default=None, gt=0, allow_inf_nan=False)
     seconds_per_attempt: Decimal | None = Field(default=None, gt=0, allow_inf_nan=False)
     decryptor_id: int | None
     decryptor_name: str

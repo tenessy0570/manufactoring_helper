@@ -1,6 +1,6 @@
 from collections.abc import Callable
 from datetime import UTC, datetime, timedelta
-from decimal import Decimal
+from decimal import ROUND_CEILING, Decimal
 
 from app.core.freshness import HISTORY_FRESHNESS, MARKET_FRESHNESS, refresh_deadline
 from app.core.repository import UnitOfWork
@@ -203,7 +203,10 @@ class ManufacturingService:
         }
         invention_results = (
             await self._invention.requests([value.key for value in invention_settings.values()])
-            if (query.include_invention_cost or query.include_invention_time)
+            if (
+                query.include_invention_cost
+                or (query.include_invention_time or query.include_copying_time)
+            )
             and self._invention is not None
             else {}
         )
@@ -229,6 +232,7 @@ class ManufacturingService:
             if product is None:
                 missing_prices += 1
                 continue
+            preparation_seconds = Decimal(0)
             invention_plan = None
             invention_cost = Decimal(0)
             invention_status = "not_requested" if candidate.meta_group_id == 2 else "not_required"
@@ -237,13 +241,15 @@ class ManufacturingService:
             invention_stale = False
             invention_deadline = None
             if (
-                query.include_invention_cost or query.include_invention_time
+                query.include_invention_cost
+                or (query.include_invention_time or query.include_copying_time)
             ) and candidate.meta_group_id is None:
                 missing_invention += 1
                 invention_unavailable[candidate.type_id] = "unknown_meta_group"
                 continue
             if (
-                query.include_invention_cost or query.include_invention_time
+                query.include_invention_cost
+                or (query.include_invention_time or query.include_copying_time)
             ) and candidate.meta_group_id == 2:
                 cached = invention_results.get(invention_settings[candidate.type_id].key)
                 if (
@@ -259,10 +265,18 @@ class ManufacturingService:
                     )
                     continue
                 invention_plan = cached.result.best.plan
-                if (query.include_invention_time) and invention_plan.seconds_per_attempt is None:
+                if (
+                    query.include_invention_time and invention_plan.seconds_per_attempt is None
+                ) or (
+                    query.include_copying_time and invention_plan.copying_seconds_per_run is None
+                ):
                     missing_invention += 1
                     invention_unavailable[candidate.type_id] = "time_pending"
                     continue
+                if query.include_invention_time:
+                    preparation_seconds += invention_plan.seconds_per_attempt or Decimal(0)
+                if query.include_copying_time:
+                    preparation_seconds += invention_plan.copying_seconds_per_run or Decimal(0)
                 if query.include_invention_cost:
                     invention_cost = cached.result.best.expected_cost_per_unit
                 invention_option = cached.result.best.plan.decryptor_name
@@ -310,7 +324,7 @@ class ManufacturingService:
             demand_profit = demand.profit if demand else None
             limited_daily_profit = demand.daily_profit if demand else None
             if (
-                query.include_invention_time
+                (query.include_invention_time or query.include_copying_time)
                 and demand is not None
                 and invention_plan is not None
                 and demand.full_runs
@@ -322,7 +336,7 @@ class ManufacturingService:
                     calculated.seconds,
                     invention_plan.runs_per_copy,
                     invention_plan.probability,
-                    invention_plan.seconds_per_attempt or Decimal(0),
+                    preparation_seconds,
                     query.production_lines,
                     query.invention_slots,
                     cap_to_day=False,
@@ -352,9 +366,13 @@ class ManufacturingService:
             rank_daily_profit = (
                 calculated.profit_per_day if limited_daily_profit is None else limited_daily_profit
             )
-            if query.include_invention_time and not is_buy and invention_plan is not None:
+            if (
+                (query.include_invention_time or query.include_copying_time)
+                and not is_buy
+                and invention_plan is not None
+            ):
                 expected_invention_seconds = (
-                    (invention_plan.seconds_per_attempt or Decimal(0))
+                    (preparation_seconds)
                     / invention_plan.probability
                     / invention_plan.runs_per_copy
                     / query.invention_slots
@@ -400,8 +418,22 @@ class ManufacturingService:
                 )
             ):
                 continue
+            duration = None
+            if demand is not None:
+                duration = (Decimal(demand.full_runs) / query.production_lines).to_integral_value(
+                    rounding=ROUND_CEILING
+                ) * calculated.seconds
+                if invention_plan is not None and demand.full_runs and preparation_seconds:
+                    copies = (
+                        Decimal(demand.full_runs) / invention_plan.runs_per_copy
+                    ).to_integral_value(rounding=ROUND_CEILING)
+                    attempts = copies / invention_plan.probability
+                    duration += (
+                        max(Decimal(1), attempts / query.invention_slots) * preparation_seconds
+                    )
             results.append(
                 Opportunity(
+                    demand_duration_seconds=duration,
                     **calculated.model_dump(),
                     type_id=candidate.type_id,
                     name=candidate.name,
