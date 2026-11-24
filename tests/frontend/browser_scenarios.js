@@ -30,6 +30,15 @@ async function checkFrontendWorkflow() {
   app.saveSettings();app.hiddenColumns=[];app.restoreSettings();
   check(!app.columnVisible('cost')&&!app.columnVisible('margin'),'Column choices persist');
   app.hiddenColumns=[];
+
+  check(app.columnOptions.some(c=>c.id==='volumeShare'),'Daily volume share is selectable');
+  app.page.items[0].daily_production_units='1000';
+  app.page.items[0].daily_units='100';
+  app.page.items[0].daily_volume_share_pct='1000';
+  await app.$nextTick();
+  const share=document.querySelector('td[x-show="columnVisible(\'volumeShare\')"]');
+  check(share.textContent.includes('1000.0%')&&share.textContent.includes('built /'),'Volume share shows output and traded quantities');
+  check(share.querySelector('strong').classList.contains('negative'),'Output above regional daily volume is highlighted');
   const originalHub = app.resultForm.hub_id;
   app.form.hub_id = originalHub === 'amarr' ? 'hek' : 'amarr';
   check(app.hasChanges && app.resultForm.hub_id === originalHub, 'Drafts do not relabel results');

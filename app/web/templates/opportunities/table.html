@@ -27,6 +27,12 @@
       >
         PROFIT / DAY
       </th>
+      <th
+        x-show="columnVisible('volumeShare')"
+        title="Your estimated daily output across the selected lines divided by regional average traded units per day. Includes copying/invention time when enabled. This is capacity, not a sales forecast or market share guarantee."
+      >
+        DAILY VOLUME SHARE
+      </th>
       <th x-show="columnVisible('turnover')">REGIONAL TURNOVER / DAY</th>
       <th x-show="columnVisible('data')">DATA</th>
       <th></th>
@@ -108,6 +114,21 @@
           :class="Number(item.rank_profit_per_day) < 0 && 'negative'"
           x-text="money(item.rank_profit_per_day)"
         ></td>
+        <td x-show="columnVisible('volumeShare')">
+          <strong
+            :class="Number(item.daily_volume_share_pct)>100?'negative':''"
+            x-text="item.daily_volume_share_pct == null ? 'N/A' : percent(item.daily_volume_share_pct)"
+          ></strong>
+          <div
+            class="muted"
+            x-show="item.daily_volume_share_pct != null"
+            x-text="money(item.daily_production_units)+' built / '+money(item.daily_units)+' traded per day'"
+          ></div>
+          <div
+            class="muted"
+            x-show="item.daily_volume_share_pct == null"
+          >No traded volume available</div>
+        </td>
         <td
           x-show="columnVisible('turnover')"
           :title="item.daily_isk_volume === null ? 'No trading history for this period' : fullMoney(item.daily_isk_volume) + ' ISK per day across the region'"

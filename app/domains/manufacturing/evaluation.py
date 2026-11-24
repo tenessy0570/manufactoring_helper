@@ -156,6 +156,12 @@ def evaluate_opportunities(
                 warnings.append("insufficient_buy_volume_for_one_run")
         opportunity = Opportunity(
             demand_duration_seconds=duration,
+            daily_production_units=timing.daily_production_units,
+            daily_volume_share_pct=(
+                timing.daily_production_units / candidate.daily_units * 100
+                if candidate.daily_units is not None and candidate.daily_units > 0
+                else None
+            ),
             **calculated.model_dump(),
             type_id=candidate.type_id,
             name=candidate.name,

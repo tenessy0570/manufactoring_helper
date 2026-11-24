@@ -51,5 +51,13 @@ async def test_all_opportunity_fields_match_pre_refactor_responses() -> None:
         cases = CASES
         for case in cases:
             page = await service.opportunities(ManufacturingQuery.model_validate(case["query"]))
-            assert page.model_dump(mode="json") == case["expected"], case["query"]
+            assert (
+                page.model_dump(
+                    mode="json",
+                    exclude={
+                        "items": {"__all__": {"daily_production_units", "daily_volume_share_pct"}}
+                    },
+                )
+                == case["expected"]
+            ), case["query"]
     await engine.dispose()

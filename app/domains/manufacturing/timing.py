@@ -19,6 +19,15 @@ def calculate_timing(
     invention_plan: InventionPlan | None,
     preparation_seconds: Decimal,
 ) -> OpportunityTiming:
+    seconds_per_run = calculated.seconds / query.production_lines
+    if (query.include_invention_time or query.include_copying_time) and invention_plan is not None:
+        seconds_per_run += (
+            preparation_seconds
+            / invention_plan.probability
+            / invention_plan.runs_per_copy
+            / query.invention_slots
+        )
+    daily_production_units = Decimal(calculated.units) * 86400 / seconds_per_run
     is_buy = query.product_order_type == "buy"
     limited_daily_profit = demand.daily_profit if demand else None
     if (
@@ -91,6 +100,7 @@ def calculate_timing(
             attempts = copies / invention_plan.probability
             duration += max(Decimal(1), attempts / query.invention_slots) * preparation_seconds
     return OpportunityTiming(
+        daily_production_units=daily_production_units,
         daily_profit=rank_daily_profit,
         demand_daily_profit=limited_daily_profit,
         duration_seconds=duration,

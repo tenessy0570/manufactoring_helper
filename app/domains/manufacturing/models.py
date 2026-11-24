@@ -67,6 +67,8 @@ class ProfitCalculation(BaseModel):
 
 class Opportunity(ProfitCalculation):
     demand_duration_seconds: Decimal | None = None
+    daily_production_units: Decimal | None = None
+    daily_volume_share_pct: Decimal | None = None
     type_id: int
     name: str
     blueprint_id: int
@@ -182,6 +184,7 @@ class OpportunityInputs(BaseModel):
 
 
 class OpportunityTiming(BaseModel):
+    daily_production_units: Decimal
     daily_profit: Decimal
     demand_daily_profit: Decimal | None
     duration_seconds: Decimal | None

@@ -81,6 +81,9 @@ document.addEventListener('alpine:init', () => {
       id: 'daily',
       label: 'Profit / day'
     }, {
+      id: 'volumeShare',
+      label: 'Daily volume share'
+    }, {
       id: 'turnover',
       label: 'Regional turnover / day'
     }, {
