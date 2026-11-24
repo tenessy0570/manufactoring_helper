@@ -1,0 +1,79 @@
+<section class="production-purchases" aria-label="Material shopping lists">
+  <h3>Prepare expenses &amp; shopping</h3>
+  <fieldset :disabled="busy">
+    <div class="filter-grid">
+      <label>
+        Price hub (best invention option)
+        <select x-model="hub">
+          <option value="jita">Jita</option>
+          <option value="amarr">Amarr</option>
+          <option value="dodixie">Dodixie</option>
+          <option value="rens">Rens</option>
+          <option value="hek">Hek</option>
+        </select>
+      </label>
+    </div>
+    <section class="production-action-group" aria-label="Fill expenses">
+      <h4>Fill expenses</h4>
+      <div class="production-actions">
+        <button
+          type="button"
+          class="button invention-action"
+          @click="prepareExpense('invention')"
+          :disabled="busy||!details.units"
+        >
+          Fill invention expense
+        </button>
+        <button
+          type="button"
+          class="button materials-action"
+          @click="prepareExpense('materials')"
+          :disabled="busy||!details.actual_runs"
+        >
+          Fill materials expense
+        </button>
+        <button
+          type="button"
+          class="button manufacturing-action"
+          @click="prepareExpense('manufacturing')"
+          :disabled="busy||!details.actual_runs"
+        >
+          Fill production expense
+        </button>
+      </div>
+    </section>
+    <section class="production-action-group" aria-label="Copy shopping lists">
+      <h4>Copy shopping lists</h4>
+      <div class="production-actions">
+        <button
+          type="button"
+          class="button invention-action"
+          @click="copyMaterials('invention')"
+          :disabled="busy||!details.units"
+        >
+          Copy invention materials
+        </button>
+        <button
+          type="button"
+          class="button materials-action"
+          @click="copyMaterials('materials')"
+          :disabled="busy||!details.actual_runs"
+        >
+          Copy manufacturing materials
+        </button>
+      </div>
+    </section>
+  </fieldset>
+  <p class="muted">EVE Multibuy format. Invention uses your selected decryptor, best value by default. BPCs excluded. Manufacturing uses ME 0.</p>
+  <div x-show="purchaseText" x-cloak>
+    <p class="muted" x-text="purchaseNote"></p>
+    <label>
+      Purchase list<textarea
+        rows="4"
+        readonly
+        :value="purchaseText"
+        @focus="$el.select()"
+      ></textarea>
+    </label>
+  </div>
+</section>

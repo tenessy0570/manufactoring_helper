@@ -12,6 +12,7 @@ window.productionEntries = () => ({
       comment: ''
     };
     this.editingId = null;
+    this.estimateRuns = '';
     this.resetEstimate();
   },
   async saveEntry() {

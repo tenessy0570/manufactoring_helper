@@ -13,7 +13,9 @@
       <thead>
         <tr>
           <th>Product</th>
-          <th>Units</th>
+          <th>Planned units</th>
+          <th>Actual units</th>
+          <th>BPC runs</th>
           <th>Status</th>
           <th>Invention</th>
           <th>Materials</th>
@@ -43,10 +45,12 @@
               <div class="muted production-comment" x-text="item.comment"></div>
             </td>
             <td x-text="item.units??'—'"></td>
+            <td x-text="item.actual_units??'Not set'"></td>
+            <td x-text="item.actual_runs??'Not set'"></td>
             <td x-text="item.status==='completed'?'Completed':'In progress'"></td>
-            <td class="expense-tone" x-text="money(item.totals.invention)"></td>
-            <td class="expense-tone" x-text="money(item.totals.materials)"></td>
-            <td class="expense-tone" x-text="money(item.totals.manufacturing)"></td>
+            <td class="invention-tone" x-text="money(item.totals.invention)"></td>
+            <td class="materials-tone" x-text="money(item.totals.materials)"></td>
+            <td class="manufacturing-tone" x-text="money(item.totals.manufacturing)"></td>
             <td class="income-tone" x-text="money(item.totals.income)"></td>
             <td
               :class="Number(item.totals.balance)<0?'expense-tone':'income-tone'"

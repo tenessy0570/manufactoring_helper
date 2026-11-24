@@ -9,6 +9,8 @@ document.addEventListener('alpine:init', () => {
     message: '',
     details: {
       units: '',
+      actual_units: '',
+      actual_runs: '',
       comment: '',
       status: 'in_progress'
     },
@@ -68,7 +70,7 @@ document.addEventListener('alpine:init', () => {
         const rows = await this.api('?' + new URLSearchParams({
           offset,
           limit: 50
-        }, [window.productionBlueprint, window.productionEstimates, window.productionEntries]));
+        }));
         this.items = rows;
         this.offset = offset;
       });
@@ -81,6 +83,8 @@ document.addEventListener('alpine:init', () => {
       this.matches = [];
       this.details = {
         units: '',
+        actual_units: '',
+        actual_runs: '',
         comment: '',
         status: 'in_progress'
       };
@@ -96,16 +100,23 @@ document.addEventListener('alpine:init', () => {
       this.creating = false;
       this.details = {
         units: item.units ?? '',
+        actual_units: item.actual_units ?? '',
+        actual_runs: item.actual_runs ?? '',
         comment: item.comment,
         status: item.status
       };
       this.estimateUnits = item.units ?? '';
+      this.estimateRuns = '';
+      this.purchaseText = '';
+      this.purchaseNote = '';
       this.resetEntry();
     },
     detailsPayload() {
       return {
         ...this.details,
-        units: this.details.units === '' ? null : Number(this.details.units)
+        units: this.details.units === '' ? null : Number(this.details.units),
+        actual_units: this.details.actual_units === '' ? null : Number(this.details.actual_units),
+        actual_runs: this.details.actual_runs === '' ? null : Number(this.details.actual_runs)
       };
     },
     async create() {
@@ -149,5 +160,5 @@ document.addEventListener('alpine:init', () => {
         this.message = 'Production deleted.';
       });
     },
-  }, [window.productionBlueprint, window.productionEstimates, window.productionEntries]));
+  }, [window.productionBlueprint, window.productionEstimates, window.productionEntries, window.productionPurchases]));
 });

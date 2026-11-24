@@ -8,10 +8,12 @@ from app.core.freshness import refresh_deadline
 from app.core.repository import UnitOfWork
 from app.domains.catalog.models import ItemTypeClause
 from app.domains.catalog.repository import ItemTypeRepository
+from app.domains.invention.models import ShoppingOption, ShoppingPlan
 from app.domains.invention.shopping import ShoppingService, ceiling
 from app.domains.manufacturing.repository import ManufacturingRepository
 from app.domains.production.errors import ProductionError
 from app.domains.production.models import (
+    BatchInput,
     DecryptorEstimate,
     Entry,
     EntryInput,
@@ -20,6 +22,9 @@ from app.domains.production.models import (
     Production,
     ProductionCreate,
     ProductionDetails,
+    ProductionPurchaseList,
+    PurchaseListInput,
+    PurchaseMaterial,
 )
 from app.domains.production.repository import ProductionRepository
 
@@ -77,6 +82,8 @@ class ProductionService:
             data.comment,
             data.status,
         )
+        production.actual_units = data.actual_units
+        production.actual_runs = data.actual_runs
         return await self.persist(production)
 
     async def entry(
@@ -126,22 +133,8 @@ class ProductionEstimateService:
     async def estimate(self, user_id: UUID, production_id: UUID, data: EstimateInput) -> Estimate:
         production = await self.productions.get(user_id, production_id)
         if data.kind == "invention":
-            plan = await self.shopping.plan(production.type_id, data.units, data.hub_id)
-            selected = (
-                plan.best
-                if data.decryptor_id == "best"
-                else next(
-                    (option for option in plan.options if option.decryptor_id == data.decryptor_id),
-                    None,
-                )
-            )
-            if selected is None:
-                raise ProductionError(
-                    ErrorKind.CONFLICT if data.decryptor_id == "best" else ErrorKind.INVALID_INPUT,
-                    "No priced invention plan. Prepare it in Invention shopping, then retry."
-                    if data.decryptor_id == "best"
-                    else "This decryptor is not available for this blueprint.",
-                )
+            assert data.units is not None
+            plan, selected = await self.invention_option(production.type_id, data)
             if selected.estimated_cost is None:
                 raise ProductionError(
                     ErrorKind.CONFLICT,
@@ -183,7 +176,7 @@ class ProductionEstimateService:
                 "No saved manufacturing recipe. Wait for the background recipe sync.",
             )
         recipe = state.recipe
-        runs = ceiling(Decimal(data.units) / recipe.units)
+        runs = batch_runs(data, recipe.units)
         stale = state.expires_at <= datetime.now(UTC)
         if data.kind == "manufacturing":
             if recipe.estimated_item_value is None and (
@@ -235,3 +228,67 @@ class ProductionEstimateService:
             description=description,
             stale=stale,
         )
+
+    async def invention_option(
+        self, type_id: int, data: EstimateInput | PurchaseListInput
+    ) -> tuple[ShoppingPlan, ShoppingOption]:
+        assert data.units is not None
+        plan = await self.shopping.plan(type_id, data.units, data.hub_id)
+        selected = (
+            plan.best
+            if data.decryptor_id == "best"
+            else next(
+                (option for option in plan.options if option.decryptor_id == data.decryptor_id),
+                None,
+            )
+        )
+        if selected is None:
+            raise ProductionError(
+                ErrorKind.CONFLICT if data.decryptor_id == "best" else ErrorKind.INVALID_INPUT,
+                "No priced invention plan. Prepare it in Invention shopping, then retry."
+                if data.decryptor_id == "best"
+                else "This decryptor is not available for this blueprint.",
+            )
+        return plan, selected
+
+    async def purchase_list(
+        self, user_id: UUID, production_id: UUID, data: PurchaseListInput
+    ) -> ProductionPurchaseList:
+        production = await self.productions.get(user_id, production_id)
+        if data.kind == "invention":
+            assert data.units is not None
+            plan, selected = await self.invention_option(production.type_id, data)
+            return ProductionPurchaseList(
+                materials=[
+                    PurchaseMaterial(type_id=m.type_id, quantity=m.quantity)
+                    for m in selected.materials
+                ],
+                description=(
+                    f"{selected.attempts:,} expected attempts; "
+                    f"{selected.decryptor_name or 'No decryptor'}. "
+                    "Skills II/II/II. T1 BPCs excluded; success is not guaranteed."
+                ),
+                stale=plan.stale,
+            )
+        state = (await self.market.recipes([production.type_id])).get(production.type_id)
+        if state is None or state.recipe is None:
+            raise ProductionError(
+                ErrorKind.CONFLICT,
+                "No saved manufacturing recipe. Wait for the background recipe sync.",
+            )
+        runs = batch_runs(data, state.recipe.units)
+        return ProductionPurchaseList(
+            materials=[
+                PurchaseMaterial(type_id=m.type_id, quantity=m.quantity * runs)
+                for m in state.recipe.materials
+            ],
+            description=f"{runs:,} runs / {runs * state.recipe.units:,} units; ME 0.",
+            stale=state.expires_at <= datetime.now(UTC),
+        )
+
+
+def batch_runs(data: BatchInput, units_per_run: int) -> int:
+    if data.manufacturing_runs is not None:
+        return data.manufacturing_runs
+    assert data.units is not None
+    return ceiling(Decimal(data.units) / units_per_run)

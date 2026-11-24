@@ -27,12 +27,12 @@
         </button>
       </div>
     </div>
-    <details class="production-details">
+    <details class="production-details" open>
       <summary>Batch details <span
         class="muted"
         x-text="(selected.units??'Not set')+' units | '+(selected.status==='completed'?'Completed':'In progress')"
       ></span></summary>
-      <form @submit.prevent="saveDetails()">
+      <form id="production-details-form" @submit.prevent="saveDetails()">
         <fieldset :disabled="busy">
           <div class="filter-grid">
             <label>
@@ -43,18 +43,38 @@
                 step="1"
                 x-model="details.units"
                 placeholder="Not set"
-              ></label><label>Status<select x-model="details.status">
-              <option value="in_progress">In progress</option>
-              <option value="completed">Completed</option>
+              ></label><label>Actual finished units
+              <input
+                type="number"
+                min="0"
+                max="1000000000"
+                step="1"
+                x-model="details.actual_units"
+                placeholder="Not known yet"
+              >
+              </label>
+              <label>
+                Available T2 BPC runs
+                <input
+                  type="number"
+                  min="0"
+                  max="1000000000"
+                  step="1"
+                  x-model="details.actual_runs"
+                  placeholder="Enter runs obtained after invention"
+                >
+              </label>
+              <label>
+                Status<select x-model="details.status">
+                <option value="in_progress">In progress</option>
+                <option value="completed">Completed</option>
               </select></label><label>Comment<input x-model="details.comment" maxlength="2000">
               </label>
-            </div>
-            <div class="production-actions">
-              <button class="button secondary" :disabled="busy">Save details</button>
             </div>
           </fieldset>
         </form>
       </details>
+      {% include "production/purchase_list.html" %}
       <div class="shopping-stats production-totals">
         <div class="expense-card"><span>Total expenses</span><strong x-text="money(selected.totals.cost)+' ISK'"></strong></div>
         <div class="income-card"><span>Received from sales</span><strong x-text="money(selected.totals.income)+' ISK'"></strong></div>
@@ -91,12 +111,12 @@
                 <td>
                   <span
                     class="production-kind"
-                    :class="item.kind==='income'?'income-tone':'expense-tone'"
+                    :class="item.kind+'-tone'"
                     x-text="label(item.kind)"
                   ></span>
                 </td>
                 <td
-                  :class="item.kind==='income'?'income-tone':'expense-tone'"
+                  :class="item.kind+'-tone'"
                   x-text="(item.kind==='income'?'+':'-')+money(item.amount)"
                 ></td>
                 <td class="production-comment" x-text="item.comment"></td>
@@ -111,6 +131,20 @@
             </template>
           </tbody>
         </table>
+      </div>
+      <div
+        class="production-save-bar"
+        role="group"
+        aria-label="Save batch details"
+      >
+        <button
+          type="submit"
+          form="production-details-form"
+          class="button primary"
+          :disabled="busy"
+        >
+          Save changes
+        </button>
       </div>
     </section>
   </template>

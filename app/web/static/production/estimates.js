@@ -1,5 +1,6 @@
 window.productionEstimates = () => ({
   estimateUnits: '',
+  estimateRuns: '',
   hub: 'jita',
   side: 'sell',
   buyBroker: '0',
@@ -57,7 +58,11 @@ window.productionEstimates = () => ({
       const result = await this.api('/' + this.selected.id + '/estimate', 'POST', {
         kind: this.entry.kind,
         decryptor_id: this.decryptorChoice === 'best' ? 'best' : this.decryptorChoice === 'none' ? null : Number(this.decryptorChoice),
-        units: Number(this.estimateUnits),
+        ...(this.entry.kind !== 'invention' && this.estimateRuns ? {
+          manufacturing_runs: Number(this.estimateRuns)
+        } : {
+          units: Number(this.estimateUnits)
+        }),
         hub_id: this.hub,
         material_order_type: this.side,
         buy_broker_fee: this.buyBroker || '0',

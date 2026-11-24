@@ -60,3 +60,30 @@ def test_catalog_migration_upgrades_and_downgrades() -> None:
         migration["downgrade"]()
         assert "item_types" not in inspect(connection).get_table_names()
     engine.dispose()
+
+
+def test_actual_units_migration_preserves_existing_plans_and_transactions() -> None:
+    migration = runpy.run_path("alembic/versions/0017_production_actual_units.py")
+    engine = create_engine("sqlite:///:memory:")
+    with engine.begin() as connection, Operations.context(MigrationContext.configure(connection)):
+        connection.exec_driver_sql(
+            "CREATE TABLE productions (id INTEGER PRIMARY KEY, units INTEGER, entries TEXT)"
+        )
+        connection.exec_driver_sql("INSERT INTO productions VALUES (1, 100, 'saved-transactions')")
+        migration["upgrade"]()
+        assert connection.exec_driver_sql(
+            "SELECT units, actual_units, entries FROM productions"
+        ).one() == (100, None, "saved-transactions")
+        connection.exec_driver_sql("UPDATE productions SET actual_units=80")
+        actual_runs = runpy.run_path("alembic/versions/0018_production_actual_runs.py")
+        actual_runs["upgrade"]()
+        assert connection.exec_driver_sql(
+            "SELECT actual_units, actual_runs FROM productions"
+        ).one() == (80, None)
+        actual_runs["downgrade"]()
+        migration["downgrade"]()
+        assert connection.exec_driver_sql("SELECT units, entries FROM productions").one() == (
+            100,
+            "saved-transactions",
+        )
+    engine.dispose()

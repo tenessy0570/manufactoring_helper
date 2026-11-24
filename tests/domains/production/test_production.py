@@ -27,6 +27,7 @@ from app.domains.production.models import (
     Production,
     ProductionCreate,
     ProductionDetails,
+    PurchaseListInput,
 )
 from app.domains.production.repository import ProductionRepository, SQLProductionRepository
 from app.domains.production.service import (
@@ -258,8 +259,21 @@ async def test_authenticated_api_ownership_and_sql_roundtrip(
         assert (await client.get(path)).status_code == 200
         assert len((await client.get("/api/v1/productions")).json()) == 1
         assert (
-            await client.put(path, json={"units": 200, "comment": "batch"}, headers=headers)
+            await client.put(
+                path,
+                json={"units": 200, "actual_units": 175, "actual_runs": 3, "comment": "batch"},
+                headers=headers,
+            )
         ).status_code == 200
+        persisted = (await client.get(path)).json()
+        assert persisted["units"] == 200
+        assert persisted["actual_units"] == 175
+        assert persisted["actual_runs"] == 3
+        purchases = await client.post(
+            path + "/purchase-list", json={"kind": "materials", "units": 3}, headers=headers
+        )
+        assert purchases.status_code == 200
+        assert purchases.json()["materials"] == [{"type_id": 34, "quantity": 20}]
         added = await client.post(
             path + "/entries", json={"kind": "income", "amount": "1.23"}, headers=headers
         )
@@ -293,6 +307,7 @@ async def test_authenticated_api_ownership_and_sql_roundtrip(
             ("PUT", "/entries/" + entry_id, {"kind": "income", "amount": "1"}),
             ("DELETE", "/entries/" + entry_id, None),
             ("POST", "/estimate", {"kind": "manufacturing", "units": 1}),
+            ("POST", "/purchase-list", {"kind": "materials", "units": 1}),
         ]:
             response = await client.request(method, path + suffix, json=body, headers=headers)
             assert response.status_code == 404
@@ -381,3 +396,79 @@ async def test_invention_decryptor_override_and_best_batch_budget() -> None:
 def test_invalid_decryptor_is_rejected(decryptor: object) -> None:
     with pytest.raises(ValidationError):
         EstimateInput.model_validate({"kind": "invention", "units": 1, "decryptor_id": decryptor})
+
+
+async def test_purchase_lists_round_runs_exclude_bpcs_and_keep_entries_unchanged() -> None:
+    svc = service()
+    row = await svc.create(uuid4(), ProductionCreate(type_id=10, units=50001))
+    market = AsyncMock(spec=ManufacturingRepository)
+    market.recipes.return_value = {10: recipe_state(recipe=recipe(units=5000))}
+    market.quotes.return_value = {34: price(34, sell_price="100")}
+    invention = AsyncMock(spec=InventionRepository)
+    now = datetime.now(UTC)
+    invention.plan.return_value = PlanState(
+        key=settings().plan_key,
+        plans=[plan(units_per_run=5000)],
+        synced_at=now,
+        expires_at=now + timedelta(days=1),
+    )
+    estimator = ProductionEstimateService(svc, market, ShoppingService(invention, market))
+    materials = await estimator.purchase_list(
+        row.user_id, row.id, PurchaseListInput(kind="materials", units=5001)
+    )
+    assert [(m.type_id, m.quantity) for m in materials.materials] == [(34, 20)]
+    copied = await estimator.purchase_list(
+        row.user_id, row.id, PurchaseListInput(kind="invention", units=50001)
+    )
+    assert [(m.type_id, m.quantity) for m in copied.materials] == [(34, 10)]
+    assert "T1 BPCs excluded" in copied.description
+    updated = await svc.update(
+        row.user_id, row.id, ProductionDetails(units=50001, actual_units=45000)
+    )
+    assert updated.units == 50001
+    assert updated.actual_units == 45000
+    assert updated.entries == []
+    with pytest.raises(ProductionError):
+        await estimator.purchase_list(uuid4(), row.id, PurchaseListInput(kind="materials", units=1))
+    market.recipes.return_value = {}
+    with pytest.raises(ProductionError):
+        await estimator.purchase_list(
+            row.user_id, row.id, PurchaseListInput(kind="materials", units=1)
+        )
+
+
+async def test_actual_bpc_runs_drive_materials_and_installation_instead_of_planned_units() -> None:
+    svc = service()
+    row = await svc.create(uuid4(), ProductionCreate(type_id=10, units=999999, actual_runs=3))
+    market = AsyncMock(spec=ManufacturingRepository)
+    market.recipes.return_value = {10: recipe_state(recipe=recipe(units=5000))}
+    market.quotes.return_value = {34: price(34, sell_price="3")}
+    estimator = ProductionEstimateService(svc, market, AsyncMock(spec=ShoppingService))
+    result = await estimator.purchase_list(
+        row.user_id, row.id, PurchaseListInput(kind="materials", manufacturing_runs=3)
+    )
+    assert result.materials[0].quantity == 30
+    assert "15,000 units" in result.description
+    cost = await estimator.estimate(
+        row.user_id, row.id, EstimateInput(kind="manufacturing", manufacturing_runs=3)
+    )
+    assert cost.amount == 12
+    materials = await estimator.estimate(
+        row.user_id, row.id, EstimateInput(kind="materials", manufacturing_runs=3)
+    )
+    assert materials.amount == 90
+    assert (await svc.get(row.user_id, row.id)).units == 999999
+
+
+@pytest.mark.parametrize(
+    "values",
+    [
+        {"kind": "materials"},
+        {"kind": "materials", "units": 100, "manufacturing_runs": 3},
+        {"kind": "invention", "manufacturing_runs": 3},
+        {"kind": "invention", "units": 100, "manufacturing_runs": 3},
+    ],
+)
+def test_batch_quantity_cannot_mix_runs_and_finished_units(values: dict[str, object]) -> None:
+    with pytest.raises(ValidationError):
+        EstimateInput.model_validate(values)

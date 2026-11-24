@@ -3,7 +3,7 @@ from decimal import Decimal
 from typing import Annotated, Literal
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, Field, PositiveInt, computed_field
+from pydantic import BaseModel, ConfigDict, Field, PositiveInt, computed_field, model_validator
 
 from app.domains.market.models import HubId
 
@@ -14,6 +14,8 @@ Kind = Literal["invention", "materials", "manufacturing", "income"]
 class ProductionDetails(BaseModel):
     model_config = ConfigDict(extra="forbid")
     units: int | None = Field(default=None, ge=1, le=10**9)
+    actual_units: int | None = Field(default=None, ge=0, le=10**9)
+    actual_runs: int | None = Field(default=None, ge=0, le=10**9)
     comment: str = Field(default="", max_length=2000)
     status: Literal["in_progress", "completed"] = "in_progress"
 
@@ -60,12 +62,25 @@ class Production(ProductionCreate):
         return totals
 
 
-class EstimateInput(BaseModel):
+class BatchInput(BaseModel):
     model_config = ConfigDict(extra="forbid")
     kind: Literal["invention", "materials", "manufacturing"]
-    decryptor_id: PositiveInt | Literal["best"] | None = "best"
-    units: int = Field(ge=1, le=10**9)
+    units: int | None = Field(default=None, ge=1, le=10**9)
+    manufacturing_runs: int | None = Field(default=None, ge=1, le=10**9)
     hub_id: HubId = "jita"
+    decryptor_id: PositiveInt | Literal["best"] | None = "best"
+
+    @model_validator(mode="after")
+    def quantity(self) -> "BatchInput":
+        if self.kind == "invention":
+            if self.units is None or self.manufacturing_runs is not None:
+                raise ValueError("Invention requires finished units, not manufacturing runs")
+        elif (self.units is None) == (self.manufacturing_runs is None):
+            raise ValueError("Provide finished units or manufacturing runs, not both")
+        return self
+
+
+class EstimateInput(BatchInput):
     material_order_type: Literal["buy", "sell"] = "sell"
     buy_broker_fee: Decimal = Field(default=Decimal(0), ge=0, le=100, allow_inf_nan=False)
     facility_tax: Decimal = Field(default=Decimal(0), ge=0, le=100, allow_inf_nan=False)
@@ -88,3 +103,18 @@ class Estimate(BaseModel):
     complete_comparison: bool = True
     decryptor_options: list[DecryptorEstimate] = Field(default_factory=list)
     selected_decryptor_id: int | None = None
+
+
+class PurchaseListInput(BatchInput):
+    kind: Literal["invention", "materials"]
+
+
+class PurchaseMaterial(BaseModel):
+    type_id: int
+    quantity: int
+
+
+class ProductionPurchaseList(BaseModel):
+    materials: list[PurchaseMaterial]
+    description: str
+    stale: bool = False

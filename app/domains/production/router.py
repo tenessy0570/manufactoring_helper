@@ -11,6 +11,8 @@ from app.domains.production.models import (
     Production,
     ProductionCreate,
     ProductionDetails,
+    ProductionPurchaseList,
+    PurchaseListInput,
 )
 from app.domains.production.service import ProductionEstimateService, ProductionService
 
@@ -94,3 +96,13 @@ async def estimate(
     service: FromDishka[ProductionEstimateService],
 ) -> Estimate:
     return await service.estimate(request.state.user.id, production_id, data)
+
+
+@router.post("/{production_id}/purchase-list")
+async def purchase_list(
+    production_id: UUID,
+    data: PurchaseListInput,
+    request: Request,
+    service: FromDishka[ProductionEstimateService],
+) -> ProductionPurchaseList:
+    return await service.purchase_list(request.state.user.id, production_id, data)

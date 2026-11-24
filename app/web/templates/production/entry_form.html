@@ -59,7 +59,7 @@
           <div class="production-actions">
             <button
               class="button"
-              :class="entry.kind==='income'?'income-button':'expense-button'"
+              :class="entry.kind+'-action'"
               :disabled="busy"
               x-text="editingId?'Save transaction':entry.kind==='income'?'+ Add income':'- Add expense'"
             ></button><button
@@ -80,6 +80,7 @@
               Finished units for this expense<input
                 type="number"
                 x-model="estimateUnits"
+                @input="estimateRuns=''"
                 min="1"
                 max="1000000000"
                 step="1"
@@ -188,11 +189,17 @@
                 </details>
               </div>
             </div>
+            <p
+              class="muted"
+              x-show="entry.kind!=='invention'&&estimateRuns"
+              x-text="estimateRuns+' available T2 BPC runs'"
+            ></p>
             <button
               type="button"
               class="button secondary"
+              :class="entry.kind+'-action'"
               @click="estimate()"
-              :disabled="busy||!estimateUnits||(entry.kind==='invention'&&(optionsLoading||!selectedDecryptor))"
+              :disabled="busy||(!estimateUnits&&!estimateRuns)||(entry.kind==='invention'&&(optionsLoading||!selectedDecryptor))"
             >
               Fill expense amount
             </button>
