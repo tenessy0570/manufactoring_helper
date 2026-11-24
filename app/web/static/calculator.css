@@ -1,13 +1,387 @@
-.calculator-layout{display:grid;grid-template-columns:minmax(320px,.85fr) minmax(0,1.3fr);gap:24px;align-items:start}.calculator-settings,.calculator-result{display:grid;gap:18px;min-width:0}.calc-panel{background:#151e25;border:1px solid #30414b;border-radius:12px;padding:24px;min-width:0}.calc-panel h2{font-size:17px;font-weight:600;margin:0 0 18px}.calc-panel label{display:flex;flex-direction:column;gap:7px;color:#9bb7ca;font-size:12px;margin-bottom:16px}.calc-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:0 18px}.calc-panel input,.calc-panel select{width:100%;min-width:0}.calc-panel .calc-toggle{flex-direction:row;align-items:center;margin-top:18px}.calc-toggle input{width:16px;height:16px}.calc-submit{width:100%}.calc-breakdown{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:12px 20px;font-size:13px}.calc-breakdown dt{color:#9bb7ca}.calc-breakdown dd{text-align:right;font-variant-numeric:tabular-nums}.calc-totals{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px;margin:22px 0}.calc-totals>div{border:1px solid #30414b;border-radius:8px;padding:14px}.calc-totals span{display:block;color:#9bb7ca;font-size:12px}.calc-totals strong{display:block;font-size:21px;margin-top:8px;overflow-wrap:anywhere}.calc-positive strong{color:#79dfae}.calc-negative strong{color:#fa8888}.calc-warning{background:#382d19;color:#f6c878;padding:12px;border-radius:6px;font-size:12px;margin:12px 0}.calculator-settings .blueprint-picker{margin-bottom:18px}.calculator-result .material-table{min-width:490px}.calculator-result .item-name img{width:48px;height:48px}.calculator-result .item-name h2{margin-bottom:4px}@media(max-width:1150px){.calculator-layout{grid-template-columns:minmax(0,1fr)}}@media(max-width:480px){.calc-panel{padding:16px}.calc-grid{grid-template-columns:minmax(0,1fr)}.calc-totals strong{font-size:17px}.calc-breakdown{gap:10px;font-size:12px}}
+.calculator-layout {
+    display: grid;
+    grid-template-columns: minmax(320px, .85fr) minmax(0, 1.3fr);
+    gap: 24px;
+    align-items: start
+}
 
-.calculator-result .item-name p span,.calculator-result .item-name p strong{display:inline;font-size:inherit}.calculator-result .item-name p{margin:0}
+.calculator-settings,
+.calculator-result {
+    display: grid;
+    gap: 18px;
+    min-width: 0
+}
 
-.calculator-settings .blueprint-suggestions{position:static;margin-top:6px;max-height:300px;overflow-y:auto}.calculator-settings .blueprint-picker{min-width:0}
+.calc-panel {
+    background: #151e25;
+    border: 1px solid #30414b;
+    border-radius: 12px;
+    padding: 24px;
+    min-width: 0
+}
 
-.calculator-heading{position:sticky;top:0;z-index:20;background:#0e141a;padding:12px 0;margin-bottom:16px;gap:16px;align-items:center}.calculator-heading h1{font-size:28px}.calculator-heading .eyebrow{display:none}.calculator-heading p{margin-top:6px}.calculator-heading .button{flex-shrink:0}.calculator-settings,.calculator-result{gap:12px}.calc-panel{padding:16px}.calc-panel h2{font-size:15px;margin-bottom:12px}.calc-panel label{margin-bottom:10px;gap:5px}.calc-panel input:not([type=checkbox]),.calc-panel select{padding:8px 10px;height:36px}.calc-panel .calc-toggle{margin-top:10px}.calc-panel .muted{font-size:11px;line-height:1.6}.calculator-settings .blueprint-picker{margin-bottom:10px}.calculator-result>.calculator-result{grid-template-columns:repeat(2,minmax(0,1fr));grid-template-areas:"summary summary" "materials materials" "output installation"}.calculator-result>.calculator-result>section:first-child{grid-area:summary}.calc-output{grid-area:output}.calc-materials{grid-area:materials}.calc-installation{grid-area:installation}.calc-totals{grid-template-columns:repeat(4,minmax(0,1fr));gap:8px;margin:14px 0}.calc-totals>div{padding:10px}.calc-totals strong{font-size:17px}.calc-breakdown{gap:8px 12px;font-size:12px}.calc-warning{padding:8px;margin:8px 0}.calculator-result .material-table td,.calculator-result .material-table th{padding:10px 8px}
-@media(max-width:1350px){.calc-totals{grid-template-columns:repeat(2,minmax(0,1fr))}.calculator-result>.calculator-result{grid-template-columns:minmax(0,1fr);grid-template-areas:"summary" "materials" "output" "installation"}}@media(max-width:600px){.calculator-heading{flex-direction:column;align-items:stretch}.calculator-heading h1{font-size:23px}.calculator-heading p{display:none}.calculator-heading .button{width:100%}}
+.calc-panel h2 {
+    font-size: 17px;
+    font-weight: 600;
+    margin: 0 0 18px
+}
 
-.calculator-result .table-wrap{min-height:0}.calc-tax .calc-grid{grid-template-columns:repeat(3,minmax(0,1fr));gap:0 12px}@media(min-width:1151px){.calc-blueprint{display:grid;grid-template-columns:minmax(0,1fr) 95px;gap:0 12px;align-items:start}.calc-blueprint h2,.calc-blueprint>.calc-toggle,.calc-blueprint>p{grid-column:1/-1}.calculator-settings .calc-blueprint .blueprint-picker{grid-column:auto}.calc-blueprint>label:not(.calc-toggle){padding-top:0}.calculator-settings .calc-blueprint .blueprint-picker>label{font-size:12px;margin-bottom:5px}}
-@media(max-width:480px){.calc-tax .calc-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
+.calc-panel label {
+    display: flex;
+    flex-direction: column;
+    gap: 7px;
+    color: #9bb7ca;
+    font-size: 12px;
+    margin-bottom: 16px
+}
 
-.calculator-selected-icon{position:absolute;left:7px;top:27px;width:28px;height:28px;object-fit:contain;pointer-events:none}.calc-panel input.has-item-icon{padding-left:42px}
+.calc-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0 18px
+}
+
+.calc-panel input,
+.calc-panel select {
+    width: 100%;
+    min-width: 0
+}
+
+.calc-panel .calc-toggle {
+    flex-direction: row;
+    align-items: center;
+    margin-top: 18px
+}
+
+.calc-toggle input {
+    width: 16px;
+    height: 16px
+}
+
+.calc-submit {
+    width: 100%
+}
+
+.calc-breakdown {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 12px 20px;
+    font-size: 13px
+}
+
+.calc-breakdown dt {
+    color: #9bb7ca
+}
+
+.calc-breakdown dd {
+    text-align: right;
+    font-variant-numeric: tabular-nums
+}
+
+.calc-totals {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 14px;
+    margin: 22px 0
+}
+
+.calc-totals>div {
+    border: 1px solid #30414b;
+    border-radius: 8px;
+    padding: 14px
+}
+
+.calc-totals span {
+    display: block;
+    color: #9bb7ca;
+    font-size: 12px
+}
+
+.calc-totals strong {
+    display: block;
+    font-size: 21px;
+    margin-top: 8px;
+    overflow-wrap: anywhere
+}
+
+.calc-positive strong {
+    color: #79dfae
+}
+
+.calc-negative strong {
+    color: #fa8888
+}
+
+.calc-warning {
+    background: #382d19;
+    color: #f6c878;
+    padding: 12px;
+    border-radius: 6px;
+    font-size: 12px;
+    margin: 12px 0
+}
+
+.calculator-settings .blueprint-picker {
+    margin-bottom: 18px
+}
+
+.calculator-result .material-table {
+    min-width: 490px
+}
+
+.calculator-result .item-name img {
+    width: 48px;
+    height: 48px
+}
+
+.calculator-result .item-name h2 {
+    margin-bottom: 4px
+}
+
+@media(max-width:1150px) {
+    .calculator-layout {
+        grid-template-columns: minmax(0, 1fr)
+    }
+}
+
+@media(max-width:480px) {
+    .calc-panel {
+        padding: 16px
+    }
+
+    .calc-grid {
+        grid-template-columns: minmax(0, 1fr)
+    }
+
+    .calc-totals strong {
+        font-size: 17px
+    }
+
+    .calc-breakdown {
+        gap: 10px;
+        font-size: 12px
+    }
+}
+
+.calculator-result .item-name p span,
+.calculator-result .item-name p strong {
+    display: inline;
+    font-size: inherit
+}
+
+.calculator-result .item-name p {
+    margin: 0
+}
+
+.calculator-settings .blueprint-suggestions {
+    position: static;
+    margin-top: 6px;
+    max-height: 300px;
+    overflow-y: auto
+}
+
+.calculator-settings .blueprint-picker {
+    min-width: 0
+}
+
+.calculator-heading {
+    position: sticky;
+    top: 0;
+    z-index: 20;
+    background: #0e141a;
+    padding: 12px 0;
+    margin-bottom: 16px;
+    gap: 16px;
+    align-items: center
+}
+
+.calculator-heading h1 {
+    font-size: 28px
+}
+
+.calculator-heading .eyebrow {
+    display: none
+}
+
+.calculator-heading p {
+    margin-top: 6px
+}
+
+.calculator-heading .button {
+    flex-shrink: 0
+}
+
+.calculator-settings,
+.calculator-result {
+    gap: 12px
+}
+
+.calc-panel {
+    padding: 16px
+}
+
+.calc-panel h2 {
+    font-size: 15px;
+    margin-bottom: 12px
+}
+
+.calc-panel label {
+    margin-bottom: 10px;
+    gap: 5px
+}
+
+.calc-panel input:not([type=checkbox]),
+.calc-panel select {
+    padding: 8px 10px;
+    height: 36px
+}
+
+.calc-panel .calc-toggle {
+    margin-top: 10px
+}
+
+.calc-panel .muted {
+    font-size: 11px;
+    line-height: 1.6
+}
+
+.calculator-settings .blueprint-picker {
+    margin-bottom: 10px
+}
+
+.calculator-result>.calculator-result {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    grid-template-areas: "summary summary" "materials materials" "output installation"
+}
+
+.calculator-result>.calculator-result>section:first-child {
+    grid-area: summary
+}
+
+.calc-output {
+    grid-area: output
+}
+
+.calc-materials {
+    grid-area: materials
+}
+
+.calc-installation {
+    grid-area: installation
+}
+
+.calc-totals {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 8px;
+    margin: 14px 0
+}
+
+.calc-totals>div {
+    padding: 10px
+}
+
+.calc-totals strong {
+    font-size: 17px
+}
+
+.calc-breakdown {
+    gap: 8px 12px;
+    font-size: 12px
+}
+
+.calc-warning {
+    padding: 8px;
+    margin: 8px 0
+}
+
+.calculator-result .material-table td,
+.calculator-result .material-table th {
+    padding: 10px 8px
+}
+
+@media(max-width:1350px) {
+    .calc-totals {
+        grid-template-columns: repeat(2, minmax(0, 1fr))
+    }
+
+    .calculator-result>.calculator-result {
+        grid-template-columns: minmax(0, 1fr);
+        grid-template-areas: "summary" "materials" "output" "installation"
+    }
+}
+
+@media(max-width:600px) {
+    .calculator-heading {
+        flex-direction: column;
+        align-items: stretch
+    }
+
+    .calculator-heading h1 {
+        font-size: 23px
+    }
+
+    .calculator-heading p {
+        display: none
+    }
+
+    .calculator-heading .button {
+        width: 100%
+    }
+}
+
+.calculator-result .table-wrap {
+    min-height: 0
+}
+
+.calc-tax .calc-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 0 12px
+}
+
+@media(min-width:1151px) {
+    .calc-blueprint {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) 95px;
+        gap: 0 12px;
+        align-items: start
+    }
+
+    .calc-blueprint h2,
+    .calc-blueprint>.calc-toggle,
+    .calc-blueprint>p {
+        grid-column: 1/-1
+    }
+
+    .calculator-settings .calc-blueprint .blueprint-picker {
+        grid-column: auto
+    }
+
+    .calc-blueprint>label:not(.calc-toggle) {
+        padding-top: 0
+    }
+
+    .calculator-settings .calc-blueprint .blueprint-picker>label {
+        font-size: 12px;
+        margin-bottom: 5px
+    }
+}
+
+@media(max-width:480px) {
+    .calc-tax .calc-grid {
+        grid-template-columns: repeat(2, minmax(0, 1fr))
+    }
+}
+
+.calculator-selected-icon {
+    position: absolute;
+    left: 7px;
+    top: 27px;
+    width: 28px;
+    height: 28px;
+    object-fit: contain;
+    pointer-events: none
+}
+
+.calc-panel input.has-item-icon {
+    padding-left: 42px
+}

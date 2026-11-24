@@ -1,0 +1,225 @@
+<div
+  class="modal-backdrop"
+  x-show="selected"
+  x-cloak
+  @click.self="closeItem()"
+>
+  <section
+    class="detail-panel"
+    role="dialog"
+    aria-modal="true"
+    aria-labelledby="detail-title"
+    x-ref="dialog"
+    tabindex="-1"
+    @keydown.tab="trapDialog($event)"
+  >
+    <template x-if="selected">
+      <div>
+        <div class="detail-heading">
+          <div>
+            <div class="eyebrow">PRODUCTION BREAKDOWN</div>
+            <h2 id="detail-title" x-text="selected.name"></h2>
+          </div>
+          <button
+            class="icon-button"
+            @click="closeItem()"
+            aria-label="Close item details"
+          >
+            ×
+          </button>
+        </div>
+        <div class="detail-stats">
+          <div><span>Profit / unit</span><strong
+            class="number"
+            :class="Number(selected.profit_per_unit) < 0 ? 'negative' : 'positive'"
+            x-text="fullMoney(selected.profit_per_unit)"
+          ></strong></div>
+          <div><span>Margin / material cost</span><strong x-text="percent(selected.margin_pct)"></strong></div>
+          <div><span>Units per run</span><strong x-text="selected.units"></strong></div>
+        </div>
+        <div
+          class="detail-note"
+          x-show="isStale(selected)"
+          x-text="staleExplanation(selected)"
+        ></div>
+        <p class="detail-context"><span x-text="hubName(resultForm.material_hub_id || resultForm.hub_id)"></span> material prices, <span
+          x-text="resultForm.material_order_type === 'buy' ? 'buy orders (placing purchase orders)' : 'sell orders (immediate purchase)'"
+        ></span>. Product sold in <span x-text="hubName(resultForm.hub_id)"></span> using <span
+          x-text="resultForm.product_order_type === 'buy' ? 'buy orders (immediate sale)' : 'sell orders (listing your product)'"
+        ></span>.</p>
+        <section class="history-section">
+          <h3>Regional trading history</h3>
+          <p class="muted">Completed UTC days for the entire <span x-text="hubName(resultForm.hub_id)"></span> region, over the selected <span x-text="resultForm.days"></span>-day period. Saved history only; missing dates are not invented or joined across gaps.</p>
+          {% include "market_history_chart.html" %}
+        </section>
+        <h3>Materials for one production run</h3>
+        <p class="muted">One run produces <strong x-text="selected.units"></strong> finished units and takes <strong x-text="duration(selected.seconds)"></strong> at base production time. Quantities below are per run; cost and profit summaries are per finished unit.</p>
+        <p
+          class="detail-note"
+          role="status"
+          x-show="materialNamesMessage"
+          x-text="materialNamesMessage"
+        ></p>
+        <button
+          class="button secondary compact"
+          x-show="materialNamesMessage"
+          :disabled="materialNamesLoading"
+          @click="loadMaterialNames()"
+        >
+          Retry material names
+        </button>
+        <div class="table-wrap">
+          <table class="material-table">
+            <thead>
+              <tr>
+                <th>MATERIAL</th>
+                <th>QUANTITY</th>
+                <th>UNIT PRICE (ISK)</th>
+                <th>RUN COST (ISK)</th>
+              </tr>
+            </thead>
+            <tbody>
+              <template x-for="material in selected.materials" :key="material.type_id">
+                <tr>
+                  <td>
+                    <div class="material-name" :title="'EVE item type ' + material.type_id">
+                      <img
+                        :src="'https://images.evetech.net/types/' + material.type_id + '/icon?size=32'"
+                        alt=""
+                        loading="lazy"
+                        @error="$el.style.display='none'"
+                      >
+                      <span x-text="materialName(material.type_id)"></span>
+                    </div>
+                  </td>
+                  <td x-text="material.quantity.toLocaleString('en-US')"></td>
+                  <td x-text="fullMoney(material.price)"></td>
+                  <td x-text="fullMoney(material.cost)"></td>
+                </tr>
+              </template>
+            </tbody>
+          </table>
+        </div>
+        <h3>Per finished unit (ISK)</h3>
+        <p
+          class="muted"
+          x-show="selected.estimated_item_value_per_unit !== null && selected.estimated_item_value_per_unit !== undefined"
+        >
+          Manufacturing tax basis (EIV): <strong x-text="fullMoney(selected.estimated_item_value_per_unit)"></strong> ISK per unit. Facility tax and system cost index are charged on this value; SCC is included in the base installation charge.
+        </p>
+        <div class="cost-lines">
+          <div><span>Materials</span><strong x-text="fullMoney(selected.material_cost_per_unit)"></strong></div>
+          <div><span>Base installation / SCC surcharge</span><strong
+            x-text="fullMoney(selected.base_job_cost_per_unit ?? selected.job_cost_per_unit)"
+          ></strong></div>
+          <div><span>Facility tax</span><strong x-text="fullMoney(selected.facility_tax_per_unit ?? 0)"></strong></div>
+          <div><span>System cost index charge</span><strong x-text="fullMoney(selected.system_cost_per_unit ?? 0)"></strong></div>
+          <div><span>Invention</span><strong
+            x-text="!selected.invention_required ? 'Not required' : selected.invention_included ? fullMoney(selected.invention_cost_per_unit) : 'Not included in this estimate'"
+          ></strong></div>
+          <div><span>Material purchase broker fee</span><strong x-text="fullMoney(selected.procurement_broker_fee_per_unit)"></strong></div>
+          <div><span>Total build cost</span><strong x-text="fullMoney(selected.total_cost_per_unit)"></strong></div>
+          <div><span>Product sale price</span><strong x-text="fullMoney(selected.revenue_per_unit)"></strong></div>
+          <div><span>Sales tax</span><strong x-text="fullMoney(selected.sales_tax_per_unit)"></strong></div>
+          <div><span>Product sale broker fee</span><strong x-text="fullMoney(selected.sales_broker_fee_per_unit)"></strong></div>
+          <div><span>Net profit</span><strong x-text="fullMoney(selected.profit_per_unit)"></strong></div>
+        </div>
+        <template x-if="resultForm.product_order_type === 'buy'">
+          <section class="demand-box">
+            <h3>Current selling capacity within your buy-price range</h3>
+            <p><strong x-text="selected.production_limit_units"></strong> units across <strong x-text="selected.full_runs_at_buy_price"></strong> full production runs within <span x-text="demandTolerance()"></span>% of the best buy price.</p>
+            <p>Estimated manufacturing time on <span x-text="productionLines()"></span> line(s): <strong x-text="demandDuration(selected)"></strong>.</p>
+            <p class="muted">Uses the cached EVE Ref duration with source skill modifiers already included. Full runs are distributed across the selected lines, assuming enough blueprints; no additional skill reduction is applied. Excludes invention, copying and manufacturing the input materials. Batch time includes copying and invention when their checkboxes are enabled, using the selected slots.</p>
+            <div>Total profit after filling this demand: <strong x-text="fullMoney(selected.profit_at_current_buy_price)"></strong></div>
+            <p x-show="selected.buy_demand_average_price">Average sale price: <strong x-text="fullMoney(selected.buy_demand_average_price)"></strong> ISK. Lowest included order price: <strong x-text="fullMoney(selected.buy_demand_min_price)"></strong> ISK.</p>
+            <p class="muted" x-show="selected.buy_demand_depth_available === false">
+              Only best-price data is loaded for this snapshot. The next market refresh will load nearby buy-price levels.
+            </p>
+            <p class="muted">Orders are filled from the highest price down. Profit uses their actual prices, not the best price for every unit. This is current demand, not replenishing daily demand.</p>
+          </section>
+        </template>
+        <ul class="demand-warnings" x-show="selected.demand_warnings.length">
+          <template x-for="warning in selected.demand_warnings" :key="warning">
+            <li x-text="demandWarning(warning)"></li>
+          </template>
+        </ul>
+        <template x-if="selected.invention_required">
+          <section class="invention-box">
+            <div class="section-heading">
+              <h3>Invention alternatives</h3>
+              <div class="invention-actions">
+                <button
+                  class="button secondary compact"
+                  @click="loadInvention()"
+                  :disabled="inventionLoading || inventionChecking || demo"
+                  x-text="inventionChecking ? 'Checking...' : 'Check status'"
+                ></button>
+                <button
+                  class="button secondary compact"
+                  @click="prepareInvention()"
+                  :disabled="inventionLoading || inventionChecking || demo || inventionReady"
+                  :title="inventionReady ? 'The current daily calculation is already prepared. No additional job is needed.' : 'Prepare a cached calculation in the background'"
+                  x-text="inventionLoading ? 'Requesting...' : inventionReady ? 'Already prepared' : 'Prepare calculation'"
+                ></button>
+              </div>
+            </div>
+            <p class="muted">Tax-free material estimate: datacores and decryptors only; excludes installation taxes and broker fees. Success chance is per attempt. Estimated cost includes failed attempts and the output of each successful blueprint copy. Saved valuations update daily.</p>
+            <p
+              class="detail-note"
+              x-show="inventionMessage"
+              x-text="inventionMessage"
+              role="status"
+              aria-live="polite"
+            ></p>
+            <p
+              class="muted"
+              x-show="lastInventionCheck"
+            >Last checked: <span x-text="timeLabel(lastInventionCheck)"></span></p>
+            <template x-if="invention && invention.request">
+              <p class="muted">Saved: <span x-text="timeLabel(invention.request.updated_at)"></span>. Refresh due: <span x-text="timeLabel(invention.request.expires_at)"></span>.</p>
+            </template>
+            <template x-if="invention && invention.request && invention.request.result">
+              <table class="invention-table">
+                <caption>Invention cost comparison per manufactured unit</caption>
+                <thead>
+                  <tr>
+                    <th>DECRYPTOR</th>
+                    <th>CHANCE / BPC OUTPUT</th>
+                    <th>EST. COST / UNIT (ISK)</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <template
+                    x-for="option in invention.request.result.options"
+                    :key="option.plan.decryptor_name"
+                  >
+                    <tr
+                      :class="invention.request.result.best?.plan.decryptor_id === option.plan.decryptor_id && option.expected_cost_per_unit !== null ? 'best-option' : ''"
+                    >
+                      <td><span
+                        x-text="option.plan.decryptor_name === 'None' ? 'No decryptor' : option.plan.decryptor_name"
+                      ></span><span
+                        class="best-label"
+                        x-show="invention.request.result.best?.plan.decryptor_id === option.plan.decryptor_id && option.expected_cost_per_unit !== null"
+                      >Lowest cost</span></td>
+                      <td data-label="Chance / BPC output">
+                        <span x-text="percent(Number(option.plan.probability) * 100)"></span>
+                        <div class="muted" x-text="option.plan.runs_per_copy + ' runs / T2 BPC'">
+                        </div>
+                      </td>
+                      <td
+                        data-label="Est. ISK / unit"
+                        x-text="option.expected_cost_per_unit === null ? 'Missing prices' : fullMoney(option.expected_cost_per_unit)"
+                      ></td>
+                    </tr>
+                  </template>
+                </tbody>
+              </table>
+            </template>
+          </section>
+        </template>
+        <div class="detail-note">Profit per day is theoretical slot throughput; buy-mode ranking is capped by demand in the selected price range. History is regional. ME/TE bonuses, hauling and blueprint copy/purchase costs are not included.</div>
+      </div>
+    </template>
+  </section>
+</div>

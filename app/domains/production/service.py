@@ -2,12 +2,14 @@ from datetime import UTC, datetime
 from decimal import ROUND_HALF_UP, Decimal
 from uuid import UUID, uuid4
 
+from app.core.application_errors import ErrorKind
 from app.core.freshness import MARKET_FRESHNESS, refresh_deadline
 from app.core.repository import UnitOfWork
 from app.domains.catalog.models import ItemTypeClause
 from app.domains.catalog.repository import ItemTypeRepository
 from app.domains.invention.shopping import ShoppingService, ceiling
 from app.domains.manufacturing.repository import ManufacturingRepository
+from app.domains.production.errors import ProductionError
 from app.domains.production.models import (
     DecryptorEstimate,
     Entry,
@@ -19,11 +21,6 @@ from app.domains.production.models import (
     ProductionDetails,
 )
 from app.domains.production.repository import ProductionRepository
-
-
-class ProductionError(Exception):
-    def __init__(self, status: int, message: str) -> None:
-        self.status, self.message = status, message
 
 
 class ProductionService:
@@ -41,7 +38,7 @@ class ProductionService:
     async def get(self, user_id: UUID, production_id: UUID, lock: bool = False) -> Production:
         production = await self.repository.get(user_id, production_id, lock)
         if production is None:
-            raise ProductionError(404, "Production not found")
+            raise ProductionError(ErrorKind.NOT_FOUND, "Production not found")
         return production
 
     async def persist(self, production: Production) -> Production:
@@ -57,7 +54,7 @@ class ProductionService:
     async def create(self, user_id: UUID, data: ProductionCreate) -> Production:
         items = await self.catalog.find(ItemTypeClause(type_ids=[data.type_id], is_active=None))
         if not items:
-            raise ProductionError(422, "Select a product from the catalog")
+            raise ProductionError(ErrorKind.INVALID_INPUT, "Select a product from the catalog")
         now = datetime.now(UTC)
         return await self.persist(
             Production(
@@ -92,7 +89,7 @@ class ProductionService:
         else:
             existing = next((entry for entry in production.entries if entry.id == entry_id), None)
             if existing is None:
-                raise ProductionError(404, "Entry not found")
+                raise ProductionError(ErrorKind.NOT_FOUND, "Entry not found")
             existing.kind, existing.amount, existing.comment = data.kind, data.amount, data.comment
         return await self.persist(production)
 
@@ -100,7 +97,7 @@ class ProductionService:
         production = await self.get(user_id, production_id, lock=True)
         remaining = [entry for entry in production.entries if entry.id != entry_id]
         if len(remaining) == len(production.entries):
-            raise ProductionError(404, "Entry not found")
+            raise ProductionError(ErrorKind.NOT_FOUND, "Entry not found")
         production.entries = remaining
         return await self.persist(production)
 
@@ -137,14 +134,15 @@ class ProductionEstimateService:
             )
             if selected is None:
                 raise ProductionError(
-                    409 if data.decryptor_id == "best" else 422,
+                    ErrorKind.CONFLICT if data.decryptor_id == "best" else ErrorKind.INVALID_INPUT,
                     "No priced invention plan. Prepare it in Invention shopping, then retry."
                     if data.decryptor_id == "best"
                     else "This decryptor is not available for this blueprint.",
                 )
             if selected.estimated_cost is None:
                 raise ProductionError(
-                    409, "Prices for this decryptor option are missing. Try another option."
+                    ErrorKind.CONFLICT,
+                    "Prices for this decryptor option are missing. Try another option.",
                 )
             amount = selected.estimated_cost
             description = (
@@ -178,7 +176,8 @@ class ProductionEstimateService:
         state = (await self.market.recipes([production.type_id])).get(production.type_id)
         if state is None or state.recipe is None:
             raise ProductionError(
-                409, "No saved manufacturing recipe. Wait for the background recipe sync."
+                ErrorKind.CONFLICT,
+                "No saved manufacturing recipe. Wait for the background recipe sync.",
             )
         recipe = state.recipe
         runs = ceiling(Decimal(data.units) / recipe.units)
@@ -188,7 +187,8 @@ class ProductionEstimateService:
                 data.facility_tax or data.system_cost_index
             ):
                 raise ProductionError(
-                    409, "Recipe needs an estimated item value. Wait for its refresh."
+                    ErrorKind.CONFLICT,
+                    "Recipe needs an estimated item value. Wait for its refresh.",
                 )
             amount = runs * (
                 recipe.job_cost
@@ -213,7 +213,7 @@ class ProductionEstimateService:
                 )
                 if price is None or price <= 0:
                     raise ProductionError(
-                        409,
+                        ErrorKind.CONFLICT,
                         "Material prices are missing. Try another hub or wait for the market sync.",
                     )
                 amount += runs * material.quantity * price

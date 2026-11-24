@@ -16,7 +16,10 @@ async function checkProductionWorkflow(){
     return new Response(JSON.stringify(result),{status:200});
   };
   try{
-    a.startCreate();a.searchText='Example';await a.search();a.choose(a.matches[0]);await a.create();
+    a.startCreate();a.searchText='Example';await a.search();await a.$nextTick();
+    const editor=document.querySelector('.production-editor');
+    if(getComputedStyle(editor).overflowY==='hidden')throw Error('Blueprint suggestions clipped by editor');
+    a.choose(a.matches[0]);await a.create();
     if(!a.selected||a.selected.units!==null||a.selected.entries.length)throw Error('Empty production');
     a.estimateUnits='150';
     await new Promise(resolve=>setTimeout(resolve,400));await a.$nextTick();

@@ -4,9 +4,9 @@ import secrets
 from datetime import UTC, datetime, timedelta
 from uuid import UUID, uuid4
 
-from sqlalchemy.exc import IntegrityError
-
+from app.core.application_errors import ErrorKind
 from app.core.repository import UnitOfWork
+from app.domains.accounts.errors import AccountError
 from app.domains.accounts.limiter import LoginLimiter
 from app.domains.accounts.models import (
     Credentials,
@@ -17,15 +17,9 @@ from app.domains.accounts.models import (
     UserUpdate,
 )
 from app.domains.accounts.passwords import hash_password, verify_password
-from app.domains.accounts.repository import AccountRepository
+from app.domains.accounts.repository import AccountRepository, DuplicateUsernameError
 
 COOKIE_NAME = "eve_session"
-SESSION_SECONDS = 14 * 86400
-
-
-class AccountError(Exception):
-    def __init__(self, status: int, message: str) -> None:
-        self.status, self.message = status, message
 
 
 def token_hash(token: str) -> str:
@@ -34,9 +28,14 @@ def token_hash(token: str) -> str:
 
 class AccountService:
     def __init__(
-        self, repository: AccountRepository, uow: UnitOfWork, limiter: LoginLimiter
+        self,
+        repository: AccountRepository,
+        uow: UnitOfWork,
+        limiter: LoginLimiter,
+        session_seconds: int = 1209600,
     ) -> None:
         self.repository, self.uow, self.limiter = repository, uow, limiter
+        self.session_seconds = session_seconds
 
     async def identity(self, token: str) -> User | None:
         user = await self.repository.session_user(token_hash(token), datetime.now(UTC))
@@ -45,18 +44,22 @@ class AccountService:
     async def login(self, data: Credentials, address: str, previous: str = "") -> tuple[User, str]:
         username = data.username.lower()
         if not await self.limiter.allow(username, address):
-            raise AccountError(429, "Too many login attempts. Try again in 15 minutes.")
+            raise AccountError(
+                ErrorKind.RATE_LIMITED, "Too many login attempts. Try again in 15 minutes."
+            )
         user = await self.repository.by_username(username)
         encoded = user.password_hash if user else "scrypt$" + "00" * 16 + "$" + "00" * 64
         valid = await asyncio.to_thread(verify_password, data.password.get_secret_value(), encoded)
         if user is None or not valid or not user.is_active:
-            raise AccountError(401, "Invalid username or password")
+            raise AccountError(ErrorKind.UNAUTHENTICATED, "Invalid username or password")
         token = secrets.token_urlsafe(32)
         try:
             if previous:
                 await self.repository.revoke(token_hash(previous))
             await self.repository.create_session(
-                token_hash(token), user.id, datetime.now(UTC) + timedelta(seconds=SESSION_SECONDS)
+                token_hash(token),
+                user.id,
+                datetime.now(UTC) + timedelta(seconds=self.session_seconds),
             )
             await self.uow.commit()
         except BaseException:
@@ -79,9 +82,9 @@ class AccountService:
         try:
             await self.repository.save(user)
             await self.uow.commit()
-        except IntegrityError as error:
+        except DuplicateUsernameError as error:
             await self.uow.rollback()
-            raise AccountError(409, "Username already exists") from error
+            raise AccountError(ErrorKind.CONFLICT, "Username already exists") from error
         except BaseException:
             await self.uow.rollback()
             raise
@@ -94,14 +97,14 @@ class AccountService:
         await self.repository.lock_admins()
         current_actor = await self.repository.get(actor.id)
         if current_actor is None or not current_actor.is_active:
-            raise AccountError(403, "Account is no longer active")
+            raise AccountError(ErrorKind.FORBIDDEN, "Account is no longer active")
         if not current_actor.is_superuser and (user_id != actor.id or data.is_active is not None):
-            raise AccountError(403, "Superuser access required")
+            raise AccountError(ErrorKind.FORBIDDEN, "Superuser access required")
         if user_id == actor.id and data.is_active is False:
-            raise AccountError(409, "You cannot disable your own account")
+            raise AccountError(ErrorKind.CONFLICT, "You cannot disable your own account")
         user = await self.repository.get(user_id)
         if user is None:
-            raise AccountError(404, "User not found")
+            raise AccountError(ErrorKind.NOT_FOUND, "User not found")
         if data.is_active is not None:
             user.is_active = data.is_active
         if data.password is not None:
@@ -123,5 +126,5 @@ class AccountService:
         if user is None or not await asyncio.to_thread(
             verify_password, data.current_password.get_secret_value(), user.password_hash
         ):
-            raise AccountError(400, "Current password is incorrect")
+            raise AccountError(ErrorKind.INVALID_OPERATION, "Current password is incorrect")
         await self.update(actor.id, UserUpdate(password=data.new_password), actor)

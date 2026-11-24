@@ -3,10 +3,15 @@ from datetime import datetime
 from uuid import UUID
 
 from sqlalchemy import delete, select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.domains.accounts.models import StoredUser
 from app.domains.accounts.tables import SessionTable, UserTable
+
+
+class DuplicateUsernameError(Exception):
+    pass
 
 
 class AccountRepository(ABC):
@@ -56,8 +61,11 @@ class SQLAccountRepository(AccountRepository):
         return None if row is None else StoredUser.model_validate(row, from_attributes=True)
 
     async def save(self, user: StoredUser) -> None:
-        await self._session.merge(UserTable(**user.model_dump()))
-        await self._session.flush()
+        try:
+            await self._session.merge(UserTable(**user.model_dump()))
+            await self._session.flush()
+        except IntegrityError as error:
+            raise DuplicateUsernameError from error
 
     async def session_user(self, token_hash: str, now: datetime) -> StoredUser | None:
         row = await self._session.scalar(

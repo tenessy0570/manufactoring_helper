@@ -1,0 +1,240 @@
+<form
+  id="opportunity-filters"
+  x-ref="filters"
+  class="filter-drawer"
+  x-show="filtersOpen"
+  x-cloak
+  @submit.prevent="load(false, 0)"
+>
+  <div class="filter-sections">
+    <fieldset class="filter-group filters-items">
+      <legend>Items</legend>
+      <div class="filter-grid">
+        <label>
+          Search items<input
+            type="search"
+            placeholder="Search items..."
+            aria-label="Search items"
+            x-model="form.search"
+          >
+        </label>
+        <label>
+          Item category<select aria-label="Item category" x-model="form.category">
+          <option value="">All categories</option>
+          <option value="Rigs">Rigs</option>
+          <option value="Ammunition &amp; Charges">Ammo</option>
+          <option value="Drones">Drones</option>
+          <option value="Modules">Modules</option>
+          <option
+            value="__profile__"
+            x-show="form.category === '__profile__'"
+          >Profile selection</option>
+          </select>
+        </label>
+        <label>
+          Tech group<select aria-label="Tech group" x-model="form.tech">
+          <option value="">All production groups</option>
+          <option
+            value="__profile__"
+            x-show="profileSettings.meta_group_ids?.length > 1"
+          >
+            Profile selection
+          </option>
+          <option value="1">Tech I / meta</option>
+          <option value="2">Tech II</option>
+          </select>
+        </label>
+      </div>
+    </fieldset>
+    <fieldset class="filter-group filters-markets">
+      <legend>Market prices</legend>
+      <div class="filter-grid">
+        <label>
+          Product hub<select aria-label="Trade hub" x-model="form.hub_id">
+          <template x-for="hub in hubs" :key="hub.id">
+            <option :value="hub.id" :selected="hub.id === form.hub_id" x-text="hub.name"></option>
+          </template>
+          </select>
+        </label>
+        <label>
+          Product prices<select aria-label="Product pricing" x-model="form.product_order_type">
+          <option value="sell">Sell orders (list your product)</option>
+          <option value="buy">Buy orders (sell immediately)</option>
+          </select>
+        </label>
+        <label>
+          Procurement hub<select x-model="form.material_hub_id">
+          <option value="">Same as product hub</option>
+          <template x-for="hub in hubs" :key="hub.id">
+            <option
+              :value="hub.id"
+              :selected="hub.id === form.material_hub_id"
+              x-text="hub.name"
+            ></option>
+          </template>
+          </select>
+        </label>
+        <label>
+          Material prices<select x-model="form.material_order_type">
+          <option value="sell">Sell orders (buy immediately)</option>
+          <option value="buy">Buy orders (place a buy order)</option>
+          </select>
+        </label>
+      </div>
+    </fieldset>
+    <fieldset class="filter-group filters-demand">
+      <legend>Profit and demand</legend>
+      <div class="filter-grid">
+        <label>
+          Buy demand price range (%)<input
+            type="number"
+            min="0"
+            max="100"
+            step="any"
+            x-model="form.buy_demand_tolerance_pct"
+            placeholder="5"
+          >
+        </label>
+        <label>
+          Min. profit / unit (ISK)<input
+            type="number"
+            step="any"
+            x-model="form.min_profit"
+            placeholder="Any"
+          >
+        </label>
+        <label>
+          Min. margin (%)<input
+            type="number"
+            step="any"
+            x-model="form.min_margin"
+            placeholder="Any"
+          >
+        </label>
+        <label>
+          Min. regional turnover / day (ISK)<input
+            type="number"
+            min="0"
+            step="any"
+            x-model="form.min_daily_isk_volume"
+            placeholder="Any"
+          >
+        </label>
+        <label
+          title="Buy pricing: total demand within your buy-price range. Sell pricing: stock at the best sell price."
+        >
+          Min. units available in price range<input
+            type="number"
+            min="0"
+            x-model="form.min_product_volume"
+            placeholder="Any"
+          >
+        </label>
+        <label>
+          History period (completed days)<input type="number" min="1" max="365" x-model="form.days">
+        </label>
+      </div>
+      <div class="toggle-row">
+        <label>
+          <input type="checkbox" x-model="form.fresh_only">
+          Fresh data only</label><label><input
+            type="checkbox"
+            x-model="form.require_full_run_demand"
+          >
+          Buy demand covers a full run
+          </label>
+        </div>
+      </fieldset>
+      <fieldset class="filter-group filters-assumptions">
+        <legend>Calculation assumptions</legend>
+        <div class="filter-grid">
+          <label>
+            Invention slots<input
+              type="number"
+              min="1"
+              max="1000"
+              step="1"
+              x-model="form.invention_slots"
+            ></label><label
+              title="Parallel lines used to estimate demand completion time. Full runs are distributed evenly between lines."
+            >Production lines<input
+              type="number"
+              min="1"
+              max="1000"
+              step="1"
+              x-model="form.production_lines"
+              placeholder="1"
+            >
+            </label>
+            <label>
+              Sales tax (%)<input
+                type="number"
+                min="0"
+                max="100"
+                step="0.01"
+                x-model="form.sales_tax"
+              >
+            </label>
+            <label title="Applied when posting buy orders for raw materials.">
+              Buy broker (%)<input
+                type="number"
+                min="0"
+                max="100"
+                step="any"
+                x-model="form.buy_broker_fee"
+                placeholder="0"
+              >
+            </label>
+            <label title="Applied when posting sell orders for the finished product.">
+              Sell broker (%)<input
+                type="number"
+                min="0"
+                max="100"
+                step="any"
+                x-model="form.sell_broker_fee"
+                placeholder="0"
+              >
+            </label>
+            <label>
+              Facility tax (%)<input
+                type="number"
+                min="0"
+                max="100"
+                step="any"
+                x-model="form.facility_tax"
+                placeholder="0"
+              >
+            </label>
+            <label>
+              System cost index (%)<input
+                type="number"
+                min="0"
+                max="100"
+                step="any"
+                x-model="form.system_cost_index"
+                placeholder="0"
+              >
+            </label>
+          </div>
+          <div class="toggle-row">
+            <label>
+              <input type="checkbox" x-model="form.include_invention_cost">
+              Include cached invention cost</label><label
+                title="Include expected T1 BPC copying time, using Invention slots. Includes copies consumed by failed invention attempts."
+              ><input type="checkbox" x-model="form.include_copying_time">
+              Include copying time in profit/day</label><label
+                title="Expected invention workload, including failed attempts. Copying is controlled by its separate checkbox. Parallel timing is approximate. Buy Profit/day is capped by saved demand and may stay unchanged if all demand still fits within a day."
+              ><input type="checkbox" x-model="form.include_invention_time">
+              Include invention time in profit/day
+              </label>
+            </div>
+          </fieldset>
+        </div>
+        <div class="drawer-actions">
+          <span
+            role="status"
+            x-text="hasChanges ? 'Changes not applied to the results below' : 'All filters applied'"
+          ></span>
+          <button type="button" class="text-button" @click="resetFilters()">Reset filters</button>
+        </div>
+      </form>

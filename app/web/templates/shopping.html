@@ -1,31 +1,268 @@
-<!doctype html>
-<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Invention shopping - EVE Manufacturing</title><link rel="stylesheet" href="/static/app.css"><link rel="stylesheet" href="/static/navigation.css"><script defer src="/static/shopping.js"></script><script defer src="/static/freshness.js"></script><script defer src="/static/vendor/alpine.min.js"></script></head>
-<body x-data="shoppingApp">{% set active_page = "shopping" %}{% include "navigation.html" %}
-<main class="workspace"><div class="content"><div class="page-heading"><div><h1>Invention shopping</h1><p>Plan datacores, decryptors and T1 blueprint-copy runs for your desired T2 output.</p></div></div>
-<section class="market-panel shopping-panel" style="padding:22px"><form @submit.prevent="calculate()"><div class="filter-grid">
-<div class="blueprint-picker" @click.outside="suggestionsOpen=false"><label for="blueprint-search">T2 blueprint or product name</label><input id="blueprint-search" x-ref="blueprintSearch" type="search" role="combobox" aria-autocomplete="list" aria-controls="blueprint-suggestions" :aria-expanded="suggestionsOpen && searchText.trim().length>=2" :aria-activedescendant="suggestionsOpen && activeMatch>=0?'blueprint-option-'+activeMatch:null" x-model="searchText" @input="invalidateSearch()" @input.debounce.300ms="search()" @focus="suggestionsOpen=true" @keydown="searchKey($event)" placeholder="Start typing a T2 blueprint name..." autocomplete="off" required>
-<div id="blueprint-suggestions" class="blueprint-suggestions" role="listbox" x-show="suggestionsOpen && searchText.trim().length>=2" x-cloak>
-<p class="muted" x-show="searching">Searching...</p><p class="muted" x-show="!searching&&!matches.length">No matching T2 blueprints.</p>
-<template x-for="(item,index) in matches" :key="item.type_id"><div role="option" :id="'blueprint-option-'+index" :aria-selected="index===activeMatch" :class="{'blueprint-highlight':index===activeMatch}" @mousedown.prevent @click="chooseBlueprint(item)"><img :src="'https://images.evetech.net/types/'+item.type_id+'/icon?size=32'" alt="" loading="lazy" @error="$el.style.visibility='hidden'"><span x-text="item.name+' Blueprint'"></span></div></template>
-</div></div>
-<label>Price hub<select x-model="hub" @change="result=null"><option value="jita">Jita</option><option value="amarr">Amarr</option><option value="dodixie">Dodixie</option><option value="rens">Rens</option><option value="hek">Hek</option></select></label><label>Finished units wanted<input type="number" x-model="units" @input="result=null" required min="1" max="1000000000" step="1"></label></div>
-
-<p class="muted">Skills II / II / II. Invention supplies only; no manufacturing materials.</p><button class="button primary" type="submit" :disabled="busy" x-text="busy?'Calculating...':'Calculate shopping list'"></button></form>
-<p class="error-banner" x-show="error" x-text="error" role="alert" x-cloak></p><p class="muted" x-show="message" x-text="message" role="status" x-cloak></p>
-<template x-if="result"><section>
-<div x-show="result.status==='not_prepared'"><p>This blueprint has no saved invention plan yet.</p><button class="button secondary" @click="prepare()" :disabled="busy">Prepare shared plan</button><button class="text-button" @click="calculate()" :disabled="busy">Check status</button></div>
-<p x-show="result.status==='unsupported'">No supported invention route is available for this product.</p>
-<div x-show="result.status==='ready'"><p class="muted" x-show="result.stale">Using saved data due for refresh.</p><p x-show="!result.best">No fully priced option is available. Wait for market snapshots, then check again.</p><p class="muted" x-show="!result.complete_pricing">Incomplete prices: some alternatives could not be compared.</p>
-<template x-if="selected"><div class="shopping-result"><div class="shopping-heading"><h2>Shopping list</h2><button type="button" class="button secondary compact" @click="copyBuyList()" :disabled="!canCopyBuyList">Copy buy list</button><div class="material-name"><template x-if="selected.decryptor_id"><img :src="'https://images.evetech.net/types/'+selected.decryptor_id+'/icon?size=64'" alt="" @error="$el.style.visibility='hidden'"></template><span>Best option: <strong x-text="selected.decryptor_id===null?'No decryptor':selected.decryptor_name"></strong></span></div></div>
-<div class="shopping-stats">
-<div><span>Purchase budget</span><strong x-text="Number(selected.estimated_cost).toLocaleString('en-US',{maximumFractionDigits:2}) + ' ISK'"></strong></div>
-<div><span>Invention attempts</span><strong x-text="selected.attempts.toLocaleString('en-US')"></strong><small x-text="(Number(selected.probability)*100).toFixed(1)+'% chance | '+selected.runs_per_copy+' runs / T2 BPC'"></small></div>
-<div><span>Successful T2 BPCs needed</span><strong x-text="selected.successful_copies.toLocaleString('en-US')"></strong><small x-text="selected.manufacturing_runs.toLocaleString('en-US')+' manufacturing runs'"></small></div>
-<div><span>Output capacity</span><strong x-text="selected.output_capacity.toLocaleString('en-US')+' units'"></strong><small x-text="result.desired_units.toLocaleString('en-US')+' requested'"></small></div>
-</div><label x-show="showBuyList">Buy list (BPCs excluded)<textarea readonly rows="5" :value="buyListText" @focus="$el.select()" style="width:100%"></textarea></label>
-<p class="muted shopping-note">Expected consumption, not guaranteed success. Budget excludes T1 BPCs and taxes.</p>
-<div class="table-wrap"><table><thead><tr><th>Item to obtain</th><th>Quantity</th></tr></thead><tbody><tr><td><div class="material-name"><img :src="'https://images.evetech.net/types/'+selected.source_blueprint_id+'/bpc?size=64'" alt="" loading="lazy" @error="$el.style.visibility='hidden'"><div><strong x-text="name(selected.source_blueprint_id)"></strong><div class="muted">T1 BPC licensed runs</div></div></div></td><td><span x-text="selected.attempts.toLocaleString('en-US')"></span> licensed runs</td></tr><template x-for="material in selected.materials" :key="material.type_id"><tr><td><div class="material-name"><img :src="'https://images.evetech.net/types/'+material.type_id+'/icon?size=64'" alt="" loading="lazy" @error="$el.style.visibility='hidden'"><span x-text="name(material.type_id)"></span></div></td><td x-text="material.quantity.toLocaleString('en-US')"></td></tr></template></tbody></table></div>
-<details class="shopping-assumptions"><summary>Calculation details</summary><p class="muted">Best option minimizes the total datacore/decryptor budget for this batch, including chance, BPC runs and units/run. Uses saved sell prices. One attempt consumes one licensed T1 BPC run and its supplies, regardless of success. A copy may contain multiple runs. T1 BPC purchase costs, availability, taxes and manufacturing materials are excluded.</p></details>
-<details><summary>Compare invention options</summary><div class="table-wrap"><table><thead><tr><th>Decryptor</th><th>Chance / BPC output</th><th>Attempts</th><th>Purchase budget (ISK)</th></tr></thead><tbody><template x-for="option in result.options" :key="String(option.decryptor_id)"><tr><td><span x-text="option.decryptor_id===null?'No decryptor':option.decryptor_name"></span><strong x-show="option.decryptor_id===selected.decryptor_id"> (best)</strong></td><td><span x-text="(Number(option.probability)*100).toFixed(1)+'%'"></span><div class="muted" x-text="option.runs_per_copy+' runs / T2 BPC'"></div></td><td x-text="option.attempts"></td><td x-text="option.estimated_cost===null?'Missing prices':Number(option.estimated_cost).toLocaleString('en-US',{maximumFractionDigits:2})"></td></tr></template></tbody></table></div></details>
-</div></template></div></section></template>
-</section></div></main></body></html>
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width,initial-scale=1">
+    <title>Invention shopping - EVE Manufacturing</title>
+    <link rel="stylesheet" href="/static/app.css">
+    <link rel="stylesheet" href="/static/navigation.css">
+    <script defer src="/ui/config.js"></script>
+    <script defer src="/static/api.js"></script>
+    <script defer src="/static/shopping.js"></script>
+    <script defer src="/static/freshness.js"></script>
+    <script defer src="/static/vendor/alpine.min.js"></script>
+  </head>
+  <body x-data="shoppingApp">
+    {% set active_page = "shopping" %}
+    {% include "navigation.html" %}
+    <main class="workspace">
+      <div class="content">
+        <div class="page-heading">
+          <div>
+            <h1>Invention shopping</h1>
+            <p>Plan datacores, decryptors and T1 blueprint-copy runs for your desired T2 output.</p>
+          </div>
+        </div>
+        <section class="market-panel shopping-panel" style="padding:22px">
+          <form @submit.prevent="calculate()">
+            <div class="filter-grid">
+              <div class="blueprint-picker" @click.outside="suggestionsOpen=false">
+                <label for="blueprint-search">T2 blueprint or product name</label><input
+                  id="blueprint-search"
+                  x-ref="blueprintSearch"
+                  type="search"
+                  role="combobox"
+                  aria-autocomplete="list"
+                  aria-controls="blueprint-suggestions"
+                  :aria-expanded="suggestionsOpen && searchText.trim().length>=2"
+                  :aria-activedescendant="suggestionsOpen && activeMatch>=0?'blueprint-option-'+activeMatch:null"
+                  x-model="searchText"
+                  @input="invalidateSearch()"
+                  @input.debounce.300ms="search()"
+                  @focus="suggestionsOpen=true"
+                  @keydown="searchKey($event)"
+                  placeholder="Start typing a T2 blueprint name..."
+                  autocomplete="off"
+                  required
+                >
+                <div
+                  id="blueprint-suggestions"
+                  class="blueprint-suggestions"
+                  role="listbox"
+                  x-show="suggestionsOpen && searchText.trim().length>=2"
+                  x-cloak
+                >
+                  <p class="muted" x-show="searching">Searching...</p>
+                  <p
+                    class="muted"
+                    x-show="!searching&&!matches.length"
+                  >No matching T2 blueprints.</p>
+                  <template x-for="(item,index) in matches" :key="item.type_id">
+                    <div
+                      role="option"
+                      :id="'blueprint-option-'+index"
+                      :aria-selected="index===activeMatch"
+                      :class="{'blueprint-highlight':index===activeMatch}"
+                      @mousedown.prevent
+                      @click="chooseBlueprint(item)"
+                    >
+                      <img
+                        :src="'https://images.evetech.net/types/'+item.type_id+'/icon?size=32'"
+                        alt=""
+                        loading="lazy"
+                        @error="$el.style.visibility='hidden'"
+                      >
+                      <span x-text="item.name+' Blueprint'"></span>
+                    </div>
+                  </template>
+                </div>
+              </div>
+              <label>
+                Price hub<select x-model="hub" @change="result=null">
+                <option value="jita">Jita</option>
+                <option value="amarr">Amarr</option>
+                <option value="dodixie">Dodixie</option>
+                <option value="rens">Rens</option>
+                <option value="hek">Hek</option>
+              </select></label><label>Finished units wanted<input
+                type="number"
+                x-model="units"
+                @input="result=null"
+                required
+                min="1"
+                max="1000000000"
+                step="1"
+              >
+              </label>
+            </div>
+            <p class="muted">Skills II / II / II. Invention supplies only; no manufacturing materials.</p>
+            <button
+              class="button primary"
+              type="submit"
+              :disabled="busy"
+              x-text="busy?'Calculating...':'Calculate shopping list'"
+            ></button>
+          </form>
+          <p
+            class="error-banner"
+            x-show="error"
+            x-text="error"
+            role="alert"
+            x-cloak
+          ></p>
+          <p class="muted" x-show="message" x-text="message" role="status" x-cloak></p>
+          <template x-if="result">
+            <section>
+              <div x-show="result.status==='not_prepared'">
+                <p>This blueprint has no saved invention plan yet.</p>
+                <button class="button secondary" @click="prepare()" :disabled="busy">Prepare shared plan</button><button class="text-button" @click="calculate()" :disabled="busy">Check status</button>
+              </div>
+              <p x-show="result.status==='unsupported'">No supported invention route is available for this product.</p>
+              <div x-show="result.status==='ready'">
+                <p class="muted" x-show="result.stale">Using saved data due for refresh.</p>
+                <p x-show="!result.best">No fully priced option is available. Wait for market snapshots, then check again.</p>
+                <p
+                  class="muted"
+                  x-show="!result.complete_pricing"
+                >Incomplete prices: some alternatives could not be compared.</p>
+                <template x-if="selected">
+                  <div class="shopping-result">
+                    <div class="shopping-heading">
+                      <h2>Shopping list</h2>
+                      <button
+                        type="button"
+                        class="button secondary compact"
+                        @click="copyBuyList()"
+                        :disabled="!canCopyBuyList"
+                      >
+                        Copy buy list
+                      </button>
+                      <div class="material-name">
+                        <template x-if="selected.decryptor_id">
+                          <img
+                            :src="'https://images.evetech.net/types/'+selected.decryptor_id+'/icon?size=64'"
+                            alt=""
+                            @error="$el.style.visibility='hidden'"
+                          >
+                        </template><span>Best option: <strong
+                          x-text="selected.decryptor_id===null?'No decryptor':selected.decryptor_name"
+                        ></strong></span>
+                      </div>
+                    </div>
+                    <div class="shopping-stats">
+                      <div><span>Purchase budget</span><strong
+                        x-text="Number(selected.estimated_cost).toLocaleString('en-US',{maximumFractionDigits:2}) + ' ISK'"
+                      ></strong></div>
+                      <div><span>Invention attempts</span><strong x-text="selected.attempts.toLocaleString('en-US')"></strong><small
+                        x-text="(Number(selected.probability)*100).toFixed(1)+'% chance | '+selected.runs_per_copy+' runs / T2 BPC'"
+                      ></small></div>
+                      <div><span>Successful T2 BPCs needed</span><strong x-text="selected.successful_copies.toLocaleString('en-US')"></strong><small
+                        x-text="selected.manufacturing_runs.toLocaleString('en-US')+' manufacturing runs'"
+                      ></small></div>
+                      <div><span>Output capacity</span><strong x-text="selected.output_capacity.toLocaleString('en-US')+' units'"></strong><small x-text="result.desired_units.toLocaleString('en-US')+' requested'"></small></div>
+                    </div>
+                    <label x-show="showBuyList">
+                      Buy list (BPCs excluded)<textarea
+                        readonly
+                        rows="5"
+                        :value="buyListText"
+                        @focus="$el.select()"
+                        style="width:100%"
+                      ></textarea>
+                    </label>
+                    <p class="muted shopping-note">Expected consumption, not guaranteed success. Budget excludes T1 BPCs and taxes.</p>
+                    <div class="table-wrap">
+                      <table>
+                        <thead>
+                          <tr>
+                            <th>Item to obtain</th>
+                            <th>Quantity</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          <tr>
+                            <td>
+                              <div class="material-name">
+                                <img
+                                  :src="'https://images.evetech.net/types/'+selected.source_blueprint_id+'/bpc?size=64'"
+                                  alt=""
+                                  loading="lazy"
+                                  @error="$el.style.visibility='hidden'"
+                                >
+                                <div>
+                                  <strong x-text="name(selected.source_blueprint_id)"></strong>
+                                  <div class="muted">T1 BPC licensed runs</div>
+                                </div>
+                              </div>
+                            </td>
+                            <td><span x-text="selected.attempts.toLocaleString('en-US')"></span> licensed runs</td>
+                          </tr>
+                          <template x-for="material in selected.materials" :key="material.type_id">
+                            <tr>
+                              <td>
+                                <div class="material-name">
+                                  <img
+                                    :src="'https://images.evetech.net/types/'+material.type_id+'/icon?size=64'"
+                                    alt=""
+                                    loading="lazy"
+                                    @error="$el.style.visibility='hidden'"
+                                  >
+                                  <span x-text="name(material.type_id)"></span>
+                                </div>
+                              </td>
+                              <td x-text="material.quantity.toLocaleString('en-US')"></td>
+                            </tr>
+                          </template>
+                        </tbody>
+                      </table>
+                    </div>
+                    <details class="shopping-assumptions">
+                      <summary>Calculation details</summary>
+                      <p class="muted">Best option minimizes the total datacore/decryptor budget for this batch, including chance, BPC runs and units/run. Uses saved sell prices. One attempt consumes one licensed T1 BPC run and its supplies, regardless of success. A copy may contain multiple runs. T1 BPC purchase costs, availability, taxes and manufacturing materials are excluded.</p>
+                    </details>
+                    <details>
+                      <summary>Compare invention options</summary>
+                      <div class="table-wrap">
+                        <table>
+                          <thead>
+                            <tr>
+                              <th>Decryptor</th>
+                              <th>Chance / BPC output</th>
+                              <th>Attempts</th>
+                              <th>Purchase budget (ISK)</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            <template
+                              x-for="option in result.options"
+                              :key="String(option.decryptor_id)"
+                            >
+                              <tr>
+                                <td><span
+                                  x-text="option.decryptor_id===null?'No decryptor':option.decryptor_name"
+                                ></span><strong x-show="option.decryptor_id===selected.decryptor_id"> (best)</strong></td>
+                                <td>
+                                  <span x-text="(Number(option.probability)*100).toFixed(1)+'%'"></span>
+                                  <div class="muted" x-text="option.runs_per_copy+' runs / T2 BPC'">
+                                  </div>
+                                </td>
+                                <td x-text="option.attempts"></td>
+                                <td
+                                  x-text="option.estimated_cost===null?'Missing prices':Number(option.estimated_cost).toLocaleString('en-US',{maximumFractionDigits:2})"
+                                ></td>
+                              </tr>
+                            </template>
+                          </tbody>
+                        </table>
+                      </div>
+                    </details>
+                  </div>
+                </template>
+              </div>
+            </section>
+          </template>
+        </section>
+      </div>
+    </main>
+  </body>
+</html>

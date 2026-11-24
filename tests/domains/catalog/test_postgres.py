@@ -24,6 +24,7 @@ from app.domains.manufacturing.models import ManufacturingQuery
 from app.domains.manufacturing.repository import SQLManufacturingRepository
 from app.domains.manufacturing.service import ManufacturingService
 from app.domains.market.models import PriceQuery
+from app.domains.market.quotes import SQLMarketQuoteReader
 from app.domains.market.repository import SQLMarketRepository
 from app.domains.profiles.models import ProfileCreate, ProfileSettings
 from app.domains.profiles.repository import SQLProfileRepository
@@ -146,7 +147,7 @@ async def test_migration_and_upsert_on_postgres() -> None:
                 await session.rollback()
                 values, _ = await history.liquidity(LiquidityQuery(days=2, type_ids=[10]), NOW)
                 assert values[0].data_days == 2
-                manufacturing = SQLManufacturingRepository(session)
+                manufacturing = SQLManufacturingRepository(session, SQLMarketQuoteReader(session))
                 await manufacturing.save(recipe_state())
                 await session.commit()
                 assert (await manufacturing.recipes([10]))[10] == recipe_state()

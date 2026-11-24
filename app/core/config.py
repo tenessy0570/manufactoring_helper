@@ -47,6 +47,11 @@ class Settings(BaseSettings):
     manufacturing_cache_seconds: int = Field(default=86400, ge=3600, le=604800)
     invention_plan_ttl_seconds: int = Field(default=604800, ge=3600, le=2592000)
 
+    session_ttl_seconds: int = Field(default=1209600, ge=60)
+    item_names_cache_seconds: int = Field(default=604800, ge=1)
+    route_cache_seconds: int = Field(default=86400, ge=1)
+    route_error_cache_seconds: int = Field(default=300, ge=1)
+
     basic_auth_username: str = ""
     basic_auth_password: SecretStr = SecretStr("")
 

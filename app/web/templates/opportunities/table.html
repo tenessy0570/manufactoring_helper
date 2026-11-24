@@ -1,0 +1,142 @@
+<table>
+  <thead>
+    <tr>
+      <th class="item-cell">ITEM</th>
+      <th x-show="columnVisible('cost')">COST / UNIT</th>
+      <th
+        x-show="columnVisible('profit')"
+        title="Per-unit profit at the best quoted price. Total demand profit uses all included price levels."
+      >
+        PROFIT / UNIT
+      </th>
+      <th
+        x-show="columnVisible('demand')"
+        title="Net profit from full runs filling buy orders inside your selected price range, using the actual prices of those orders."
+      >
+        PROFIT ON DEMAND
+      </th>
+      <th
+        x-show="columnVisible('margin')"
+        title="Legacy formula: net profit divided by raw material cost, multiplied by 100. This is not profit as a percentage of sale revenue."
+      >
+        MARGIN
+      </th>
+      <th
+        x-show="columnVisible('daily')"
+        title="Total daily profit across the selected production lines. Buy results are capped by saved demand. Invention time is included only when enabled."
+      >
+        PROFIT / DAY
+      </th>
+      <th x-show="columnVisible('turnover')">REGIONAL TURNOVER / DAY</th>
+      <th x-show="columnVisible('data')">DATA</th>
+      <th></th>
+      <th></th>
+    </tr>
+  </thead>
+  <tbody>
+    <template x-for="item in visibleItems" :key="item.type_id">
+      <tr
+        @click="openItem(item)"
+        @keydown.enter="openItem(item)"
+        @keydown.space.prevent="openItem(item)"
+        tabindex="0"
+        :aria-label="'View ' + item.name"
+      >
+        <td>
+          <div class="item-name">
+            <img
+              :src="'https://images.evetech.net/types/' + item.type_id + '/icon?size=64'"
+              alt=""
+              loading="lazy"
+              @error="$el.style.visibility='hidden'"
+            >
+            <div><strong x-text="item.name"></strong><span><span
+              class="tech-tag"
+              x-text="item.meta_group_id === 2 ? 'T2' : item.meta_group_id === 1 ? 'T1' : 'ITEM'"
+            ></span> <span
+              class="mini-warning"
+              x-show="item.invention_required && !item.invention_included"
+            > · invention cost not included</span></span></div>
+          </div>
+        </td>
+        <td
+          x-show="columnVisible('cost')"
+          x-text="money(item.total_cost_per_unit)"
+        ></td>
+        <td
+          x-show="columnVisible('profit')"
+          class="number"
+          :class="Number(item.profit_per_unit) >= 0 ? 'positive' : 'negative'"
+          x-text="money(item.profit_per_unit)"
+        ></td>
+        <td x-show="columnVisible('demand')">
+          <template x-if="item.profit_at_current_buy_price !== null">
+            <div>
+              <strong
+                :class="Number(item.profit_at_current_buy_price) < 0 ? 'negative' : 'positive'"
+                x-text="money(item.profit_at_current_buy_price)"
+                :title="fullMoney(item.profit_at_current_buy_price) + ' ISK total profit'"
+              ></strong>
+              <div
+                class="muted"
+                x-text="item.production_limit_units.toLocaleString('en-US') + ' units / ' + item.full_runs_at_buy_price.toLocaleString('en-US') + ' runs'"
+              ></div>
+              <div
+                class="muted"
+                title="Estimated batch time: production plus copying and invention when their checkboxes are enabled. Uses selected slots and cached source durations; parallel preparation time is approximate."
+                x-text="'~' + demandDuration(item) + ' on ' + productionLines() + (productionLines() === 1 ? ' line' : ' lines')"
+              ></div>
+              <div class="muted" x-show="item.buy_demand_depth_available === false">
+                Best-price data only
+              </div>
+            </div>
+          </template><span
+            class="muted"
+            x-show="item.profit_at_current_buy_price === null"
+          >Buy pricing only</span>
+        </td>
+        <td x-show="columnVisible('margin')">
+          <span
+            class="margin-badge"
+            :class="Number(item.margin_pct) < 0 && 'loss'"
+            x-text="percent(item.margin_pct)"
+          ></span>
+        </td>
+        <td
+          x-show="columnVisible('daily')"
+          class="number positive"
+          :class="Number(item.rank_profit_per_day) < 0 && 'negative'"
+          x-text="money(item.rank_profit_per_day)"
+        ></td>
+        <td
+          x-show="columnVisible('turnover')"
+          :title="item.daily_isk_volume === null ? 'No trading history for this period' : fullMoney(item.daily_isk_volume) + ' ISK per day across the region'"
+          x-text="money(item.daily_isk_volume)"
+        ></td>
+        <td x-show="columnVisible('data')"><span
+          class="data-badge"
+          :class="isStale(item) ? 'stale' : 'fresh'"
+          x-text="isStale(item) ? 'Stale' : 'Fresh'"
+          :title="isStale(item) ? staleExplanation(item) : 'Saved inputs are within their freshness window.'"
+        ></span><span
+          class="risk-dot"
+          x-show="item.demand_warnings.length"
+          :title="item.demand_warnings.map(w => demandWarning(w)).join(' ')"
+        >!</span></td>
+        <td>
+          <button
+            type="button"
+            class="text-button"
+            @click.stop="excludeItem(item)"
+            @keydown.stop
+            :disabled="loading"
+            :aria-label="'Exclude '+item.name"
+          >
+            Exclude
+          </button>
+        </td>
+        <td class="row-arrow">↗</td>
+      </tr>
+    </template>
+  </tbody>
+</table>

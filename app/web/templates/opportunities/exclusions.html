@@ -1,0 +1,59 @@
+<details class="excluded-items" x-show="excludedItems.length">
+  <summary>Excluded items <span
+    class="muted"
+    x-text="'('+excludedItems.length+')'"
+  ></span></summary>
+  <div class="excluded-content">
+    <div class="excluded-toolbar">
+      <span class="muted">Hidden from opportunities. Restore to include in your next search.</span><button
+        type="button"
+        class="text-button"
+        @click="changeExclusions([])"
+        :disabled="loading"
+      >
+        Restore all
+      </button>
+    </div>
+    <div class="excluded-list">
+      <template x-for="item in excludedPageItems" :key="item.type_id">
+        <div class="excluded-row">
+          <img
+            :src="'https://images.evetech.net/types/'+item.type_id+'/icon?size=32'"
+            alt=""
+            width="32"
+            height="32"
+            loading="lazy"
+            @error="$el.style.visibility='hidden'"
+          ><span x-text="item.name"></span><button
+            type="button"
+            class="button secondary compact"
+            @click="restoreItem(item.type_id)"
+            :disabled="loading"
+          >
+            Restore
+          </button>
+        </div>
+      </template>
+    </div>
+    <div class="excluded-pagination">
+      <span class="muted"><span x-text="excludedPage*25+1"></span>–<span x-text="Math.min((excludedPage+1)*25,excludedItems.length)"></span> of <span x-text="excludedItems.length"></span></span>
+      <div>
+        <button
+          type="button"
+          class="button secondary compact"
+          :disabled="excludedPage===0"
+          @click="excludedPage--"
+        >
+          Previous
+        </button><span x-text="(excludedPage+1)+' / '+excludedPages"></span><button
+          type="button"
+          class="button secondary compact"
+          :disabled="excludedPage+1>=excludedPages"
+          @click="excludedPage++"
+        >
+          Next
+        </button>
+      </div>
+    </div>
+  </div>
+</details>

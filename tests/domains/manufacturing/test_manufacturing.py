@@ -36,6 +36,7 @@ from app.domains.manufacturing.models import (
 )
 from app.domains.manufacturing.repository import ManufacturingRepository, SQLManufacturingRepository
 from app.domains.manufacturing.service import ManufacturingService, ManufacturingSyncService
+from app.domains.market.quotes import SQLMarketQuoteReader
 from app.domains.market.repository import SQLMarketRepository
 from app.infrastructure.http import HttpStatusError
 from app.main import create_app
@@ -285,7 +286,7 @@ async def seed(session: AsyncSession) -> SQLManufacturingRepository:
     )
     await market.replace(market_state("amarr"), [price(34, hub_id="amarr", sell_price="1")])
     await SQLHistoryRepository(session).replace(history_state(), [day()])
-    repository = SQLManufacturingRepository(session)
+    repository = SQLManufacturingRepository(session, SQLMarketQuoteReader(session))
     for entry in (
         recipe_state(),
         recipe_state(20),
@@ -297,7 +298,7 @@ async def seed(session: AsyncSession) -> SQLManufacturingRepository:
 
 
 async def test_repository_batches_json_roundtrip_and_rollback(session: AsyncSession) -> None:
-    repository = SQLManufacturingRepository(session)
+    repository = SQLManufacturingRepository(session, SQLMarketQuoteReader(session))
     assert await repository.recipes([10]) == {}
     await repository.save(recipe_state())
     await session.commit()
@@ -471,7 +472,7 @@ async def test_candidates_past_first_batch_are_ranked_before_pagination(
     session: AsyncSession,
 ) -> None:
     await SQLItemTypeRepository(session).upsert_many([item(number) for number in range(1, 502)])
-    repository = SQLManufacturingRepository(session)
+    repository = SQLManufacturingRepository(session, SQLMarketQuoteReader(session))
     await repository.save(recipe_state(501))
     await SQLMarketRepository(session).replace(
         market_state(), [price(501, sell_price="30"), price(34, sell_price="3")]
@@ -650,7 +651,7 @@ async def test_mass_production_group_limit_cannot_be_overridden(
     session: AsyncSession, meta_group: int | None
 ) -> None:
     await SQLItemTypeRepository(session).upsert_many([item(10, meta_group_id=meta_group)])
-    repository = SQLManufacturingRepository(session)
+    repository = SQLManufacturingRepository(session, SQLMarketQuoteReader(session))
     await repository.save(recipe_state())
     await SQLMarketRepository(session).replace(
         market_state(), [price(10, sell_price="30"), price(34, sell_price="3")]
@@ -857,7 +858,7 @@ async def test_manual_calculator_accepts_non_mass_production_blueprint(
     session: AsyncSession,
 ) -> None:
     await SQLItemTypeRepository(session).upsert_many([item(60, meta_group_id=3)])
-    repository = SQLManufacturingRepository(session)
+    repository = SQLManufacturingRepository(session, SQLMarketQuoteReader(session))
     await repository.save(recipe_state(60))
     await SQLMarketRepository(session).replace(
         market_state(), [price(60, sell_price="30"), price(34, sell_price="3")]

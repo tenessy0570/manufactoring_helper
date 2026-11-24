@@ -1,1 +1,86 @@
-<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Cargo planner</title><link rel="stylesheet" href="/static/app.css"><link rel="stylesheet" href="/static/navigation.css"><link rel="stylesheet" href="/static/compact.css"><link rel="stylesheet" href="/static/trading.css"><script defer src="/static/history-chart.js"></script><script defer src="/static/cargo.js"></script><script defer src="/static/freshness.js"></script><script defer src="/static/vendor/alpine.min.js"></script></head><body class="compact-page" x-data="cargoApp">{% set active_page='cargo' %}{% include 'navigation.html' %}<main class="workspace"><div class="content"><h1>Cargo planner</h1><p class="muted">Maximize net profit for one trip: buy from sell orders and sell at one destination using buy or sell prices.</p><form class="market-panel trade-filters" @submit.prevent="calculate()"><div class="trade-filter-grid"><label>Buy in<select x-model="form.source_hub" required><template x-for="hub in hubs"><option :value="hub" x-text="name(hub)"></option></template></select></label><label>Sell in<select x-model="form.destination_hub"><option value="">Best destination</option><template x-for="hub in hubs"><option :value="hub" :disabled="hub===form.source_hub" x-text="name(hub)"></option></template></select></label><label>Cargo capacity (m&#179;)<input x-model="form.cargo_m3" type="number" min="0.00000001" step="any" required></label><label>Budget (ISK)<input x-model="form.budget" type="number" min="0.01" step="any" placeholder="Unlimited"></label><label>Sale prices<select x-model="form.sale_side"><option value="buy">Buy orders (sell immediately)</option><option value="sell">Sell orders (list items)</option></select></label><label>Min. destination turnover / day (ISK)<input type="number" min="0" step="any" x-model="form.min_daily_isk_volume" :disabled="!form.filter_daily_turnover" placeholder="Any"></label><label>History period (completed days)<input type="number" min="1" max="365" x-model="form.history_days" required></label><label>Sales tax (%)<input x-model="form.sales_tax" type="number" min="0" max="100" step="any" required></label><label>Route<select x-model="form.route_mode"><option value="safe">Safe (0.5+ only)</option><option value="shortest">Shortest</option></select></label><label>Sell purchase price range (%)<input x-model="form.sell_price_range" type="number" min="0" max="100" step="any" required></label><label>Buy sale price range (%)<input x-model="form.buy_price_range" :disabled="form.sale_side!=='buy'" type="number" min="0" max="100" step="any" required></label></div><div class="trade-toolbar"><label class="trade-toggle"><input type="checkbox" x-model="form.filter_daily_turnover">Filter daily turnover (ISK)</label><label class="trade-toggle"><input x-model="form.fresh_only" type="checkbox">Fresh data only</label><button class="button primary" :disabled="loading" x-text="loading?'Optimizing...':'Plan cargo'"></button></div></form><p role="alert" x-show="error" x-text="error"></p><p x-show="changed">Settings changed. Select Plan cargo to update.</p><template x-if="result"><div><p x-show="applied.sale_side==='sell'">Sell-price scenario: items must sell after listing. Sell stock is not demand; sale time and broker fees are not included.</p><p class="muted">Daily turnover is traded ISK across the destination region, averaged over the selected completed UTC days. When enabled with a minimum, items without saved history are excluded. Plans use saved orders and packaged volumes. Orders may change before arrival; transport costs, losses and minimum order quantities are not simulated. Empty cargo space may be more profitable than additional purchases.</p><p x-show="result.skipped_routes"><span x-text="result.skipped_routes"></span> destinations unavailable: route not verified.</p><p x-show="result.missing_volume"><span x-text="result.missing_volume"></span> items excluded: transport volume unknown.</p><p x-show="result.partial_depth">Some snapshots only contain best-price stock or demand. Estimates are conservative until the next market update.</p><p x-show="!result.plans.length">No verified destination routes available.</p><template x-for="(plan,index) in result.plans" :key="plan.destination_hub"><details class="market-panel cargo-plan"><summary><strong><span x-text="index===0?'Best plan: ':'Alternative: '"></span><span x-text="name(applied.source_hub)+' \u2192 '+name(plan.destination_hub)"></span></strong><strong class="positive" x-text="compact(plan.profit)+' ISK profit'"></strong><span class="margin-badge" x-text="money(plan.margin_pct)+'% margin'"></span><span x-text="money(Number(plan.cargo_m3)/Number(applied.cargo_m3)*100)+'% cargo'"></span><span x-text="plan.jumps+' jumps'"></span><span x-show="!plan.highsec"> &middot; Low/null-sec</span></summary><div class="cargo-plan-body"><p>Investment: <span x-text="compact(plan.investment)+' ISK'"></span> &middot; Net revenue: <span x-text="compact(plan.revenue)+' ISK'"></span> &middot; Cargo: <span x-text="money(plan.cargo_m3)+' / '+money(applied.cargo_m3)+' m&#179; ('+money(Number(plan.cargo_m3)/Number(applied.cargo_m3)*100)+'%)'"></span></p><p x-text="plan.optimal?'Optimized within solver tolerance.':'Approximate plan: optimization time limit or numerical adjustment.'"></p><p x-show="plan.stale">Some inputs are due for refresh.</p><p x-show="!plan.items.length">No profitable load with these settings.</p><div class="table-wrap"><table><thead><tr><th>Item</th><th>Units</th><th>Cargo (m&#179;)</th><th>Investment (ISK)</th><th>Net revenue (ISK)</th><th>Profit (ISK)</th></tr></thead><tbody><template x-for="item in plan.items" :key="item.type_id"><tr><td><button type="button" class="item-name trade-item-button" @click="openHistory(item,plan)" :aria-label="'Price history for '+item.name+' in '+name(plan.destination_hub)"><img :src="'https://images.evetech.net/types/'+item.type_id+'/icon?size=32'" alt="" loading="lazy"><strong x-text="item.name"></strong></button></td><td x-text="money(item.quantity)"></td><td x-text="money(item.cargo_m3)"></td><td x-text="compact(item.investment)"></td><td x-text="compact(item.revenue)"></td><td class="positive" x-text="compact(item.profit)"></td></tr></template></tbody></table></div></div></details></template></div></template></div></main><dialog class="trade-history-dialog" x-ref="historyDialog" aria-labelledby="cargo-history-title" @cancel.prevent="closeHistory()" @click="historyOutside($event)"><template x-if="historyItem"><div><div class="trade-history-heading"><div><div class="eyebrow">SALE REGION HISTORY: <span x-text="name(historyItem.destination_hub)"></span></div><h2 id="cargo-history-title" x-text="historyItem.name"></h2></div><button type="button" class="icon-button" x-ref="historyClose" @click="closeHistory()" aria-label="Close price history">&times;</button></div><p class="muted">Average traded price and volume for the entire destination region over 30 completed UTC days. Historical station buy/sell quotes are unavailable.</p>{% include "market_history_chart.html" %}</div></template></dialog></body></html>
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width,initial-scale=1">
+    <title>Cargo planner</title>
+    <link rel="stylesheet" href="/static/app.css">
+    <link rel="stylesheet" href="/static/navigation.css">
+    <link rel="stylesheet" href="/static/compact.css">
+    <link rel="stylesheet" href="/static/trading.css">
+    <script defer src="/ui/config.js"></script>
+    <script defer src="/static/api.js"></script><script defer src="/static/history-chart.js"></script><script defer src="/static/cargo.js"></script><script defer src="/static/freshness.js"></script><script defer src="/static/vendor/alpine.min.js"></script></head><body class="compact-page" x-data="cargoApp">{% set active_page = "cargo" %}{% include "navigation.html" %}<main class="workspace"><div class="content"><h1>Cargo planner</h1><p class="muted">Maximize net profit for one trip: buy from sell orders and sell at one destination using buy or sell prices.</p><form class="market-panel trade-filters" @submit.prevent="calculate()"><div class="trade-filter-grid"><label>Buy in<select x-model="form.source_hub" required><template x-for="hub in hubs"><option :value="hub" x-text="name(hub)"></option></template></select></label><label>Sell in<select x-model="form.destination_hub"><option value="">Best destination</option><template x-for="hub in hubs"><option :value="hub" :disabled="hub===form.source_hub" x-text="name(hub)"></option></template></select></label><label>Cargo capacity (m³)<input
+      x-model="form.cargo_m3"
+      type="number"
+      min="0.00000001"
+      step="any"
+      required
+    ></label><label>Budget (ISK)<input
+      x-model="form.budget"
+      type="number"
+      min="0.01"
+      step="any"
+      placeholder="Unlimited"
+    ></label><label>Sale prices<select x-model="form.sale_side"><option value="buy">Buy orders (sell immediately)</option><option value="sell">Sell orders (list items)</option></select></label><label>Min. destination turnover / day (ISK)<input
+      type="number"
+      min="0"
+      step="any"
+      x-model="form.min_daily_isk_volume"
+      :disabled="!form.filter_daily_turnover"
+      placeholder="Any"
+    ></label><label>History period (completed days)<input type="number" min="1" max="365" x-model="form.history_days" required></label><label>Sales tax (%)<input
+      x-model="form.sales_tax"
+      type="number"
+      min="0"
+      max="100"
+      step="any"
+      required
+    ></label><label>Route<select x-model="form.route_mode"><option value="safe">Safe (0.5+ only)</option><option value="shortest">Shortest</option></select></label><label>Sell purchase price range (%)<input
+      x-model="form.sell_price_range"
+      type="number"
+      min="0"
+      max="100"
+      step="any"
+      required
+    ></label><label>Buy sale price range (%)<input
+      x-model="form.buy_price_range"
+      :disabled="form.sale_side!=='buy'"
+      type="number"
+      min="0"
+      max="100"
+      step="any"
+      required
+    ></label></div><div class="trade-toolbar"><label class="trade-toggle"><input type="checkbox" x-model="form.filter_daily_turnover">Filter daily turnover (ISK)</label><label class="trade-toggle"><input x-model="form.fresh_only" type="checkbox">Fresh data only</label><button
+      class="button primary"
+      :disabled="loading"
+      x-text="loading?'Optimizing...':'Plan cargo'"
+    ></button></div></form><p role="alert" x-show="error" x-text="error"></p><p x-show="changed">Settings changed. Select Plan cargo to update.</p><template x-if="result"><div><p x-show="applied.sale_side==='sell'">Sell-price scenario: items must sell after listing. Sell stock is not demand; sale time and broker fees are not included.</p><p class="muted">Daily turnover is traded ISK across the destination region, averaged over the selected completed UTC days. When enabled with a minimum, items without saved history are excluded. Plans use saved orders and packaged volumes. Orders may change before arrival; transport costs, losses and minimum order quantities are not simulated. Empty cargo space may be more profitable than additional purchases.</p><p x-show="result.skipped_routes"><span x-text="result.skipped_routes"></span> destinations unavailable: route not verified.</p><p x-show="result.missing_volume"><span x-text="result.missing_volume"></span> items excluded: transport volume unknown.</p><p x-show="result.partial_depth">Some snapshots only contain best-price stock or demand. Estimates are conservative until the next market update.</p><p x-show="!result.plans.length">No verified destination routes available.</p><template x-for="(plan,index) in result.plans" :key="plan.destination_hub"><details class="market-panel cargo-plan"><summary><strong><span x-text="index===0?'Best plan: ':'Alternative: '"></span><span
+      x-text="name(applied.source_hub)+' \u2192 '+name(plan.destination_hub)"
+    ></span></strong><strong class="positive" x-text="compact(plan.profit)+' ISK profit'"></strong><span class="margin-badge" x-text="money(plan.margin_pct)+'% margin'"></span><span
+      x-text="money(Number(plan.cargo_m3)/Number(applied.cargo_m3)*100)+'% cargo'"
+    ></span><span x-text="plan.jumps+' jumps'"></span><span x-show="!plan.highsec"> · Low/null-sec</span></summary><div class="cargo-plan-body"><p>Investment: <span x-text="compact(plan.investment)+' ISK'"></span> · Net revenue: <span x-text="compact(plan.revenue)+' ISK'"></span> · Cargo: <span
+      x-text="money(plan.cargo_m3)+' / '+money(applied.cargo_m3)+' m³ ('+money(Number(plan.cargo_m3)/Number(applied.cargo_m3)*100)+'%)'"
+    ></span></p><p
+      x-text="plan.optimal?'Optimized within solver tolerance.':'Approximate plan: optimization time limit or numerical adjustment.'"
+    ></p><p x-show="plan.stale">Some inputs are due for refresh.</p><p x-show="!plan.items.length">No profitable load with these settings.</p><div class="table-wrap"><table><thead><tr><th>Item</th><th>Units</th><th>Cargo (m³)</th><th>Investment (ISK)</th><th>Net revenue (ISK)</th><th>Profit (ISK)</th></tr></thead><tbody><template x-for="item in plan.items" :key="item.type_id"><tr><td><button
+      type="button"
+      class="item-name trade-item-button"
+      @click="openHistory(item,plan)"
+      :aria-label="'Price history for '+item.name+' in '+name(plan.destination_hub)"
+    ><img
+      :src="'https://images.evetech.net/types/'+item.type_id+'/icon?size=32'"
+      alt=""
+      loading="lazy"
+    ><strong x-text="item.name"></strong></button></td><td x-text="money(item.quantity)"></td><td x-text="money(item.cargo_m3)"></td><td x-text="compact(item.investment)"></td><td x-text="compact(item.revenue)"></td><td class="positive" x-text="compact(item.profit)"></td></tr></template></tbody></table></div></div></details></template></div></template></div></main><dialog
+      class="trade-history-dialog"
+      x-ref="historyDialog"
+      aria-labelledby="cargo-history-title"
+      @cancel.prevent="closeHistory()"
+      @click="historyOutside($event)"
+    ><template x-if="historyItem"><div><div class="trade-history-heading"><div><div class="eyebrow">SALE REGION HISTORY: <span x-text="name(historyItem.destination_hub)"></span></div><h2 id="cargo-history-title" x-text="historyItem.name"></h2></div><button
+      type="button"
+      class="icon-button"
+      x-ref="historyClose"
+      @click="closeHistory()"
+      aria-label="Close price history"
+    >×</button></div><p class="muted">Average traded price and volume for the entire destination region over 30 completed UTC days. Historical station buy/sell quotes are unavailable.</p>{% include "market_history_chart.html" %}</div></template></dialog></body></html>

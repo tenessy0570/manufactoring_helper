@@ -4,7 +4,8 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, Field, model_validator
 
-from app.domains.history.models import LiquidityQuery
+from app.domains.history.models import LiquidityItem, LiquidityQuery
+from app.domains.invention.models import InventionRequest, InventionSettings
 from app.domains.market.models import HubId, MarketPrice
 
 
@@ -232,3 +233,28 @@ class BatchCalculation(BaseModel):
 
 class CalculatorPage(OpportunityPage):
     batch: BatchCalculation | None = None
+
+
+class OpportunityInputs(BaseModel):
+    candidates: list[LiquidityItem]
+    recipes: dict[int, RecipeState]
+    quotes: dict[int, MarketPrice]
+    products: dict[int, MarketPrice]
+    invention_settings: dict[int, InventionSettings]
+    invention_results: dict[str, InventionRequest]
+
+
+class OpportunityTiming(BaseModel):
+    daily_profit: Decimal
+    demand_daily_profit: Decimal | None
+    duration_seconds: Decimal | None
+
+
+class OpportunityEvaluation(BaseModel):
+    items: list[Opportunity]
+    missing_recipes: int
+    non_manufacturable: int
+    missing_prices: int
+    missing_job_costs: int
+    missing_invention: int
+    invention_unavailable: dict[int, str]

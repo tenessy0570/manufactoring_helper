@@ -1,11 +1,102 @@
-<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>{% if mode == 'admin' %}User administration{% elif mode == 'login' %}Log in{% else %}My account{% endif %} - EVE Manufacturing</title><link rel="stylesheet" href="/static/app.css"><link rel="stylesheet" href="/static/navigation.css"><script defer src="/static/account.js"></script><script defer src="/static/freshness.js"></script><script defer src="/static/vendor/alpine.min.js"></script></head>
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>{% if mode == "admin" %}User administration{% elif mode == "login" %}Log in{% else %}My account{% endif %} - EVE Manufacturing</title><link rel="stylesheet" href="/static/app.css"><link rel="stylesheet" href="/static/navigation.css"><script defer src="/ui/config.js"></script>
+<script defer src="/static/api.js"></script>
+<script defer src="/static/account.js"></script>
+<script defer src="/static/freshness.js"></script>
+<script defer src="/static/vendor/alpine.min.js"></script>
+</head>
 <body x-data="accountApp" data-mode="{{ mode }}">
-{% if mode != 'login' %}{% set active_page = mode %}{% include "navigation.html" %}{% endif %}
-<main class="{% if mode != 'login' %}workspace{% endif %}"><div class="content" {% if mode == 'login' %}style="max-width:500px;margin:8vh auto"{% endif %}>
-<div class="page-heading"><div><h1>{% if mode == 'admin' %}User administration{% elif mode == 'login' %}Log in{% else %}My account{% endif %}</h1><p>{% if mode == 'login' %}Use the account provided by your administrator.{% elif mode == 'admin' %}Manage access to EVE Manufacturing.{% else %}Manage your login and password.{% endif %}</p></div></div>
-<p class="error-banner" x-show="error" x-text="error" role="alert" x-cloak></p><p class="profile-notice" x-show="message" x-text="message" role="status" x-cloak></p>
-<section class="market-panel" style="padding:22px">
-{% if mode == 'login' %}<p class="profile-notice" x-show="new URLSearchParams(location.search).has('changed')">Password updated. Please log in again.</p><form @submit.prevent="submitLogin()" class="account-form"><label>Username<input x-model="username" autocomplete="username" required minlength="3" maxlength="32"></label><label>Password<input type="password" x-model="password" autocomplete="current-password" required maxlength="128"></label><button class="button primary" :disabled="busy" x-text="busy?'Signing in...':'Log in'"></button></form><p class="muted">No public registration. First superuser: run the documented create-superuser command on the server.</p>
-{% elif mode == 'account' %}<p>Signed in as <strong x-text="user?.username"></strong><span x-show="user?.is_superuser"> (superuser)</span></p><a class="button secondary" href="/admin" x-show="user?.is_superuser">User administration</a><button type="button" class="button secondary" @click="logout()">Log out</button><h2 style="margin-top:24px">Change password</h2><form @submit.prevent="changePassword()" class="account-form"><label>Current password<input type="password" x-model="currentPassword" autocomplete="current-password" required maxlength="128"></label><label>New password<input type="password" x-model="newPassword" autocomplete="new-password" required minlength="12" maxlength="128"></label><button class="button primary" :disabled="busy">Change password</button></form><p class="muted">Changing your password signs you out on all devices.</p>
-{% else %}<h2>Create user</h2><form @submit.prevent="createUser()"><div class="filter-grid"><label>Username<input x-model="newUsername" autocomplete="off" pattern="[a-zA-Z0-9_.-]+" required minlength="3" maxlength="32"></label><label>Initial password<input type="password" x-model="initialPassword" autocomplete="new-password" required minlength="12" maxlength="128"></label></div><label class="toggle-row"><input type="checkbox" x-model="superuser"> Superuser</label><button class="button primary" :disabled="busy">Create user</button></form><h2 style="margin-top:24px">Users</h2><div class="table-wrap"><table><thead><tr><th>Username</th><th>Role</th><th>Status</th><th>Actions</th></tr></thead><tbody><template x-for="item in users" :key="item.id"><tr><td x-text="item.username"></td><td x-text="item.is_superuser?'Superuser':'User'"></td><td x-text="item.is_active?'Active':'Disabled'"></td><td><button class="text-button" @click="editing=item;resetPassword=''">Reset password</button><button class="text-button" :disabled="item.id===user?.id" @click="toggleUser(item)" x-text="item.is_active?'Disable':'Enable'"></button></td></tr></template></tbody></table></div><template x-if="editing"><form @submit.prevent="saveReset()" class="account-form"><h3 x-text="'Reset password: '+editing.username"></h3><label>New password<input type="password" x-model="resetPassword" autocomplete="new-password" required minlength="12" maxlength="128"></label><div><button class="button primary" :disabled="busy">Reset password</button><button type="button" class="text-button" @click="editing=null;resetPassword=''">Cancel</button></div></form></template>{% endif %}
-</section></div></main></body></html>
+  {% if mode != "login" %}
+    {% set active_page = mode %}
+    {% include "navigation.html" %}
+  {% endif %}
+  <main class="{% if mode != 'login' %}workspace{% endif %}">
+    <div
+      class="content"
+      {% if mode == 'login' %}style="max-width:500px;margin:8vh auto"{% endif %}
+    >
+      <div class="page-heading"><div><h1>{% if mode == "admin" %}User administration{% elif mode == "login" %}Log in{% else %}My account{% endif %}</h1><p>{% if mode == "login" %}Use the account provided by your administrator.{% elif mode == "admin" %}Manage access to EVE Manufacturing.{% else %}Manage your login and password.{% endif %}</p></div></div>
+      <p
+        class="error-banner"
+        x-show="error"
+        x-text="error"
+        role="alert"
+        x-cloak
+      ></p>
+      <p
+        class="profile-notice"
+        x-show="message"
+        x-text="message"
+        role="status"
+        x-cloak
+      ></p>
+      <section class="market-panel" style="padding:22px">
+      {% if mode == "login" %}<p
+        class="profile-notice"
+        x-show="new URLSearchParams(location.search).has('changed')"
+      >Password updated. Please log in again.</p><form @submit.prevent="submitLogin()" class="account-form"><label>Username<input
+        x-model="username"
+        autocomplete="username"
+        required
+        minlength="3"
+        maxlength="32"
+      ></label><label>Password<input
+        type="password"
+        x-model="password"
+        autocomplete="current-password"
+        required
+        maxlength="128"
+      ></label><button
+        class="button primary"
+        :disabled="busy"
+        x-text="busy?'Signing in...':'Log in'"
+      ></button></form><p class="muted">No public registration. First superuser: run the documented create-superuser command on the server.</p>
+    {% elif mode == "account" %}<p>Signed in as <strong x-text="user?.username"></strong><span x-show="user?.is_superuser"> (superuser)</span></p><a class="button secondary" href="/admin" x-show="user?.is_superuser">User administration</a><button type="button" class="button secondary" @click="logout()">Log out</button><h2 style="margin-top:24px">Change password</h2><form @submit.prevent="changePassword()" class="account-form"><label>Current password<input
+      type="password"
+      x-model="currentPassword"
+      autocomplete="current-password"
+      required
+      maxlength="128"
+    ></label><label>New password<input
+      type="password"
+      x-model="newPassword"
+      autocomplete="new-password"
+      required
+      minlength="12"
+      maxlength="128"
+    ></label><button class="button primary" :disabled="busy">Change password</button></form><p class="muted">Changing your password signs you out on all devices.</p>
+    {% else %}<h2>Create user</h2><form @submit.prevent="createUser()"><div class="filter-grid"><label>Username<input
+      x-model="newUsername"
+      autocomplete="off"
+      pattern="[a-zA-Z0-9_.-]+"
+      required
+      minlength="3"
+      maxlength="32"
+    ></label><label>Initial password<input
+      type="password"
+      x-model="initialPassword"
+      autocomplete="new-password"
+      required
+      minlength="12"
+      maxlength="128"
+    ></label></div><label class="toggle-row"><input type="checkbox" x-model="superuser"> Superuser</label><button class="button primary" :disabled="busy">Create user</button></form><h2 style="margin-top:24px">Users</h2><div class="table-wrap"><table><thead><tr><th>Username</th><th>Role</th><th>Status</th><th>Actions</th></tr></thead><tbody><template x-for="item in users" :key="item.id"><tr><td x-text="item.username"></td><td x-text="item.is_superuser?'Superuser':'User'"></td><td x-text="item.is_active?'Active':'Disabled'"></td><td><button class="text-button" @click="editing=item;resetPassword=''">Reset password</button><button
+      class="text-button"
+      :disabled="item.id===user?.id"
+      @click="toggleUser(item)"
+      x-text="item.is_active?'Disable':'Enable'"
+    ></button></td></tr></template></tbody></table></div><template x-if="editing"><form @submit.prevent="saveReset()" class="account-form"><h3 x-text="'Reset password: '+editing.username"></h3><label>New password<input
+      type="password"
+      x-model="resetPassword"
+      autocomplete="new-password"
+      required
+      minlength="12"
+      maxlength="128"
+    ></label><div><button class="button primary" :disabled="busy">Reset password</button><button
+      type="button"
+      class="text-button"
+      @click="editing=null;resetPassword=''"
+    >Cancel</button></div></form></template>{% endif %}
+  </section>
+</div>
+</main>
+</body>
+</html>

@@ -21,6 +21,7 @@ class SessionAuthMiddleware(BaseHTTPMiddleware):
         path = request.url.path
         public = path in (
             "/login",
+            "/ui/config.js",
             "/api/v1/accounts/login",
             "/health/live",
             "/health/ready",

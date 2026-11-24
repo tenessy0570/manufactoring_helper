@@ -1,18 +1,74 @@
-<details class="workspace-help" x-data @click.outside="$el.open=false" @keydown.escape.stop="$el.open=false;$refs.helpToggle.focus()"><summary x-ref="helpToggle">Help &amp; details</summary><aside class="workspace-help-content" aria-label="Page help"><h2>{% if active_page == 'opportunities' %}Opportunities</h2><p>All amounts are in ISK. Select a result to inspect materials, demand and invention.</p><p>Buy demand range: blank = 5%; zero = best price only.</p><details class="calculation-notes"><summary>Tax &amp; calculation notes</summary><p class="muted">All five rates default to 0%; blank means 0%. Buy broker applies to material buy orders, sell broker to product sell orders, and sales tax to either sale type. Facility tax and system cost index apply to manufacturing EIV, not market material prices. SCC surcharge remains included separately. Invention uses shared tax-free material estimates; these rates never create separate invention jobs.</p></details><details class="results-help" x-show="!demo" x-init="setInterval(() => { if (!document.hidden) { progressNow=Date.now(); loadProgress(); } }, 30000)"><summary @click="loadProgress()">Background data coverage</summary>
-          <p class="muted">Saved coverage for the selected product hub, independent of item filters. Counts do not mean workers are currently running. Empty trading history also counts as loaded. Invention coverage uses sell-priced inputs.</p>
-          <p x-show="progressError" role="status">Progress is temporarily unavailable.</p>
-          <template x-if="dataProgress"><dl>
-            <dt>Catalog candidates</dt><dd x-text="dataProgress.catalog_items"></dd>
-            <dt>Manufacturing recipes</dt><dd x-text="dataProgress.recipes_loaded + ' loaded / ' + dataProgress.catalog_items + ' candidates; ' + dataProgress.recipes_unavailable + ' unavailable'"></dd>
-            <dt>Regional history</dt><dd x-text="dataProgress.history_loaded + ' / ' + dataProgress.catalog_items + ' loaded'"></dd>
-            <dt>Market snapshots</dt><dd :title="dataProgress.market_updated_at ? new Date(dataProgress.market_updated_at).toLocaleString() : ''" x-text="dataProgress.market_items + ' items; last saved ' + timeAgo(dataProgress.market_updated_at)"></dd>
-            <dt>T2 invention</dt><dd x-text="dataProgress.invention_ready + ' ready / ' + dataProgress.t2_items + ' T2 items; ' + dataProgress.invention_pending + ' requested; ' + dataProgress.invention_unsupported + ' unsupported; ' + dataProgress.invention_errors + ' errors or missing prices'"></dd>
-          </dl></template><button type="button" class="text-button" @click="loadProgress()">Refresh status</button>
-        </details><details class="results-help"><summary>How to read these results</summary><dl>
-          <dt>Cost per unit</dt><dd>Materials, estimated job installation and optional invention/procurement fees for one finished item.</dd>
-          <dt>Profit per unit</dt><dd>Product price minus production costs and your selected sales tax/broker fees.</dd>
-          <dt>Margin</dt><dd>Profit divided by material cost, multiplied by 100. It is not a percentage of the sale price.</dd>
-          <dt>Profit per day</dt><dd>Theoretical production through one slot for 24 hours. Selling into buy orders caps this figure by available units and the actual buy prices within your selected range.</dd>
-          <dt>Profit on demand</dt><dd>Net profit from filling buy orders within the selected percentage below the best buy price, using each price level. Volumes smaller than a full production run, orders outside the range and future demand are excluded. Available only when product prices use buy orders.</dd><dt>Regional turnover</dt><dd>Estimated daily ISK traded across the entire hub region, averaged over your selected completed days. This is not your expected revenue or station-only demand.</dd>
-          <dt>Stale</dt><dd>One or more inputs are due for refresh: market snapshots after 20 minutes, regional history after 24 hours, recipes and included invention estimates at their saved refresh deadlines. The result uses the last available data. Orders refresh every 20 minutes; history and invention valuations refresh daily. Show results applies your settings to saved data.</dd>
-        </dl></details><p class="table-hint">Select an item for its material costs, demand and invention details. Scroll the table sideways on smaller screens.</p><footer class="page-footer"><span>Prices are snapshots, not guaranteed fills. ISK figures exclude hauling and blueprint purchase costs.</span><span>Built for your next production cycle.</span></footer>{% else %}Production history</h2><p>Record expenses as you build and each partial sale as a separate income transaction.</p><p class="muted">Balance = received income − recorded expenses. Unsold items and unrecorded expenses are excluded.</p><p class="muted">Record expenses as you build, and income as sales arrive.</p><p class="muted">Fill the amount on the left, then review and save.</p><p class="muted">Estimate this batch only. Saved prices; no ME bonuses.</p><p>Fill inserts a market estimate; review it before saving the transaction.</p><a href="/invention-shopping">Open invention shopping</a>{% endif %}</aside></details>
+<details
+  class="workspace-help"
+  x-data
+  @click.outside="$el.open=false"
+  @keydown.escape.stop="$el.open=false;$refs.helpToggle.focus()"
+><summary x-ref="helpToggle">Help &amp; details</summary><aside class="workspace-help-content" aria-label="Page help"><h2>{% if active_page == "opportunities" %}Opportunities</h2><p>All amounts are in ISK. Select a result to inspect materials, demand and invention.</p><p>Buy demand range: blank = 5%; zero = best price only.</p><details class="calculation-notes"><summary>Tax &amp; calculation notes</summary><p class="muted">All five rates default to 0%; blank means 0%. Buy broker applies to material buy orders, sell broker to product sell orders, and sales tax to either sale type. Facility tax and system cost index apply to manufacturing EIV, not market material prices. SCC surcharge remains included separately. Invention uses shared tax-free material estimates; these rates never create separate invention jobs.</p></details><details
+  class="results-help"
+  x-show="!demo"
+  x-init="setInterval(() => { if (!document.hidden) { progressNow=Date.now(); loadProgress(); } }, 30000)"
+><summary @click="loadProgress()">Background data coverage</summary>
+  <p class="muted">Saved coverage for the selected product hub, independent of item filters. Counts do not mean workers are currently running. Empty trading history also counts as loaded. Invention coverage uses sell-priced inputs.</p>
+  <p x-show="progressError" role="status">Progress is temporarily unavailable.</p>
+  <template x-if="dataProgress">
+    <dl>
+      <dt>Catalog candidates</dt>
+      <dd x-text="dataProgress.catalog_items">
+      </dd>
+      <dt>Manufacturing recipes</dt>
+      <dd
+        x-text="dataProgress.recipes_loaded + ' loaded / ' + dataProgress.catalog_items + ' candidates; ' + dataProgress.recipes_unavailable + ' unavailable'"
+      >
+      </dd>
+      <dt>Regional history</dt>
+      <dd
+        x-text="dataProgress.history_loaded + ' / ' + dataProgress.catalog_items + ' loaded'"
+      >
+      </dd>
+      <dt>Market snapshots</dt>
+      <dd
+        :title="dataProgress.market_updated_at ? new Date(dataProgress.market_updated_at).toLocaleString() : ''"
+        x-text="dataProgress.market_items + ' items; last saved ' + timeAgo(dataProgress.market_updated_at)"
+      >
+      </dd>
+      <dt>T2 invention</dt>
+      <dd
+        x-text="dataProgress.invention_ready + ' ready / ' + dataProgress.t2_items + ' T2 items; ' + dataProgress.invention_pending + ' requested; ' + dataProgress.invention_unsupported + ' unsupported; ' + dataProgress.invention_errors + ' errors or missing prices'"
+      >
+      </dd>
+    </dl>
+  </template>
+  <button type="button" class="text-button" @click="loadProgress()">Refresh status</button>
+  </details>
+  <details class="results-help">
+    <summary>How to read these results</summary>
+    <dl>
+      <dt>Cost per unit</dt>
+      <dd>
+        Materials, estimated job installation and optional invention/procurement fees for one finished item.
+      </dd>
+      <dt>Profit per unit</dt>
+      <dd>
+        Product price minus production costs and your selected sales tax/broker fees.
+      </dd>
+      <dt>Margin</dt>
+      <dd>
+        Profit divided by material cost, multiplied by 100. It is not a percentage of the sale price.
+      </dd>
+      <dt>Profit per day</dt>
+      <dd>
+        Theoretical production through one slot for 24 hours. Selling into buy orders caps this figure by available units and the actual buy prices within your selected range.
+      </dd>
+      <dt>Profit on demand</dt>
+      <dd>
+        Net profit from filling buy orders within the selected percentage below the best buy price, using each price level. Volumes smaller than a full production run, orders outside the range and future demand are excluded. Available only when product prices use buy orders.
+      </dd>
+      <dt>Regional turnover</dt>
+      <dd>
+        Estimated daily ISK traded across the entire hub region, averaged over your selected completed days. This is not your expected revenue or station-only demand.
+      </dd>
+      <dt>Stale</dt>
+      <dd>
+        One or more inputs are due for refresh: market snapshots after 20 minutes, regional history after 24 hours, recipes and included invention estimates at their saved refresh deadlines. The result uses the last available data. Orders refresh every 20 minutes; history and invention valuations refresh daily. Show results applies your settings to saved data.
+      </dd>
+    </dl></details><p class="table-hint">Select an item for its material costs, demand and invention details. Scroll the table sideways on smaller screens.</p><footer class="page-footer"><span>Prices are snapshots, not guaranteed fills. ISK figures exclude hauling and blueprint purchase costs.</span><span>Built for your next production cycle.</span></footer>{% else %}Production history</h2><p>Record expenses as you build and each partial sale as a separate income transaction.</p><p class="muted">Balance = received income − recorded expenses. Unsold items and unrecorded expenses are excluded.</p><p class="muted">Record expenses as you build, and income as sales arrive.</p><p class="muted">Fill the amount on the left, then review and save.</p><p class="muted">Estimate this batch only. Saved prices; no ME bonuses.</p><p>Fill inserts a market estimate; review it before saving the transaction.</p><a href="/invention-shopping">Open invention shopping</a>{% endif %}</aside></details>

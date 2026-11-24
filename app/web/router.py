@@ -1,12 +1,14 @@
+import json
 from pathlib import Path
 
 from dishka.integrations.fastapi import DishkaRoute, FromDishka
 from fastapi import APIRouter, Request
-from fastapi.responses import HTMLResponse
+from fastapi.responses import HTMLResponse, Response
 from fastapi.templating import Jinja2Templates
 
 from app.domains.health.models import HealthStatus
 from app.domains.health.service import HealthService
+from app.web.config import BROWSER_CONFIG
 
 WEB_ROOT = Path(__file__).resolve().parent
 templates = Jinja2Templates(directory=str(WEB_ROOT / "templates"))
@@ -75,3 +77,12 @@ async def interhub_trading(request: Request) -> HTMLResponse:
 # @router.get("/cargo-planner", response_class=HTMLResponse)
 # async def cargo_planner(request: Request) -> HTMLResponse:
 #     return templates.TemplateResponse(request=request, name="cargo.html")
+
+
+@router.get("/ui/config.js")
+async def browser_config() -> Response:
+    # Explicit public allowlist; never serialize Settings into a browser response.
+    return Response(
+        "window.eveConfig = Object.freeze(" + json.dumps(BROWSER_CONFIG) + ");",
+        media_type="application/javascript",
+    )

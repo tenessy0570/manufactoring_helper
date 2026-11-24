@@ -45,8 +45,16 @@ class EsiRouteGateway(RouteGateway):
 
 
 class TradingRoutes:
-    def __init__(self, cache: Cache, loader: CacheService, gateway: RouteGateway) -> None:
+    def __init__(
+        self,
+        cache: Cache,
+        loader: CacheService,
+        gateway: RouteGateway,
+        ttl_seconds: int = 86400,
+        error_ttl_seconds: int = 300,
+    ) -> None:
         self._cache, self._loader, self._gateway = cache, loader, gateway
+        self._ttl, self._error_ttl = ttl_seconds, error_ttl_seconds
 
     @staticmethod
     def key(source: HubId, destination: HubId, mode: RouteMode) -> str:
@@ -76,7 +84,7 @@ class TradingRoutes:
                     return await self._gateway.security(system)
 
                 security = await self._loader.get_or_load(
-                    f"trade:security:v1:{system}", load_security, 86400
+                    f"trade:security:v1:{system}", load_security, self._ttl
                 )
                 # EVE displays security rounded to one decimal: 0.45 is displayed as 0.5.
                 if (
@@ -88,9 +96,11 @@ class TradingRoutes:
             result = TradeRoute(jumps=len(route) - 1, highsec=highsec)
             if mode == "safe" and not highsec:
                 result = TradeRoute(error="No verified high-sec route")
-            await self._cache.set(key, result.model_dump(mode="json"), 86400)
+            await self._cache.set(key, result.model_dump(mode="json"), self._ttl)
         except Exception:
             logger.exception("Route refresh failed: %s to %s (%s)", source, destination, mode)
             await self._cache.set(
-                key, TradeRoute(error="Route temporarily unavailable").model_dump(mode="json"), 300
+                key,
+                TradeRoute(error="Route temporarily unavailable").model_dump(mode="json"),
+                self._error_ttl,
             )

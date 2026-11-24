@@ -454,6 +454,17 @@ return 'PASS: exclude, persist, restore and 25-item pagination';
                     if(Alpine.$data(nav).menuOpen)throw Error('Menu did not close');
                     return 'PASS: mobile navigation opens and closes';})()""")
                 )
+            print(
+                evaluate("""(async()=>{
+                const marker='private-password-must-not-appear';
+                for(const response of [new Response(JSON.stringify({detail:marker}),{status:500}),
+                    new Response(marker,{status:502}),new Response(marker,{status:422})]){
+                    try{await window.readApiResponse(response);throw Error('Expected failure');}
+                    catch(error){if(error.message.includes(marker))
+                        throw Error('Server details leaked');}
+                }
+                return 'PASS: frontend hides raw server failures';})()""")
+            )
             if errors:
                 raise RuntimeError(str(errors))
             print("PASS: no uncaught JavaScript errors")

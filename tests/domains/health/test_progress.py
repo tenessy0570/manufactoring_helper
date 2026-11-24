@@ -9,6 +9,7 @@ from app.domains.health.repository import SQLProgressRepository
 from app.domains.health.service import ProgressService
 from app.domains.invention.repository import SQLInventionRepository
 from app.domains.manufacturing.repository import SQLManufacturingRepository
+from app.domains.market.quotes import SQLMarketQuoteReader
 from app.main import create_app
 from tests.domains.catalog.test_catalog import NOW
 from tests.domains.invention.test_invention import request
@@ -48,7 +49,9 @@ async def test_progress_persists_coverage_and_validates_hub() -> None:
             "invention",
         ]
         assert all(source.status == "fresh" for source in freshness.sources)
-        await SQLManufacturingRepository(session).save(recipe_state(expires_at=NOW))
+        await SQLManufacturingRepository(session, SQLMarketQuoteReader(session)).save(
+            recipe_state(expires_at=NOW)
+        )
         partial = await repository.freshness("jita", NOW)
         recipes = next(source for source in partial.sources if source.source == "recipes")
         assert recipes.status == "partial"

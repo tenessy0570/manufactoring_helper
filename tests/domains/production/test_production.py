@@ -10,6 +10,7 @@ from dishka import Provider, Scope, make_async_container
 from pydantic import ValidationError
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
 
+from app.core.application_errors import ErrorKind
 from app.core.orm import Base
 from app.core.repository import SQLAlchemyUnitOfWork, UnitOfWork
 from app.domains.accounts.service import AccountService
@@ -18,6 +19,7 @@ from app.domains.invention.models import PlanState
 from app.domains.invention.repository import InventionRepository
 from app.domains.invention.shopping import ShoppingService
 from app.domains.manufacturing.repository import ManufacturingRepository
+from app.domains.production.errors import ProductionError
 from app.domains.production.models import (
     EntryInput,
     Estimate,
@@ -28,7 +30,6 @@ from app.domains.production.models import (
 )
 from app.domains.production.repository import ProductionRepository, SQLProductionRepository
 from app.domains.production.service import (
-    ProductionError,
     ProductionEstimateService,
     ProductionService,
 )
@@ -117,7 +118,7 @@ async def test_empty_progressive_expenses_partial_sales_and_corrections() -> Non
     ]:
         with pytest.raises(ProductionError) as error:
             await operation
-        assert error.value.status == 404
+        assert error.value.kind == ErrorKind.NOT_FOUND
     await svc.delete(user, row.id)
     assert await svc.find(user) == []
 
@@ -367,7 +368,12 @@ async def test_invention_decryptor_override_and_best_batch_budget() -> None:
             await estimator.estimate(
                 row.user_id, row.id, data.model_copy(update={"decryptor_id": chosen})
             )
-        assert error.value.status == status
+        assert (
+            error.value.kind
+            == {404: ErrorKind.NOT_FOUND, 422: ErrorKind.INVALID_INPUT, 409: ErrorKind.CONFLICT}[
+                status
+            ]
+        )
     assert (await svc.get(row.user_id, row.id)).entries == []
 
 

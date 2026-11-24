@@ -2,6 +2,7 @@ from dishka import Provider, Scope, provide
 from redis.asyncio import Redis
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.config import Settings
 from app.core.repository import UnitOfWork
 from app.domains.accounts.limiter import LoginLimiter, RedisLoginLimiter
 from app.domains.accounts.repository import AccountRepository, SQLAccountRepository
@@ -19,6 +20,10 @@ class AccountProvider(Provider):
 
     @provide(scope=Scope.REQUEST)
     def service(
-        self, repository: AccountRepository, uow: UnitOfWork, limiter: LoginLimiter
+        self,
+        repository: AccountRepository,
+        uow: UnitOfWork,
+        limiter: LoginLimiter,
+        settings: Settings,
     ) -> AccountService:
-        return AccountService(repository, uow, limiter)
+        return AccountService(repository, uow, limiter, settings.session_ttl_seconds)

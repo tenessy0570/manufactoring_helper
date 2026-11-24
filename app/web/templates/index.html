@@ -1,144 +1,327 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="en">
-<head>
-  <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="color-scheme" content="dark">
-  <title>EVE Manufacturing — Opportunities</title>
-  <link rel="stylesheet" href="/static/app.css"><link rel="stylesheet" href="/static/navigation.css">
-  <script defer src="/static/vendor/htmx.min.js"></script>
-  <script defer src="/static/history-chart.js"></script><script defer src="/static/app.js"></script>
-  <script defer src="/static/freshness.js"></script><script defer src="/static/vendor/alpine.min.js"></script>
-<link rel="stylesheet" href="/static/compact.css"></head>
-<body data-user-id="{{ request.state.user.id if request.state.user is defined else 'preview' }}" class="compact-page opportunities-page" x-data="manufacturingApp" @keydown.escape.window="selected ? closeItem() : profileSaveOpen = false">
-  {% set active_page = "opportunities" %}{% include "navigation.html" %}
-  <main class="workspace" :inert="selected !== null">
-    <header class="topbar"><div class="breadcrumb">Workspace <span>/</span> <strong>Opportunities</strong></div><div class="connection"><template x-if="!demo"><div hx-get="/ui/status" hx-trigger="load, every 60s" hx-swap="innerHTML">Checking services…</div></template><template x-if="demo"><span><span class="status-dot demo-dot"></span> Preview data</span></template></div></header>
-    <div class="content">
-      <div class="demo-banner" x-show="demo" x-cloak><strong>Interface preview</strong> Sample opportunities, not live market quotes. <a href="/">Switch to live data ↗</a></div>
-      <div class="page-heading"><div><div class="eyebrow">INDUSTRY INTELLIGENCE</div><h1>Find your next build<span>.</span></h1></div>{% include "workspace_help.html" %}</div>
-      <div class="stats-grid">
-        <section class="stat-card"><div class="stat-label">MATCHING OPPORTUNITIES <span>▦</span></div><div class="stat-value" x-text="loading ? '…' : page.total.toLocaleString('en-US')">—</div><div class="stat-note">After your selected filters</div></section>
-        <section class="stat-card"><div class="stat-label">TOP PROFIT / DAY <span>↗</span></div><div class="stat-value accent" x-text="money(topDaily)">—</div><div class="stat-note" x-text="resultForm.product_order_type === 'buy' ? 'Visible page - capped by buy demand' : 'Visible page - theoretical slot throughput'"></div></section>
-        <section class="stat-card"><div class="stat-label">MEDIAN MARGIN <span>◈</span></div><div class="stat-value" x-text="medianMargin === null ? '—' : percent(medianMargin)">—</div><div class="stat-note">For the visible page</div></section>
-        <section class="stat-card"><div class="stat-label">TRADE HUB <span>◎</span></div><div class="stat-value" x-text="hubName(resultForm.hub_id)">Jita</div><div class="stat-note"><span class="tiny-tag" x-text="resultForm.product_order_type.toUpperCase()"></span> Product sale price</div></section>
-      </div>
-      <section class="market-panel">
-        <div class="panel-toolbar"><div class="panel-title">Filters &amp; profiles</div><div class="toolbar-right"><label class="profile-select"><span>Profile</span><select aria-label="Saved profile" x-model="profileId" @change="applyProfile()"><option value="">Custom settings</option><template x-for="profile in profiles" :key="profile.id"><option :value="profile.id" :selected="profile.id === profileId" x-text="profile.name + (profile.browser ? ' (browser)' : profile.is_default ? ' (default)' : '')"></option></template></select></label><button class="button secondary" x-show="browserProfile" @click="updateBrowserProfile()">Update profile</button><button type="button" class="button profile-delete" :disabled="!selectedProfile || deletingProfile" @click="deleteProfile()" x-text="deletingProfile?'Deleting...':'Delete profile'">Delete profile</button><button class="button secondary" @click="profileSaveOpen = !profileSaveOpen; profileError=''; $nextTick(() => $refs.profileName.focus())">Save as profile</button><button class="button secondary" @click="filtersOpen = !filtersOpen" :aria-expanded="filtersOpen" aria-controls="opportunity-filters"><span x-text="filtersOpen ? 'Hide filters' : 'Show filters'"></span><span class="filter-count" x-show="activeFilters" x-text="activeFilters"></span></button></div></div>
-        <p class="profile-notice" role="status" x-show="profileWarning" x-text="profileWarning" x-cloak></p>
-        <p class="profile-notice" role="status" x-show="storageWarning" x-text="storageWarning" x-cloak></p>
-        <p class="profile-notice" role="status" x-show="profileNotice" x-text="profileNotice" x-cloak></p>
-        <form class="filter-drawer" x-show="profileSaveOpen" x-cloak @submit.prevent="saveBrowserProfile()">
-          <div class="toolbar-right"><label class="profile-select">Profile name<input x-ref="profileName" aria-label="Profile name" type="text" maxlength="100" required x-model="profileName" placeholder="My production settings"></label><button type="submit" class="button primary">Save profile</button><button type="button" class="button secondary" @click="profileSaveOpen=false">Cancel</button></div>
-          <p class="muted">Saved in this browser. Includes all current filters and calculation settings.</p>
-          <p role="alert" x-show="profileError" x-text="profileError"></p>
-        </form>
-        <form id="opportunity-filters" x-ref="filters" class="filter-drawer" x-show="filtersOpen" x-cloak @submit.prevent="load(false, 0)">
-          <div class="filter-sections">
-            <fieldset class="filter-group filters-items"><legend>Items</legend><div class="filter-grid">
-              <label>Search items<input type="search" placeholder="Search items..." aria-label="Search items" x-model="form.search"></label>
-              <label>Item category<select aria-label="Item category" x-model="form.category"><option value="">All categories</option><option value="Rigs">Rigs</option><option value="Ammunition &amp; Charges">Ammo</option><option value="Drones">Drones</option><option value="Modules">Modules</option><option value="__profile__" x-show="form.category === '__profile__'">Profile selection</option></select></label>
-              <label>Tech group<select aria-label="Tech group" x-model="form.tech"><option value="">All production groups</option><option value="__profile__" x-show="profileSettings.meta_group_ids?.length > 1">Profile selection</option><option value="1">Tech I / meta</option><option value="2">Tech II</option></select></label>
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="color-scheme" content="dark">
+    <title>EVE Manufacturing — Opportunities</title>
+    <link rel="stylesheet" href="/static/app.css">
+    <link rel="stylesheet" href="/static/navigation.css">
+    <script defer src="/ui/config.js"></script>
+    <script defer src="/static/api.js"></script>
+    <script defer src="/static/vendor/htmx.min.js"></script>
+    <script defer src="/static/history-chart.js"></script>
+    <script defer src="/static/manufacturing/features.js"></script>
+    <script defer src="/static/manufacturing/exclusions.js"></script>
+    <script defer src="/static/manufacturing/profiles.js"></script>
+    <script defer src="/static/manufacturing/details.js"></script>
+    <script defer src="/static/manufacturing/settings.js"></script>
+    <script defer src="/static/manufacturing/blueprint.js"></script>
+    <script defer src="/static/app.js"></script>
+    <script defer src="/static/freshness.js"></script>
+    <script defer src="/static/vendor/alpine.min.js"></script>
+    <link rel="stylesheet" href="/static/compact.css">
+  </head>
+  <body
+    data-user-id="{{ request.state.user.id if request.state.user is defined else 'preview' }}"
+    class="compact-page opportunities-page"
+    x-data="manufacturingApp"
+    @keydown.escape.window="selected ? closeItem() : profileSaveOpen = false"
+  >
+    {% set active_page = "opportunities" %}
+    {% include "navigation.html" %}
+    <main class="workspace" :inert="selected !== null">
+      <header class="topbar">
+        <div class="breadcrumb">Workspace <span>/</span> <strong>Opportunities</strong></div>
+        <div class="connection">
+          <template x-if="!demo">
+            <div hx-get="/ui/status" hx-trigger="load, every 60s" hx-swap="innerHTML">
+              Checking services…
             </div>
-            </fieldset>
-            <fieldset class="filter-group filters-markets"><legend>Market prices</legend><div class="filter-grid">
-              <label>Product hub<select aria-label="Trade hub" x-model="form.hub_id"><template x-for="hub in hubs" :key="hub.id"><option :value="hub.id" :selected="hub.id === form.hub_id" x-text="hub.name"></option></template></select></label>
-              <label>Product prices<select aria-label="Product pricing" x-model="form.product_order_type"><option value="sell">Sell orders (list your product)</option><option value="buy">Buy orders (sell immediately)</option></select></label>
-              <label>Procurement hub<select x-model="form.material_hub_id"><option value="">Same as product hub</option><template x-for="hub in hubs" :key="hub.id"><option :value="hub.id" :selected="hub.id === form.material_hub_id" x-text="hub.name"></option></template></select></label>
-              <label>Material prices<select x-model="form.material_order_type"><option value="sell">Sell orders (buy immediately)</option><option value="buy">Buy orders (place a buy order)</option></select></label>
-            </div>
-            </fieldset>
-            <fieldset class="filter-group filters-demand"><legend>Profit and demand</legend><div class="filter-grid">
-              <label>Buy demand price range (%)<input type="number" min="0" max="100" step="any" x-model="form.buy_demand_tolerance_pct" placeholder="5"></label>
-              <label>Min. profit / unit (ISK)<input type="number" step="any" x-model="form.min_profit" placeholder="Any"></label>
-              <label>Min. margin (%)<input type="number" step="any" x-model="form.min_margin" placeholder="Any"></label>
-              <label>Min. regional turnover / day (ISK)<input type="number" min="0" step="any" x-model="form.min_daily_isk_volume" placeholder="Any"></label>
-              <label title="Buy pricing: total demand within your buy-price range. Sell pricing: stock at the best sell price.">Min. units available in price range<input type="number" min="0" x-model="form.min_product_volume" placeholder="Any"></label>
-              <label>History period (completed days)<input type="number" min="1" max="365" x-model="form.days"></label>
-            </div>
-            <div class="toggle-row"><label><input type="checkbox" x-model="form.fresh_only"> Fresh data only</label><label><input type="checkbox" x-model="form.require_full_run_demand"> Buy demand covers a full run</label></div>
-            </fieldset>
-            <fieldset class="filter-group filters-assumptions"><legend>Calculation assumptions</legend><div class="filter-grid"><label>Invention slots<input type="number" min="1" max="1000" step="1" x-model="form.invention_slots"></label><label title="Parallel lines used to estimate demand completion time. Full runs are distributed evenly between lines.">Production lines<input type="number" min="1" max="1000" step="1" x-model="form.production_lines" placeholder="1"></label>
-              <label>Sales tax (%)<input type="number" min="0" max="100" step="0.01" x-model="form.sales_tax"></label>
-              <label title="Applied when posting buy orders for raw materials.">Buy broker (%)<input type="number" min="0" max="100" step="any" x-model="form.buy_broker_fee" placeholder="0"></label>
-              <label title="Applied when posting sell orders for the finished product.">Sell broker (%)<input type="number" min="0" max="100" step="any" x-model="form.sell_broker_fee" placeholder="0"></label>
-              <label>Facility tax (%)<input type="number" min="0" max="100" step="any" x-model="form.facility_tax" placeholder="0"></label>
-              <label>System cost index (%)<input type="number" min="0" max="100" step="any" x-model="form.system_cost_index" placeholder="0"></label>
-            </div>
-            <div class="toggle-row"><label><input type="checkbox" x-model="form.include_invention_cost"> Include cached invention cost</label><label title="Include expected T1 BPC copying time, using Invention slots. Includes copies consumed by failed invention attempts."><input type="checkbox" x-model="form.include_copying_time"> Include copying time in profit/day</label><label title="Expected invention workload, including failed attempts. Copying is controlled by its separate checkbox. Parallel timing is approximate. Buy Profit/day is capped by saved demand and may stay unchanged if all demand still fits within a day."><input type="checkbox" x-model="form.include_invention_time"> Include invention time in profit/day</label></div>
-            </fieldset>
-
-          </div>
-          <div class="drawer-actions"><span role="status" x-text="hasChanges ? 'Changes not applied to the results below' : 'All filters applied'"></span><button type="button" class="text-button" @click="resetFilters()">Reset filters</button></div>
-        </form>
-        <div class="error-banner" x-show="error" x-cloak role="alert"><span x-text="error"></span><button class="text-button" @click="load()">Retry</button></div>
-        <div class="notice" x-show="!demo && missingCount > 0" x-cloak><div>
-          <p>Some matching items are excluded because calculation inputs are missing:</p>
-          <ul><li x-show="page.missing_recipes"><span x-text="page.missing_recipes"></span> without a prepared manufacturing recipe.</li><li x-show="page.missing_prices"><span x-text="page.missing_prices"></span> without all required market prices.</li><li x-show="page.missing_job_costs"><span x-text="page.missing_job_costs"></span> awaiting EIV data for manufacturing taxes. The background recipe refresh will load it.</li><li x-show="page.missing_invention"><span x-text="page.missing_invention"></span> without a usable invention calculation for this market and pricing choice.</li></ul>
-          <button class="button secondary" x-show="page.missing_invention && resultForm.include_invention_cost" :disabled="preparingMarket" @click="prepareMarketInvention()" x-text="preparingMarket ? 'Requesting preparation...' : 'Prepare invention for this market'"></button>
-
-        </div></div>
-        <p class="profile-notice" role="status" x-show="preparationMessage" x-text="preparationMessage" x-cloak></p>
-        <div class="pending-banner" x-show="hasChanges" x-cloak>Filters have changed. Select Show results to update the results below.</div>
-
-        <div class="table-meta"><span><span class="status-dot"></span> <span x-text="demo ? 'Sample opportunities' : 'Saved market snapshots'"></span></span><span>Amounts in ISK</span></div>
-
-
-
-        <div class="column-toolbar" style="gap:10px;flex-wrap:wrap" x-data="{open:false}" @keydown.escape.stop="open=false; $refs.columnsButton.focus()" @click.outside="open=false">
-          <label class="table-sort" title="Profit on demand requires Buy orders for product pricing.">Sort by<select form="opportunity-filters" aria-label="Sort candidates" x-model="form.rank_by"><option value="profit_per_day">Profit / day</option><option value="margin">Margin</option><option value="profit">Profit / unit</option><option value="demand_profit">Profit on demand (buy orders)</option></select></label><label class="table-page-size">Rows per page<input form="opportunity-filters" aria-label="Rows per page" type="number" min="1" max="1000" x-model="form.limit"></label><button type="submit" form="opportunity-filters" class="button primary compact" :disabled="loading" x-text="loading ? 'Loading...' : 'Show results'">Show results</button>
-          <button type="button" class="button secondary compact" x-ref="columnsButton" :aria-expanded="open" aria-controls="column-options" @click="open=!open">Columns</button>
-          <div id="column-options" class="column-popover" x-show="open" x-cloak>
-            <template x-for="column in columnOptions" :key="column.id"><label><input type="checkbox" :checked="columnVisible(column.id)" @change="hiddenColumns = $event.target.checked ? hiddenColumns.filter(id => id !== column.id) : [...hiddenColumns, column.id]"> <span x-text="column.label"></span></label></template>
-            <button type="button" class="text-button" @click="hiddenColumns=[]">Show all columns</button>
-          </div>
+          </template><template x-if="demo"><span><span class="status-dot demo-dot"></span> Preview data</span></template>
         </div>
-        <div class="table-wrap" :aria-busy="loading">
-          <details class="excluded-items" x-show="excludedItems.length"><summary>Excluded items <span class="muted" x-text="'('+excludedItems.length+')'"></span></summary><div class="excluded-content"><div class="excluded-toolbar"><span class="muted">Hidden from opportunities. Restore to include in your next search.</span><button type="button" class="text-button" @click="changeExclusions([])" :disabled="loading">Restore all</button></div><div class="excluded-list"><template x-for="item in excludedPageItems" :key="item.type_id"><div class="excluded-row"><img :src="'https://images.evetech.net/types/'+item.type_id+'/icon?size=32'" alt="" width="32" height="32" loading="lazy" @error="$el.style.visibility='hidden'"><span x-text="item.name"></span><button type="button" class="button secondary compact" @click="restoreItem(item.type_id)" :disabled="loading">Restore</button></div></template></div><div class="excluded-pagination"><span class="muted"><span x-text="excludedPage*25+1"></span>&ndash;<span x-text="Math.min((excludedPage+1)*25,excludedItems.length)"></span> of <span x-text="excludedItems.length"></span></span><div><button type="button" class="button secondary compact" :disabled="excludedPage===0" @click="excludedPage--">Previous</button><span x-text="(excludedPage+1)+' / '+excludedPages"></span><button type="button" class="button secondary compact" :disabled="excludedPage+1>=excludedPages" @click="excludedPage++">Next</button></div></div></div></details><table><thead><tr><th class="item-cell">ITEM</th><th x-show="columnVisible('cost')">COST / UNIT</th><th x-show="columnVisible('profit')" title="Per-unit profit at the best quoted price. Total demand profit uses all included price levels.">PROFIT / UNIT</th><th x-show="columnVisible('demand')" title="Net profit from full runs filling buy orders inside your selected price range, using the actual prices of those orders.">PROFIT ON DEMAND</th><th x-show="columnVisible('margin')" title="Legacy formula: net profit divided by raw material cost, multiplied by 100. This is not profit as a percentage of sale revenue.">MARGIN</th><th x-show="columnVisible('daily')" title="Total daily profit across the selected production lines. Buy results are capped by saved demand. Invention time is included only when enabled.">PROFIT / DAY</th><th x-show="columnVisible('turnover')">REGIONAL TURNOVER / DAY</th><th x-show="columnVisible('data')">DATA</th><th></th><th></th></tr></thead>
-          <tbody><template x-for="item in visibleItems" :key="item.type_id"><tr @click="openItem(item)" @keydown.enter="openItem(item)" @keydown.space.prevent="openItem(item)" tabindex="0" :aria-label="'View ' + item.name">
-            <td><div class="item-name"><img :src="'https://images.evetech.net/types/' + item.type_id + '/icon?size=64'" alt="" loading="lazy" @error="$el.style.visibility='hidden'"><div><strong x-text="item.name"></strong><span><span class="tech-tag" x-text="item.meta_group_id === 2 ? 'T2' : item.meta_group_id === 1 ? 'T1' : 'ITEM'"></span> <span class="mini-warning" x-show="item.invention_required && !item.invention_included"> · invention cost not included</span></span></div></div></td>
-            <td x-show="columnVisible('cost')" x-text="money(item.total_cost_per_unit)"></td><td x-show="columnVisible('profit')" class="number" :class="Number(item.profit_per_unit) >= 0 ? 'positive' : 'negative'" x-text="money(item.profit_per_unit)"></td><td x-show="columnVisible('demand')"><template x-if="item.profit_at_current_buy_price !== null"><div><strong :class="Number(item.profit_at_current_buy_price) < 0 ? 'negative' : 'positive'" x-text="money(item.profit_at_current_buy_price)" :title="fullMoney(item.profit_at_current_buy_price) + ' ISK total profit'"></strong><div class="muted" x-text="item.production_limit_units.toLocaleString('en-US') + ' units / ' + item.full_runs_at_buy_price.toLocaleString('en-US') + ' runs'"></div><div class="muted" title="Estimated batch time: production plus copying and invention when their checkboxes are enabled. Uses selected slots and cached source durations; parallel preparation time is approximate." x-text="'~' + demandDuration(item) + ' on ' + productionLines() + (productionLines() === 1 ? ' line' : ' lines')"></div><div class="muted" x-show="item.buy_demand_depth_available === false">Best-price data only</div></div></template><span class="muted" x-show="item.profit_at_current_buy_price === null">Buy pricing only</span></td><td x-show="columnVisible('margin')"><span class="margin-badge" :class="Number(item.margin_pct) < 0 && 'loss'" x-text="percent(item.margin_pct)"></span></td><td x-show="columnVisible('daily')" class="number positive" :class="Number(item.rank_profit_per_day) < 0 && 'negative'" x-text="money(item.rank_profit_per_day)"></td><td x-show="columnVisible('turnover')" :title="item.daily_isk_volume === null ? 'No trading history for this period' : fullMoney(item.daily_isk_volume) + ' ISK per day across the region'" x-text="money(item.daily_isk_volume)"></td><td x-show="columnVisible('data')"><span class="data-badge" :class="isStale(item) ? 'stale' : 'fresh'" x-text="isStale(item) ? 'Stale' : 'Fresh'" :title="isStale(item) ? staleExplanation(item) : 'Saved inputs are within their freshness window.'"></span><span class="risk-dot" x-show="item.demand_warnings.length" :title="item.demand_warnings.map(w => demandWarning(w)).join(' ')">!</span></td><td><button type="button" class="text-button" @click.stop="excludeItem(item)" @keydown.stop :disabled="loading" :aria-label="'Exclude '+item.name">Exclude</button></td><td class="row-arrow">↗</td>
-          </tr></template></tbody></table>
-          <div class="empty-state" x-show="!loading && !visibleItems.length"><span class="empty-icon">▦</span><h2 x-text="error ? 'Market data is unavailable' : 'No matching opportunities'"></h2><p x-text="error ? 'The data service did not respond. Try again, or inspect the sample interface while it recovers.' : 'No items match with all required calculation inputs. Broaden the filters and check any missing-data notice above.'"></p><div><button class="button secondary" @click="resetFilters()">Reset filters</button><a class="button secondary" href="/?demo=1" x-show="!demo">Explore sample data ↗</a></div></div>
-          <div class="loading-state" x-show="loading"><span class="spinning">◌</span> Loading opportunities…</div>
+      </header>
+      <div class="content">
+        <div class="demo-banner" x-show="demo" x-cloak><strong>Interface preview</strong> Sample opportunities, not live market quotes. <a href="/">Switch to live data ↗</a></div>
+        <div class="page-heading"><div><div class="eyebrow">INDUSTRY INTELLIGENCE</div><h1>Find your next build<span>.</span></h1></div>{% include "workspace_help.html" %}</div>
+        <div class="stats-grid">
+          <section class="stat-card">
+            <div class="stat-label">MATCHING OPPORTUNITIES <span>▦</span></div>
+            <div
+              class="stat-value"
+              x-text="loading ? '…' : page.total.toLocaleString('en-US')"
+            >
+              —
+            </div>
+            <div class="stat-note">After your selected filters</div>
+          </section>
+          <section class="stat-card">
+            <div class="stat-label">TOP PROFIT / DAY <span>↗</span></div>
+            <div class="stat-value accent" x-text="money(topDaily)">—</div>
+            <div
+              class="stat-note"
+              x-text="resultForm.product_order_type === 'buy' ? 'Visible page - capped by buy demand' : 'Visible page - theoretical slot throughput'"
+            ></div>
+          </section>
+          <section class="stat-card">
+            <div class="stat-label">MEDIAN MARGIN <span>◈</span></div>
+            <div
+              class="stat-value"
+              x-text="medianMargin === null ? '—' : percent(medianMargin)"
+            >
+              —
+            </div>
+            <div class="stat-note">For the visible page</div>
+          </section>
+          <section class="stat-card">
+            <div class="stat-label">TRADE HUB <span>◎</span></div>
+            <div class="stat-value" x-text="hubName(resultForm.hub_id)">Jita</div>
+            <div class="stat-note"><span
+              class="tiny-tag"
+              x-text="resultForm.product_order_type.toUpperCase()"
+            ></span> Product sale price</div>
+          </section>
         </div>
-        <footer class="table-footer"><span x-text="rangeLabel"></span><div><button class="button secondary compact" :disabled="loading || hasChanges || page.offset === 0" @click="previousPage()">← Previous</button><button class="button secondary compact" :disabled="loading || hasChanges || page.offset + page.limit >= page.total" @click="nextPage()">Next →</button></div></footer>
-      </section>
-
-    </div>
-  </main>
-  <div class="modal-backdrop" x-show="selected" x-cloak @click.self="closeItem()"><section class="detail-panel" role="dialog" aria-modal="true" aria-labelledby="detail-title" x-ref="dialog" tabindex="-1" @keydown.tab="trapDialog($event)">
-    <template x-if="selected"><div><div class="detail-heading"><div><div class="eyebrow">PRODUCTION BREAKDOWN</div><h2 id="detail-title" x-text="selected.name"></h2></div><button class="icon-button" @click="closeItem()" aria-label="Close item details">×</button></div>
-    <div class="detail-stats"><div><span>Profit / unit</span><strong class="number" :class="Number(selected.profit_per_unit) < 0 ? 'negative' : 'positive'" x-text="fullMoney(selected.profit_per_unit)"></strong></div><div><span>Margin / material cost</span><strong x-text="percent(selected.margin_pct)"></strong></div><div><span>Units per run</span><strong x-text="selected.units"></strong></div></div>
-    <div class="detail-note" x-show="isStale(selected)" x-text="staleExplanation(selected)"></div>
-    <p class="detail-context"><span x-text="hubName(resultForm.material_hub_id || resultForm.hub_id)"></span> material prices, <span x-text="resultForm.material_order_type === 'buy' ? 'buy orders (placing purchase orders)' : 'sell orders (immediate purchase)'"></span>. Product sold in <span x-text="hubName(resultForm.hub_id)"></span> using <span x-text="resultForm.product_order_type === 'buy' ? 'buy orders (immediate sale)' : 'sell orders (listing your product)'"></span>.</p>
-    <section class="history-section"><h3>Regional trading history</h3><p class="muted">Completed UTC days for the entire <span x-text="hubName(resultForm.hub_id)"></span> region, over the selected <span x-text="resultForm.days"></span>-day period. Saved history only; missing dates are not invented or joined across gaps.</p>
-      {% include "market_history_chart.html" %}
-    </section>
-    <h3>Materials for one production run</h3><p class="muted">One run produces <strong x-text="selected.units"></strong> finished units and takes <strong x-text="duration(selected.seconds)"></strong> at base production time. Quantities below are per run; cost and profit summaries are per finished unit.</p>
-    <p class="detail-note" role="status" x-show="materialNamesMessage" x-text="materialNamesMessage"></p><button class="button secondary compact" x-show="materialNamesMessage" :disabled="materialNamesLoading" @click="loadMaterialNames()">Retry material names</button><div class="table-wrap"><table class="material-table"><thead><tr><th>MATERIAL</th><th>QUANTITY</th><th>UNIT PRICE (ISK)</th><th>RUN COST (ISK)</th></tr></thead><tbody><template x-for="material in selected.materials" :key="material.type_id"><tr><td><div class="material-name" :title="'EVE item type ' + material.type_id"><img :src="'https://images.evetech.net/types/' + material.type_id + '/icon?size=32'" alt="" loading="lazy" @error="$el.style.display='none'"><span x-text="materialName(material.type_id)"></span></div></td><td x-text="material.quantity.toLocaleString('en-US')"></td><td x-text="fullMoney(material.price)"></td><td x-text="fullMoney(material.cost)"></td></tr></template></tbody></table></div>
-    <h3>Per finished unit (ISK)</h3><p class="muted" x-show="selected.estimated_item_value_per_unit !== null && selected.estimated_item_value_per_unit !== undefined">Manufacturing tax basis (EIV): <strong x-text="fullMoney(selected.estimated_item_value_per_unit)"></strong> ISK per unit. Facility tax and system cost index are charged on this value; SCC is included in the base installation charge.</p><div class="cost-lines"><div><span>Materials</span><strong x-text="fullMoney(selected.material_cost_per_unit)"></strong></div><div><span>Base installation / SCC surcharge</span><strong x-text="fullMoney(selected.base_job_cost_per_unit ?? selected.job_cost_per_unit)"></strong></div><div><span>Facility tax</span><strong x-text="fullMoney(selected.facility_tax_per_unit ?? 0)"></strong></div><div><span>System cost index charge</span><strong x-text="fullMoney(selected.system_cost_per_unit ?? 0)"></strong></div><div><span>Invention</span><strong x-text="!selected.invention_required ? 'Not required' : selected.invention_included ? fullMoney(selected.invention_cost_per_unit) : 'Not included in this estimate'"></strong></div><div><span>Material purchase broker fee</span><strong x-text="fullMoney(selected.procurement_broker_fee_per_unit)"></strong></div><div><span>Total build cost</span><strong x-text="fullMoney(selected.total_cost_per_unit)"></strong></div><div><span>Product sale price</span><strong x-text="fullMoney(selected.revenue_per_unit)"></strong></div><div><span>Sales tax</span><strong x-text="fullMoney(selected.sales_tax_per_unit)"></strong></div><div><span>Product sale broker fee</span><strong x-text="fullMoney(selected.sales_broker_fee_per_unit)"></strong></div><div><span>Net profit</span><strong x-text="fullMoney(selected.profit_per_unit)"></strong></div></div>
-    <template x-if="resultForm.product_order_type === 'buy'"><section class="demand-box"><h3>Current selling capacity within your buy-price range</h3><p><strong x-text="selected.production_limit_units"></strong> units across <strong x-text="selected.full_runs_at_buy_price"></strong> full production runs within <span x-text="demandTolerance()"></span>% of the best buy price.</p><p>Estimated manufacturing time on <span x-text="productionLines()"></span> line(s): <strong x-text="demandDuration(selected)"></strong>.</p><p class="muted">Uses the cached EVE Ref duration with source skill modifiers already included. Full runs are distributed across the selected lines, assuming enough blueprints; no additional skill reduction is applied. Excludes invention, copying and manufacturing the input materials. Batch time includes copying and invention when their checkboxes are enabled, using the selected slots.</p><div>Total profit after filling this demand: <strong x-text="fullMoney(selected.profit_at_current_buy_price)"></strong></div><p x-show="selected.buy_demand_average_price">Average sale price: <strong x-text="fullMoney(selected.buy_demand_average_price)"></strong> ISK. Lowest included order price: <strong x-text="fullMoney(selected.buy_demand_min_price)"></strong> ISK.</p><p class="muted" x-show="selected.buy_demand_depth_available === false">Only best-price data is loaded for this snapshot. The next market refresh will load nearby buy-price levels.</p><p class="muted">Orders are filled from the highest price down. Profit uses their actual prices, not the best price for every unit. This is current demand, not replenishing daily demand.</p></section></template>
-    <ul class="demand-warnings" x-show="selected.demand_warnings.length"><template x-for="warning in selected.demand_warnings" :key="warning"><li x-text="demandWarning(warning)"></li></template></ul>
-    <template x-if="selected.invention_required"><section class="invention-box">
-      <div class="section-heading"><h3>Invention alternatives</h3><div class="invention-actions">
-        <button class="button secondary compact" @click="loadInvention()" :disabled="inventionLoading || inventionChecking || demo" x-text="inventionChecking ? 'Checking...' : 'Check status'"></button>
-        <button class="button secondary compact" @click="prepareInvention()" :disabled="inventionLoading || inventionChecking || demo || inventionReady" :title="inventionReady ? 'The current daily calculation is already prepared. No additional job is needed.' : 'Prepare a cached calculation in the background'" x-text="inventionLoading ? 'Requesting...' : inventionReady ? 'Already prepared' : 'Prepare calculation'"></button>
-      </div></div>
-      <p class="muted">Tax-free material estimate: datacores and decryptors only; excludes installation taxes and broker fees. Success chance is per attempt. Estimated cost includes failed attempts and the output of each successful blueprint copy. Saved valuations update daily.</p>
-      <p class="detail-note" x-show="inventionMessage" x-text="inventionMessage" role="status" aria-live="polite"></p>
-      <p class="muted" x-show="lastInventionCheck">Last checked: <span x-text="timeLabel(lastInventionCheck)"></span></p>
-      <template x-if="invention && invention.request"><p class="muted">Saved: <span x-text="timeLabel(invention.request.updated_at)"></span>. Refresh due: <span x-text="timeLabel(invention.request.expires_at)"></span>.</p></template>
-      <template x-if="invention && invention.request && invention.request.result"><table class="invention-table">
-        <caption>Invention cost comparison per manufactured unit</caption><thead><tr><th>DECRYPTOR</th><th>CHANCE / BPC OUTPUT</th><th>EST. COST / UNIT (ISK)</th></tr></thead>
-        <tbody><template x-for="option in invention.request.result.options" :key="option.plan.decryptor_name"><tr :class="invention.request.result.best?.plan.decryptor_id === option.plan.decryptor_id && option.expected_cost_per_unit !== null ? 'best-option' : ''">
-          <td><span x-text="option.plan.decryptor_name === 'None' ? 'No decryptor' : option.plan.decryptor_name"></span><span class="best-label" x-show="invention.request.result.best?.plan.decryptor_id === option.plan.decryptor_id && option.expected_cost_per_unit !== null">Lowest cost</span></td>
-          <td data-label="Chance / BPC output"><span x-text="percent(Number(option.plan.probability) * 100)"></span><div class="muted" x-text="option.plan.runs_per_copy + ' runs / T2 BPC'"></div></td>
-          <td data-label="Est. ISK / unit" x-text="option.expected_cost_per_unit === null ? 'Missing prices' : fullMoney(option.expected_cost_per_unit)"></td>
-        </tr></template></tbody>
-      </table></template>
-    </section></template>
-    <div class="detail-note">Profit per day is theoretical slot throughput; buy-mode ranking is capped by demand in the selected price range. History is regional. ME/TE bonuses, hauling and blueprint copy/purchase costs are not included.</div>
-    </div></template>
-  </section></div>
-  <noscript><div class="error-banner">Enable JavaScript to load opportunities and use the filters.</div></noscript>
-</body></html>
+        <section class="market-panel">
+          <div class="panel-toolbar">
+            <div class="panel-title">Filters &amp; profiles</div>
+            <div class="toolbar-right">
+              <label class="profile-select">
+                <span>Profile</span><select
+                  aria-label="Saved profile"
+                  x-model="profileId"
+                  @change="applyProfile()"
+                >
+                  <option value="">Custom settings</option>
+                  <template x-for="profile in profiles" :key="profile.id">
+                    <option
+                      :value="profile.id"
+                      :selected="profile.id === profileId"
+                      x-text="profile.name + (profile.browser ? ' (browser)' : profile.is_default ? ' (default)' : '')"
+                    ></option>
+                  </template>
+                </select></label><button
+                  class="button secondary"
+                  x-show="browserProfile"
+                  @click="updateBrowserProfile()"
+                >
+                  Update profile
+                </button><button
+                  type="button"
+                  class="button profile-delete"
+                  :disabled="!selectedProfile || deletingProfile"
+                  @click="deleteProfile()"
+                  x-text="deletingProfile?'Deleting...':'Delete profile'"
+                >
+                  Delete profile
+                </button><button
+                  class="button secondary"
+                  @click="profileSaveOpen = !profileSaveOpen; profileError=''; $nextTick(() => $refs.profileName.focus())"
+                >
+                  Save as profile
+                </button><button
+                  class="button secondary"
+                  @click="filtersOpen = !filtersOpen"
+                  :aria-expanded="filtersOpen"
+                  aria-controls="opportunity-filters"
+                >
+                  <span x-text="filtersOpen ? 'Hide filters' : 'Show filters'"></span><span
+                    class="filter-count"
+                    x-show="activeFilters"
+                    x-text="activeFilters"
+                  ></span>
+                </button>
+              </div>
+            </div>
+            <p
+              class="profile-notice"
+              role="status"
+              x-show="profileWarning"
+              x-text="profileWarning"
+              x-cloak
+            ></p>
+            <p
+              class="profile-notice"
+              role="status"
+              x-show="storageWarning"
+              x-text="storageWarning"
+              x-cloak
+            ></p>
+            <p
+              class="profile-notice"
+              role="status"
+              x-show="profileNotice"
+              x-text="profileNotice"
+              x-cloak
+            ></p>
+            <form
+              class="filter-drawer"
+              x-show="profileSaveOpen"
+              x-cloak
+              @submit.prevent="saveBrowserProfile()"
+            >
+              <div class="toolbar-right">
+                <label class="profile-select">
+                  Profile name<input
+                    x-ref="profileName"
+                    aria-label="Profile name"
+                    type="text"
+                    maxlength="100"
+                    required
+                    x-model="profileName"
+                    placeholder="My production settings"
+                  ></label><button type="submit" class="button primary">Save profile</button><button type="button" class="button secondary" @click="profileSaveOpen=false">
+                  Cancel
+                  </button>
+                </div>
+                <p class="muted">Saved in this browser. Includes all current filters and calculation settings.</p>
+                <p role="alert" x-show="profileError" x-text="profileError"></p>
+              </form>
+              {% include "opportunities/filters.html" %}
+              <div class="error-banner" x-show="error" x-cloak role="alert">
+                <span x-text="error"></span>
+                <button class="text-button" @click="load()">Retry</button>
+              </div>
+              <div class="notice" x-show="!demo && missingCount > 0" x-cloak>
+                <div>
+                  <p>Some matching items are excluded because calculation inputs are missing:</p>
+                  <ul>
+                    <li x-show="page.missing_recipes"><span x-text="page.missing_recipes"></span> without a prepared manufacturing recipe.</li>
+                    <li x-show="page.missing_prices"><span x-text="page.missing_prices"></span> without all required market prices.</li>
+                    <li x-show="page.missing_job_costs"><span x-text="page.missing_job_costs"></span> awaiting EIV data for manufacturing taxes. The background recipe refresh will load it.</li>
+                    <li x-show="page.missing_invention"><span x-text="page.missing_invention"></span> without a usable invention calculation for this market and pricing choice.</li>
+                  </ul>
+                  <button
+                    class="button secondary"
+                    x-show="page.missing_invention && resultForm.include_invention_cost"
+                    :disabled="preparingMarket"
+                    @click="prepareMarketInvention()"
+                    x-text="preparingMarket ? 'Requesting preparation...' : 'Prepare invention for this market'"
+                  ></button>
+                </div>
+              </div>
+              <p
+                class="profile-notice"
+                role="status"
+                x-show="preparationMessage"
+                x-text="preparationMessage"
+                x-cloak
+              ></p>
+              <div
+                class="pending-banner"
+                x-show="hasChanges"
+                x-cloak
+              >Filters have changed. Select Show results to update the results below.</div>
+              <div class="table-meta"><span><span class="status-dot"></span> <span x-text="demo ? 'Sample opportunities' : 'Saved market snapshots'"></span></span><span>Amounts in ISK</span></div>
+              <div
+                class="column-toolbar"
+                style="gap:10px;
+                       flex-wrap:wrap"
+                x-data="{open:false}"
+                @keydown.escape.stop="open=false; $refs.columnsButton.focus()"
+                @click.outside="open=false"
+              >
+                <label
+                  class="table-sort"
+                  title="Profit on demand requires Buy orders for product pricing."
+                >
+                  Sort by<select
+                    form="opportunity-filters"
+                    aria-label="Sort candidates"
+                    x-model="form.rank_by"
+                  >
+                  <option value="profit_per_day">Profit / day</option>
+                  <option value="margin">Margin</option>
+                  <option value="profit">Profit / unit</option>
+                  <option value="demand_profit">Profit on demand (buy orders)</option>
+                </select></label><label class="table-page-size">Rows per page<input
+                  form="opportunity-filters"
+                  aria-label="Rows per page"
+                  type="number"
+                  min="1"
+                  max="1000"
+                  x-model="form.limit"
+                ></label><button
+                  type="submit"
+                  form="opportunity-filters"
+                  class="button primary compact"
+                  :disabled="loading"
+                  x-text="loading ? 'Loading...' : 'Show results'"
+                >
+                  Show results
+                </button>
+                <button
+                  type="button"
+                  class="button secondary compact"
+                  x-ref="columnsButton"
+                  :aria-expanded="open"
+                  aria-controls="column-options"
+                  @click="open=!open"
+                >
+                  Columns
+                </button>
+                <div id="column-options" class="column-popover" x-show="open" x-cloak>
+                  <template x-for="column in columnOptions" :key="column.id">
+                    <label>
+                      <input
+                        type="checkbox"
+                        :checked="columnVisible(column.id)"
+                        @change="hiddenColumns = $event.target.checked ? hiddenColumns.filter(id => id !== column.id) : [...hiddenColumns, column.id]"
+                      >
+                      <span x-text="column.label"></span>
+                    </label>
+                  </template>
+                  <button
+                    type="button"
+                    class="text-button"
+                    @click="hiddenColumns=[]"
+                  >Show all columns</button>
+                </div>
+              </div>
+              <div class="table-wrap" :aria-busy="loading">
+                {% include "opportunities/exclusions.html" %}
+                {% include "opportunities/table.html" %}
+                <div class="empty-state" x-show="!loading && !visibleItems.length">
+                  <span class="empty-icon">▦</span>
+                  <h2
+                    x-text="error ? 'Market data is unavailable' : 'No matching opportunities'"
+                  ></h2>
+                  <p
+                    x-text="error ? 'The data service did not respond. Try again, or inspect the sample interface while it recovers.' : 'No items match with all required calculation inputs. Broaden the filters and check any missing-data notice above.'"
+                  ></p>
+                  <div>
+                    <button class="button secondary" @click="resetFilters()">Reset filters</button><a class="button secondary" href="/?demo=1" x-show="!demo">Explore sample data ↗</a>
+                  </div>
+                </div>
+                <div
+                  class="loading-state"
+                  x-show="loading"
+                ><span class="spinning">◌</span> Loading opportunities…</div>
+              </div>
+              <footer class="table-footer">
+                <span x-text="rangeLabel"></span>
+                <div>
+                  <button
+                    class="button secondary compact"
+                    :disabled="loading || hasChanges || page.offset === 0"
+                    @click="previousPage()"
+                  >
+                    ← Previous
+                  </button><button
+                    class="button secondary compact"
+                    :disabled="loading || hasChanges || page.offset + page.limit >= page.total"
+                    @click="nextPage()"
+                  >
+                    Next →
+                  </button>
+                </div>
+              </footer>
+            </section>
+          </div>
+        </main>
+        {% include "opportunities/item_details.html" %}
+        <noscript>
+          <div class="error-banner">Enable JavaScript to load opportunities and use the filters.</div>
+        </noscript>
+      </body>
+    </html>

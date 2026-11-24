@@ -4,6 +4,7 @@ import httpx
 from dishka import Provider, Scope, provide
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.cache import CacheService
 from app.core.config import Settings
 from app.core.repository import UnitOfWork
 from app.domains.catalog.gateway import CatalogGateway, EsiEverefCatalogGateway
@@ -50,7 +51,12 @@ class CatalogProvider(Provider):
     def repository(self, session: AsyncSession) -> ItemTypeRepository:
         return SQLItemTypeRepository(session)
 
-    names = provide(ItemNameService, scope=Scope.APP)
+    @provide(scope=Scope.APP)
+    def names(
+        self, gateway: CatalogGateway, cache: CacheService, settings: Settings
+    ) -> ItemNameService:
+        return ItemNameService(gateway, cache, settings.item_names_cache_seconds)
+
     service = provide(CatalogService, scope=Scope.REQUEST)
 
     @provide(scope=Scope.REQUEST)

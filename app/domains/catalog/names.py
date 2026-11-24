@@ -17,8 +17,11 @@ class _IncompleteItemNamesError(Exception):
 
 
 class ItemNameService:
-    def __init__(self, gateway: CatalogGateway, cache: CacheService) -> None:
+    def __init__(
+        self, gateway: CatalogGateway, cache: CacheService, ttl_seconds: int = 604800
+    ) -> None:
         self._gateway, self._cache = gateway, cache
+        self._ttl = ttl_seconds
 
     async def resolve(self, type_ids: list[int]) -> ItemNamesResult:
         ids = sorted(set(type_ids))
@@ -35,7 +38,7 @@ class ItemNameService:
             return {str(key): name for key, name in names.items()}
 
         try:
-            values = await self._cache.get_or_load(f"item-names:v1:{digest}", load, 604800)
+            values = await self._cache.get_or_load(f"item-names:v1:{digest}", load, self._ttl)
             names = ItemNamesResult.model_validate({"names": values, "missing_type_ids": []}).names
         except _IncompleteItemNamesError as error:
             names = error.names

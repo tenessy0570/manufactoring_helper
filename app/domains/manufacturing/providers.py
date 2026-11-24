@@ -11,6 +11,7 @@ from app.domains.invention.repository import InventionRepository
 from app.domains.manufacturing.gateway import EverefIndustryGateway, IndustryClient, IndustryGateway
 from app.domains.manufacturing.repository import ManufacturingRepository, SQLManufacturingRepository
 from app.domains.manufacturing.service import ManufacturingService, ManufacturingSyncService
+from app.domains.market.quotes import MarketQuoteReader
 
 
 class ManufacturingProvider(Provider):
@@ -28,8 +29,10 @@ class ManufacturingProvider(Provider):
         return EverefIndustryGateway(client)
 
     @provide(scope=Scope.REQUEST)
-    def repository(self, session: AsyncSession) -> ManufacturingRepository:
-        return SQLManufacturingRepository(session)
+    def repository(
+        self, session: AsyncSession, quotes: MarketQuoteReader
+    ) -> ManufacturingRepository:
+        return SQLManufacturingRepository(session, quotes)
 
     @provide(scope=Scope.REQUEST)
     def service(

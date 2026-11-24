@@ -8,7 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.domains.manufacturing.models import RecipeState
 from app.domains.manufacturing.tables import RecipeTable
 from app.domains.market.models import HubId, MarketPrice
-from app.domains.market.tables import MarketPriceTable
+from app.domains.market.quotes import MarketQuoteReader
 
 
 class ManufacturingRepository(ABC):
@@ -23,8 +23,8 @@ class ManufacturingRepository(ABC):
 
 
 class SQLManufacturingRepository(ManufacturingRepository):
-    def __init__(self, session: AsyncSession) -> None:
-        self._session = session
+    def __init__(self, session: AsyncSession, quotes: MarketQuoteReader) -> None:
+        self._session, self._quotes = session, quotes
 
     async def recipes(self, type_ids: Sequence[int]) -> dict[int, RecipeState]:
         results: dict[int, RecipeState] = {}
@@ -59,20 +59,4 @@ class SQLManufacturingRepository(ManufacturingRepository):
         await self._session.flush()
 
     async def quotes(self, hub_id: HubId, type_ids: Sequence[int]) -> dict[int, MarketPrice]:
-        results: dict[int, MarketPrice] = {}
-        for start in range(0, len(type_ids), 500):
-            rows = await self._session.scalars(
-                select(MarketPriceTable).where(
-                    MarketPriceTable.hub_id == hub_id,
-                    MarketPriceTable.type_id.in_(type_ids[start : start + 500]),
-                )
-            )
-            for row in rows:
-                quote = MarketPrice.model_validate(row, from_attributes=True)
-                quote.expires_at = (
-                    quote.expires_at.replace(tzinfo=UTC)
-                    if quote.expires_at.tzinfo is None
-                    else quote.expires_at
-                )
-                results[quote.type_id] = quote
-        return results
+        return await self._quotes.quotes(hub_id, type_ids)

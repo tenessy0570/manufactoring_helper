@@ -9,13 +9,15 @@ from dishka import Provider, Scope, make_async_container
 from redis.asyncio import Redis
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
 
+from app.core.application_errors import ErrorKind
 from app.core.orm import Base
 from app.core.repository import SQLAlchemyUnitOfWork
+from app.domains.accounts.errors import AccountError
 from app.domains.accounts.limiter import LoginLimiter, RedisLoginLimiter
 from app.domains.accounts.models import Credentials, PasswordChange, User, UserCreate, UserUpdate
 from app.domains.accounts.passwords import hash_password, verify_password
 from app.domains.accounts.repository import SQLAccountRepository
-from app.domains.accounts.service import COOKIE_NAME, AccountError, AccountService, token_hash
+from app.domains.accounts.service import COOKIE_NAME, AccountService, token_hash
 from app.main import create_app
 from tests.helpers import make_settings
 
@@ -71,7 +73,7 @@ async def test_login_rotation_revocation_password_and_disabled_user(
     for username, password in (("missing", PASSWORD), ("admin", "wrong")):
         with pytest.raises(AccountError) as error:
             await service.login(credentials(username, password), "test")
-        assert error.value.status == 401
+        assert error.value.kind == ErrorKind.UNAUTHENTICATED
     identity, token = await service.login(credentials("ADMIN"), "test")
     assert identity.id == actor.id
     assert await service.identity(token) == identity
@@ -117,7 +119,7 @@ async def test_login_rotation_revocation_password_and_disabled_user(
         await service.update(uuid4(), UserUpdate(is_active=False), actor)
     with pytest.raises(AccountError) as error:
         await make_user(service, "ADMIN")
-    assert error.value.status == 409
+    assert error.value.kind == ErrorKind.CONFLICT
     assert len(await service.find()) == 2
 
 
@@ -132,7 +134,7 @@ async def test_expired_session_and_rate_limit(service: AccountService) -> None:
     service.limiter.allowed = False
     with pytest.raises(AccountError) as error:
         await service.login(credentials(), "test")
-    assert error.value.status == 429
+    assert error.value.kind == ErrorKind.RATE_LIMITED
 
 
 async def test_whole_site_gate_roles_csrf_and_cookie(service: AccountService) -> None:

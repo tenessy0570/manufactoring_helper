@@ -4,7 +4,7 @@ from dishka.integrations.fastapi import DishkaRoute, FromDishka
 from fastapi import APIRouter, Request, Response
 
 from app.domains.accounts.models import Credentials, PasswordChange, User, UserCreate, UserUpdate
-from app.domains.accounts.service import COOKIE_NAME, SESSION_SECONDS, AccountService
+from app.domains.accounts.service import COOKIE_NAME, AccountService
 
 router = APIRouter(prefix="/api/v1/accounts", tags=["accounts"], route_class=DishkaRoute)
 
@@ -21,7 +21,7 @@ async def login(
     response.set_cookie(
         COOKIE_NAME,
         token,
-        max_age=SESSION_SECONDS,
+        max_age=service.session_seconds,
         httponly=True,
         samesite="lax",
         secure=request.url.scheme == "https",

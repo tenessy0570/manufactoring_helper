@@ -1,16 +1,15 @@
 from dishka import AsyncContainer
 from dishka.integrations.fastapi import setup_dishka
-from fastapi import FastAPI, Request
-from fastapi.responses import JSONResponse
+from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
 
 from app.core.config import Settings, get_settings
 from app.core.di import create_container
+from app.core.http_errors import install_error_handlers
 from app.core.logging import configure_logging
 from app.core.security import BasicAuthMiddleware
 from app.domains.accounts.middleware import SessionAuthMiddleware
 from app.domains.accounts.router import router as account_router
-from app.domains.accounts.service import AccountError
 from app.domains.catalog.router import router as catalog_router
 from app.domains.exclusions.router import router as exclusions_router
 from app.domains.health.router import router as health_router
@@ -19,7 +18,6 @@ from app.domains.invention.router import router as invention_router
 from app.domains.manufacturing.router import router as manufacturing_router
 from app.domains.market.router import router as market_router
 from app.domains.production.router import router as production_router
-from app.domains.production.service import ProductionError
 from app.domains.profiles.router import router as profile_router
 from app.domains.trading.router import router as trading_router
 from app.web.router import WEB_ROOT
@@ -36,7 +34,8 @@ def create_app(
     configure_logging(settings.log_level)
     container = container or create_container(settings)
 
-    app = FastAPI(title="EVE Manufacturing")
+    app = FastAPI(title="EVE Manufacturing", debug=False)
+    install_error_handlers(app)
     app.include_router(account_router)
     app.include_router(health_router)
     app.include_router(catalog_router)
@@ -58,13 +57,6 @@ def create_app(
             username=settings.basic_auth_username,
             password=settings.basic_auth_password.get_secret_value(),
         )
-
-    @app.exception_handler(ProductionError)
-    @app.exception_handler(AccountError)
-    async def account_error(
-        request: Request, error: AccountError | ProductionError
-    ) -> JSONResponse:
-        return JSONResponse({"detail": error.message}, status_code=error.status)
 
     setup_dishka(container, app)
     return app
