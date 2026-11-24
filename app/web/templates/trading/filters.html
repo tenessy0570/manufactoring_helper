@@ -1,0 +1,132 @@
+<form
+  id="trade-filters"
+  class="market-panel trade-filters"
+  @submit.prevent="load()"
+>
+  <div class="trade-route trade-price-options">
+    <label>
+      Purchase prices<select x-model="form.purchase_side">
+      <option value="sell">Sell orders (buy immediately)</option>
+      <option value="buy">Buy orders (place orders)</option>
+    </select></label><label>Sale prices<select x-model="form.sale_side">
+      <option value="buy">Buy orders (sell immediately)</option>
+      <option value="sell">Sell orders (list product)</option>
+      </select>
+    </label>
+  </div>
+  <div class="trade-filter-grid">
+    <label>
+      Min. price spike (%)<input
+        type="number"
+        min="0"
+        step="any"
+        x-model="form.price_spike_threshold"
+        :disabled="!form.price_spikes_only"
+        placeholder="30"
+      ></label><label>Route preference<select x-model="form.route_mode">
+      <option value="safe">Safe (0.5+ only)</option>
+      <option value="shortest">Shortest (may cross low/null-sec)</option>
+      </select></label><label>Max. jumps<input
+        type="number"
+        min="1"
+        step="1"
+        x-model="form.max_jumps"
+        placeholder="Any"
+      ></label><label>Min. batch profit / jump (ISK)<input
+        type="number"
+        min="0"
+        step="any"
+        x-model="form.min_profit_per_jump"
+        placeholder="Any"
+      ></label><label class="trade-search">Search all market items<input
+        aria-label="Search trade items"
+        type="search"
+        x-model="form.search"
+        placeholder="Item name..."
+      ></label><label>Sales tax (%)<input
+        type="number"
+        step="any"
+        min="0"
+        max="100"
+        x-model="form.sales_tax"
+        placeholder="0"
+      ></label><label>Buy broker (%)<input
+        type="number"
+        step="any"
+        min="0"
+        max="100"
+        x-model="form.buy_broker_fee"
+        placeholder="0"
+      ></label><label>Sell broker (%)<input
+        type="number"
+        step="any"
+        min="0"
+        max="100"
+        x-model="form.sell_broker_fee"
+        placeholder="0"
+      ></label><label>Sell purchase price range (%)<input
+        type="number"
+        min="0"
+        max="100"
+        step="any"
+        x-model="form.sell_price_range"
+      ></label><label>Buy price range below best (%)<input
+        type="number"
+        step="any"
+        min="0"
+        max="100"
+        x-model="form.buy_price_range"
+        placeholder="Any"
+      ></label><label>Min. region turnover / day (ISK)<input
+        type="number"
+        min="0"
+        step="any"
+        x-model="form.min_daily_isk_volume"
+        :disabled="!form.filter_daily_turnover"
+        placeholder="Any"
+      ></label><label>History period (completed days)<input type="number" min="1" max="365" step="1" x-model="form.history_days"></label><label>Min. profit / unit (ISK)<input type="number" step="any" x-model="form.min_profit" placeholder="Any"></label><label>Min. margin (%)<input type="number" step="any" x-model="form.min_margin" placeholder="Any"></label><label>Min. batch profit (ISK)<input
+        type="number"
+        step="any"
+        x-model="form.min_batch_profit"
+        placeholder="Any"
+      ></label><label>Max. investment (ISK)<input
+        type="number"
+        step="any"
+        min="0"
+        x-model="form.max_investment"
+        placeholder="Any"
+      ></label><label>Max. cargo (m³)<input
+        type="number"
+        step="any"
+        min="0"
+        x-model="form.max_cargo_m3"
+        placeholder="Any"
+      ></label><label>Max. units<input
+        type="number"
+        step="1"
+        min="1"
+        x-model="form.max_units"
+        placeholder="Any"
+      >
+      </label>
+    </div>
+    <div class="trade-toolbar">
+      <label class="trade-toggle">
+        <input type="checkbox" x-model="form.filter_daily_turnover">Filter daily turnover (ISK)</label><label
+          class="trade-toggle"
+          title="Sale quote at least this much above the median regional daily average over the last 7 completed days. At least 3 traded days required."
+        ><input type="checkbox" x-model="form.price_spikes_only">Price spikes only</label><label class="trade-toggle"><input type="checkbox" x-model="form.fresh_only">Fresh data only</label><label>Sort by<select aria-label="Trade sorting" x-model="form.rank_by">
+          <option value="profit_per_jump">Profit / jump</option>
+          <option value="jumps">Jumps (fewest first)</option>
+          <option value="batch_profit">Batch profit</option>
+          <option value="profit">Profit / unit</option>
+          <option value="margin">Margin</option>
+          <option value="profit_per_m3">Profit / m³</option>
+        </select></label><label>Rows per page<select x-model="form.limit">
+          <option>25</option>
+          <option>50</option>
+          <option>100</option>
+          </select>
+        </label>
+      </div>
+    </form>

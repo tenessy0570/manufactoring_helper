@@ -1,9 +1,10 @@
 from datetime import date, datetime
 from decimal import Decimal
 
-from pydantic import AwareDatetime, BaseModel, Field, model_validator
+from pydantic import AwareDatetime, BaseModel, Field
 
-from app.domains.market.models import HubId, TradeHub
+from app.contracts.opportunities import LiquidityFilters
+from app.domains.market.models import TradeHub
 
 
 class HistoryDay(BaseModel):
@@ -27,33 +28,8 @@ class HistoryState(BaseModel):
     expires_at: datetime
 
 
-class LiquidityQuery(BaseModel):
-    hub_id: HubId = "jita"
-    days: int = Field(default=30, ge=1, le=365)
-    type_ids: list[int] | None = Field(default=None, max_length=1000)
-    exclude_type_ids: list[int] | None = Field(default=None, max_length=1000)
-    search: str | None = Field(default=None, min_length=1, max_length=200)
-    categories: list[str] | None = Field(default=None, max_length=100)
-    meta_group_ids: list[int] | None = Field(default=None, max_length=100)
-    is_rig: bool | None = None
-    min_daily_isk_volume: Decimal | None = Field(default=None, ge=0, allow_inf_nan=False)
-    max_daily_isk_volume: Decimal | None = Field(default=None, ge=0, allow_inf_nan=False)
-    min_daily_units: Decimal | None = Field(default=None, ge=0, allow_inf_nan=False)
-    max_daily_units: Decimal | None = Field(default=None, ge=0, allow_inf_nan=False)
-    has_history: bool | None = None
-    fresh_only: bool = False
-    limit: int = Field(default=100, ge=1, le=1000)
-    offset: int = Field(default=0, ge=0)
-
-    @model_validator(mode="after")
-    def ranges(self) -> "LiquidityQuery":
-        for low, high in (
-            (self.min_daily_units, self.max_daily_units),
-            (self.min_daily_isk_volume, self.max_daily_isk_volume),
-        ):
-            if low is not None and high is not None and low > high:
-                raise ValueError("Minimum must not exceed maximum")
-        return self
+class LiquidityQuery(LiquidityFilters):
+    pass
 
 
 class LiquidityItem(BaseModel):

@@ -3,7 +3,8 @@ from decimal import ROUND_HALF_UP, Decimal
 from uuid import UUID, uuid4
 
 from app.core.application_errors import ErrorKind
-from app.core.freshness import MARKET_FRESHNESS, refresh_deadline
+from app.core.config import DEFAULT_REFRESH, RefreshPolicy
+from app.core.freshness import refresh_deadline
 from app.core.repository import UnitOfWork
 from app.domains.catalog.models import ItemTypeClause
 from app.domains.catalog.repository import ItemTypeRepository
@@ -117,8 +118,10 @@ class ProductionEstimateService:
         productions: ProductionService,
         market: ManufacturingRepository,
         shopping: ShoppingService,
+        refresh_policy: RefreshPolicy = DEFAULT_REFRESH,
     ) -> None:
         self.productions, self.market, self.shopping = productions, market, shopping
+        self._refresh = refresh_policy
 
     async def estimate(self, user_id: UUID, production_id: UUID, data: EstimateInput) -> Estimate:
         production = await self.productions.get(user_id, production_id)
@@ -219,7 +222,7 @@ class ProductionEstimateService:
                 amount += runs * material.quantity * price
                 assert quote is not None
                 stale = stale or refresh_deadline(
-                    quote.synced_at, MARKET_FRESHNESS
+                    quote.synced_at, self._refresh.market
                 ) <= datetime.now(UTC)
             if data.material_order_type == "buy":
                 amount *= 1 + data.buy_broker_fee / 100

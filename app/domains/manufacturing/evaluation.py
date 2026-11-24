@@ -1,7 +1,8 @@
 from datetime import datetime
 from decimal import Decimal
 
-from app.core.freshness import HISTORY_FRESHNESS, MARKET_FRESHNESS, refresh_deadline
+from app.core.config import DEFAULT_REFRESH, RefreshPolicy
+from app.core.freshness import refresh_deadline
 from app.domains.manufacturing.calculation import calculate
 from app.domains.manufacturing.demand import estimate_buy_demand
 from app.domains.manufacturing.filtering import matches_filters
@@ -16,7 +17,10 @@ from app.domains.manufacturing.timing import calculate_timing
 
 
 def evaluate_opportunities(
-    inputs: OpportunityInputs, query: ManufacturingQuery, now: datetime
+    inputs: OpportunityInputs,
+    query: ManufacturingQuery,
+    now: datetime,
+    refresh_policy: RefreshPolicy = DEFAULT_REFRESH,
 ) -> OpportunityEvaluation:
     candidates, recipes = inputs.candidates, inputs.recipes
     quotes, products = inputs.quotes, inputs.products
@@ -107,12 +111,12 @@ def evaluate_opportunities(
             continue
         deadlines = {
             "recipe": state.expires_at,
-            "product_market": refresh_deadline(product.synced_at, MARKET_FRESHNESS),
+            "product_market": refresh_deadline(product.synced_at, refresh_policy.market),
             "material_market": min(
-                refresh_deadline(quotes[m.type_id].synced_at, MARKET_FRESHNESS)
+                refresh_deadline(quotes[m.type_id].synced_at, refresh_policy.market)
                 for m in state.recipe.materials
             ),
-            "history": refresh_deadline(candidate.synced_at, HISTORY_FRESHNESS)
+            "history": refresh_deadline(candidate.synced_at, refresh_policy.history)
             if candidate.synced_at is not None
             else now,
         }

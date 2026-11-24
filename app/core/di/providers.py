@@ -5,7 +5,7 @@ from redis.asyncio import Redis
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker
 
 from app.core.cache import Cache, CacheService, MemoryCache, RedisCache, TieredCache
-from app.core.config import Settings
+from app.core.config import RefreshPolicy, Settings
 from app.core.database import create_engine, create_session_factory
 from app.core.repository import SQLAlchemyUnitOfWork, UnitOfWork
 
@@ -14,6 +14,10 @@ class InfrastructureProvider(Provider):
     """Wires settings, database, Redis, cache and the per-request transaction objects."""
 
     settings = from_context(provides=Settings, scope=Scope.APP)
+
+    @provide(scope=Scope.APP)
+    def refresh_policy(self, settings: Settings) -> RefreshPolicy:
+        return settings.refresh_policy
 
     @provide(scope=Scope.APP)
     async def engine(self, settings: Settings) -> AsyncIterator[AsyncEngine]:

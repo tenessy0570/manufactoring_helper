@@ -1,0 +1,71 @@
+<section
+  class="market-panel trade-quick-controls"
+  aria-label="Trading controls"
+>
+  <div class="trade-toolbar trade-quick-row">
+    <label>
+      Buy in<select aria-label="Purchase hub" x-model="form.source_hub">
+      <option value="">All hubs</option>
+      <template x-for="hub in hubs" :key="hub">
+        <option :value="hub" x-text="hubName(hub)"></option>
+      </template>
+    </select></label><button
+      class="button secondary"
+      type="button"
+      @click="swap()"
+      aria-label="Swap trade hubs"
+    >
+      ⇄
+    </button><label>Sell in<select aria-label="Sale hub" x-model="form.destination_hub">
+      <option value="">All hubs</option>
+      <template x-for="hub in hubs" :key="hub">
+        <option :value="hub" x-text="hubName(hub)"></option>
+      </template>
+    </select></label><label>Profile<select x-model="profileId" @change="selectProfile()">
+      <option value="">Custom settings</option>
+      <template x-for="profile in profiles" :key="profile.id">
+        <option :value="profile.id" x-text="profile.name"></option>
+      </template>
+    </select></label><button
+      type="button"
+      class="button secondary"
+      :disabled="!profiles.some(p=>p.id===profileId)"
+      @click="saveProfile(true)"
+    >
+      Update profile
+    </button><button
+      type="button"
+      class="button secondary"
+      :disabled="!profiles.some(p=>p.id===profileId)"
+      @click="deleteProfile()"
+    >
+      Delete profile
+    </button><button
+      type="button"
+      class="button secondary"
+      @click="profileSaveOpen=!profileSaveOpen"
+    >
+      Save as profile
+    </button><button
+      type="submit"
+      form="trade-filters"
+      class="button primary"
+      :disabled="loading"
+      x-text="loading?'Loading...':'Show results'"
+    ></button>
+  </div>
+  <form
+    x-show="profileSaveOpen"
+    @submit.prevent="saveProfile()"
+    class="trade-toolbar"
+  >
+    <label>
+      Profile name<input
+        x-model="profileName"
+        maxlength="100"
+        required
+        placeholder="Profile name"
+      ></label><button class="button primary" type="submit">Save profile</button>
+  </form>
+  <p role="alert" x-show="profileError" x-text="profileError"></p>
+</section>

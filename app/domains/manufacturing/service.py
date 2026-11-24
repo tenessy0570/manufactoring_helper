@@ -2,6 +2,7 @@ from collections.abc import Callable
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 
+from app.core.config import DEFAULT_REFRESH, RefreshPolicy
 from app.core.repository import UnitOfWork
 from app.domains.history.repository import HistoryRepository
 from app.domains.invention.repository import InventionRepository
@@ -26,7 +27,7 @@ class ManufacturingSyncService:
         repository: ManufacturingRepository,
         gateway: IndustryGateway,
         unit_of_work: UnitOfWork,
-        ttl_seconds: int = 86400,
+        ttl_seconds: int = DEFAULT_REFRESH.recipe_seconds,
         clock: Callable[[], datetime] = lambda: datetime.now(UTC),
     ) -> None:
         self._repository, self._gateway, self._uow = repository, gateway, unit_of_work
@@ -66,10 +67,12 @@ class ManufacturingService:
         clock: Callable[[], datetime] = lambda: datetime.now(UTC),
         invention: InventionRepository | None = None,
         sync: ManufacturingSyncService | None = None,
+        refresh_policy: RefreshPolicy = DEFAULT_REFRESH,
     ) -> None:
         self._repository, self._history, self._clock = repository, history, clock
         self._invention = invention
         self._sync = sync
+        self._refresh = refresh_policy
 
     async def calculator(self, type_id: int, query: CalculatorQuery) -> CalculatorPage:
         if self._sync is not None:
@@ -158,7 +161,7 @@ class ManufacturingService:
         inputs = await OpportunityDataLoader(self._repository, self._history, self._invention).load(
             query, now, restrict_to_mass_production
         )
-        evaluation = evaluate_opportunities(inputs, query, now)
+        evaluation = evaluate_opportunities(inputs, query, now, self._refresh)
         results = evaluation.items
         field = {
             "profit_per_day": "rank_profit_per_day",

@@ -1,9 +1,34 @@
+from datetime import timedelta
 from functools import lru_cache
 from typing import Literal
 
-from pydantic import Field, SecretStr
+from pydantic import BaseModel, ConfigDict, Field, SecretStr
 from pydantic_settings import BaseSettings, SettingsConfigDict
 from sqlalchemy.engine import URL
+
+
+class RefreshPolicy(BaseModel):
+    """Shared refresh intervals used by workers, calculations and freshness reports."""
+
+    model_config = ConfigDict(frozen=True)
+    market_seconds: int = Field(default=1200, ge=1)
+    history_seconds: int = Field(default=86400, ge=3600, le=86400)
+    recipe_seconds: int = Field(default=86400, ge=3600, le=604800)
+    invention_price_seconds: int = Field(default=86400, ge=1)
+    invention_plan_seconds: int = Field(default=604800, ge=3600, le=2592000)
+    metadata_seconds: int = Field(default=604800, ge=1)
+    retry_seconds: int = Field(default=300, ge=1)
+
+    @property
+    def market(self) -> timedelta:
+        return timedelta(seconds=self.market_seconds)
+
+    @property
+    def history(self) -> timedelta:
+        return timedelta(seconds=self.history_seconds)
+
+
+DEFAULT_REFRESH = RefreshPolicy()
 
 
 class Settings(BaseSettings):
@@ -40,12 +65,21 @@ class Settings(BaseSettings):
     http_max_retries: int = 4
 
     catalog_max_age_hours: int = 20
+    market_refresh_seconds: int = Field(default=DEFAULT_REFRESH.market_seconds, ge=1)
     market_cache_seconds: int = Field(default=300, ge=1, le=3600)
-    history_cache_seconds: int = Field(default=86400, ge=3600, le=86400)
+    history_cache_seconds: int = Field(default=DEFAULT_REFRESH.history_seconds, ge=3600, le=86400)
     industry_base_url: str = "https://api.everef.net"
     industry_max_concurrency: int = Field(default=3, ge=1, le=20)
-    manufacturing_cache_seconds: int = Field(default=86400, ge=3600, le=604800)
-    invention_plan_ttl_seconds: int = Field(default=604800, ge=3600, le=2592000)
+    manufacturing_cache_seconds: int = Field(
+        default=DEFAULT_REFRESH.recipe_seconds, ge=3600, le=604800
+    )
+    invention_plan_ttl_seconds: int = Field(
+        default=DEFAULT_REFRESH.invention_plan_seconds, ge=3600, le=2592000
+    )
+
+    invention_price_ttl_seconds: int = Field(default=DEFAULT_REFRESH.invention_price_seconds, ge=1)
+    trading_metadata_ttl_seconds: int = Field(default=DEFAULT_REFRESH.metadata_seconds, ge=1)
+    refresh_retry_seconds: int = Field(default=DEFAULT_REFRESH.retry_seconds, ge=1)
 
     session_ttl_seconds: int = Field(default=1209600, ge=60)
     item_names_cache_seconds: int = Field(default=604800, ge=1)
@@ -54,6 +88,18 @@ class Settings(BaseSettings):
 
     basic_auth_username: str = ""
     basic_auth_password: SecretStr = SecretStr("")
+
+    @property
+    def refresh_policy(self) -> RefreshPolicy:
+        return RefreshPolicy(
+            market_seconds=self.market_refresh_seconds,
+            history_seconds=self.history_cache_seconds,
+            recipe_seconds=self.manufacturing_cache_seconds,
+            invention_price_seconds=self.invention_price_ttl_seconds,
+            invention_plan_seconds=self.invention_plan_ttl_seconds,
+            metadata_seconds=self.trading_metadata_ttl_seconds,
+            retry_seconds=self.refresh_retry_seconds,
+        )
 
     @property
     def database_url(self) -> URL:

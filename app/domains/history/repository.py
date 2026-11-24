@@ -7,7 +7,7 @@ from typing import Any
 from sqlalchemy import Numeric, Select, cast, delete, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.freshness import HISTORY_FRESHNESS
+from app.core.config import DEFAULT_REFRESH, RefreshPolicy
 from app.domains.catalog.tables import ItemTypeTable
 from app.domains.history.models import HistoryDay, HistoryState, LiquidityItem, LiquidityQuery
 from app.domains.history.tables import HistoryDayTable, HistoryStateTable
@@ -36,8 +36,11 @@ class HistoryRepository(ABC):
 
 
 class SQLHistoryRepository(HistoryRepository):
-    def __init__(self, session: AsyncSession) -> None:
+    def __init__(
+        self, session: AsyncSession, refresh_policy: RefreshPolicy = DEFAULT_REFRESH
+    ) -> None:
         self._session = session
+        self._refresh = refresh_policy
 
     async def state(self, region_id: int, type_id: int) -> HistoryState | None:
         row = await self._session.get(HistoryStateTable, (region_id, type_id))
@@ -58,7 +61,7 @@ class SQLHistoryRepository(HistoryRepository):
                     HistoryStateTable.region_id == region_id,
                     HistoryStateTable.type_id.in_(type_ids[start : start + 500]),
                     (HistoryStateTable.expires_at > now)
-                    | (HistoryStateTable.synced_at > now - HISTORY_FRESHNESS),
+                    | (HistoryStateTable.synced_at > now - self._refresh.history),
                 )
             )
             fresh.update(rows)
@@ -166,7 +169,7 @@ class SQLHistoryRepository(HistoryRepository):
                 totals.c.type_id.is_not(None) if query.has_history else totals.c.type_id.is_(None)
             )
         if query.fresh_only:
-            statement = statement.where(states.synced_at > now - HISTORY_FRESHNESS)
+            statement = statement.where(states.synced_at > now - self._refresh.history)
         return statement
 
     async def liquidity(

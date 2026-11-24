@@ -43,7 +43,7 @@ dev = [
 include = ["app*"]
 
 [tool.setuptools.package-data]
-app = ["web/templates/*.html", "web/templates/opportunities/*.html", "web/static/*.css", "web/static/*.js", "web/static/manufacturing/*.js", "web/static/vendor/*.js"]
+app = ["web/templates/*.html", "web/templates/opportunities/*.html", "web/templates/production/*.html", "web/templates/trading/*.html", "web/static/*.css", "web/static/*.js", "web/static/manufacturing/*.js", "web/static/production/*.js", "web/static/trading/*.js", "web/static/vendor/*.js"]
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"

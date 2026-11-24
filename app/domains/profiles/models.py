@@ -4,10 +4,10 @@ from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
-from app.domains.manufacturing.models import ManufacturingQuery
+from app.contracts.opportunities import OpportunitySettings
 
 
-class ProfileSettings(ManufacturingQuery):
+class ProfileSettings(OpportunitySettings):
     model_config = ConfigDict(extra="forbid")
     offset: Literal[0] = 0
 

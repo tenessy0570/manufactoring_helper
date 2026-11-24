@@ -35,6 +35,7 @@ def create_app(
     container = container or create_container(settings)
 
     app = FastAPI(title="EVE Manufacturing", debug=False)
+    app.state.refresh_policy = settings.refresh_policy
     install_error_handlers(app)
     app.include_router(account_router)
     app.include_router(health_router)

@@ -1,7 +1,7 @@
 from dishka import Provider, Scope, provide
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.config import Settings
+from app.core.config import RefreshPolicy, Settings
 from app.core.repository import UnitOfWork
 from app.domains.market.gateway import EsiMarketGateway, MarketGateway
 from app.domains.market.quotes import MarketQuoteReader, SQLMarketQuoteReader
@@ -18,13 +18,17 @@ class MarketProvider(Provider):
         return EsiMarketGateway(esi, settings.market_cache_seconds)
 
     @provide(scope=Scope.REQUEST)
-    def repository(self, session: AsyncSession) -> MarketRepository:
-        return SQLMarketRepository(session)
+    def repository(self, session: AsyncSession, refresh_policy: RefreshPolicy) -> MarketRepository:
+        return SQLMarketRepository(session, refresh_policy)
 
     service = provide(MarketService, scope=Scope.REQUEST)
 
     @provide(scope=Scope.REQUEST)
     def sync_service(
-        self, repository: MarketRepository, gateway: MarketGateway, unit_of_work: UnitOfWork
+        self,
+        repository: MarketRepository,
+        gateway: MarketGateway,
+        unit_of_work: UnitOfWork,
+        refresh_policy: RefreshPolicy,
     ) -> MarketSyncService:
-        return MarketSyncService(repository, gateway, unit_of_work)
+        return MarketSyncService(repository, gateway, unit_of_work, refresh_policy=refresh_policy)

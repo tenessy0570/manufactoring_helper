@@ -1,10 +1,11 @@
 from abc import ABC, abstractmethod
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, datetime
 from typing import Any
 
 from sqlalchemy import and_, case, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.config import DEFAULT_REFRESH, RefreshPolicy
 from app.domains.catalog.tables import ItemTypeTable
 from app.domains.health.models import DataProgress, FreshnessReport, SourceFreshness
 from app.domains.history.tables import HistoryStateTable
@@ -23,8 +24,11 @@ class ProgressRepository(ABC):
 
 
 class SQLProgressRepository(ProgressRepository):
-    def __init__(self, session: AsyncSession) -> None:
+    def __init__(
+        self, session: AsyncSession, refresh_policy: RefreshPolicy = DEFAULT_REFRESH
+    ) -> None:
         self._session = session
+        self._refresh = refresh_policy
 
     async def snapshot(self, hub: HubId) -> DataProgress:
         eligible = select(ItemTypeTable.type_id).where(
@@ -89,14 +93,14 @@ class SQLProgressRepository(ProgressRepository):
                 "market",
                 MarketStateTable,
                 MarketStateTable.synced_at,
-                MarketStateTable.synced_at > now - timedelta(minutes=20),
+                MarketStateTable.synced_at > now - self._refresh.market,
                 [MarketStateTable.hub_id == hub],
             ),
             (
                 "history",
                 HistoryStateTable,
                 HistoryStateTable.synced_at,
-                HistoryStateTable.synced_at > now - timedelta(days=1),
+                HistoryStateTable.synced_at > now - self._refresh.history,
                 [HistoryStateTable.region_id == get_hub(hub).region_id],
             ),
             (

@@ -1,0 +1,241 @@
+<template x-if="page">
+  <section class="market-panel trade-results" :aria-busy="loading">
+    <div class="trade-summary"><strong><span x-text="hubName(resultForm.source_hub)"></span> → <span x-text="hubName(resultForm.destination_hub)"></span></strong><span><span x-text="page.total.toLocaleString('en-US')"></span> opportunities / <span x-text="page.scanned.toLocaleString('en-US')"></span> item/route pairs checked</span><span>Oldest source: <span x-text="age(page.source_updated_at)"></span> · Oldest destination: <span x-text="age(page.destination_updated_at)"></span></span></div>
+    <p class="trade-notice" x-show="page.missing_routes"><span x-text="page.missing_routes"></span> directions excluded: route data is preparing or no verified route is available. Safe routes contain only systems with displayed security 0.5 or higher.</p>
+    <p
+      class="trade-notice"
+      x-show="!page.source_updated_at||!page.destination_updated_at"
+    >
+      Some selected hubs have no saved market snapshot yet.
+    </p>
+    <details
+      class="trade-notice"
+      x-show="page.missing_metadata||page.missing_volume"
+    >
+      <summary>Item details are preparing in the background</summary>
+      <p><span x-text="page.missing_metadata"></span> paired items still need metadata; <span x-text="page.missing_volume"></span> have no transport volume. Name searches may be incomplete until metadata is loaded. Profit per m³ is unavailable for unknown volumes; cargo limits skip these items. Select Show results after the background update.</p>
+    </details>
+    <p class="trade-notice" x-show="page.missing_history"><span x-text="page.missing_history"></span> destination item histories are not loaded yet. When Filter daily turnover is enabled and a minimum is set, these opportunities are excluded until the background update.</p>
+    <div class="trade-table-toolbar">
+      <details
+        class="trade-columns"
+        @click.outside="$el.open=false"
+        @keydown.escape.stop="$el.open=false;$el.querySelector('summary').focus()"
+      >
+        <summary class="button secondary" aria-controls="trade-column-options">Columns</summary>
+        <div id="trade-column-options">
+          <template x-for="column in columnOptions" :key="column.id">
+            <label>
+              <input
+                type="checkbox"
+                :checked="columnVisible(column.id)"
+                @change="hiddenColumns=$event.target.checked?hiddenColumns.filter(id=>id!==column.id):[...hiddenColumns,column.id]"
+              >
+              <span x-text="column.label"></span>
+            </label>
+          </template>
+          <button
+            type="button"
+            class="text-button"
+            @click="hiddenColumns=[]"
+          >Show all columns</button>
+        </div>
+      </details>
+    </div>
+    <div class="table-wrap">
+      <table class="trade-table" :style="{minWidth:tableWidth}">
+        <thead>
+          <tr>
+            <th>Item</th>
+            <th x-show="columnVisible('jumps')">Jumps</th>
+            <th
+              x-show="columnVisible('jumpProfit')"
+              title="Net profit for the whole batch divided by gate jumps."
+            >
+              Profit / jump (ISK)
+            </th>
+            <th x-show="columnVisible('route')">Route</th>
+            <th x-show="columnVisible('purchase')">Buy / unit</th>
+            <th x-show="columnVisible('sale')">Sell / unit</th>
+            <th x-show="columnVisible('profit')">Profit / unit</th>
+            <th
+              x-show="columnVisible('density')"
+              title="Net batch profit divided by cargo volume; unit profit per volume when no batch is specified."
+            >
+              Profit / m³
+            </th>
+            <th x-show="columnVisible('margin')">Margin</th>
+            <th x-show="columnVisible('quantity')">Units</th>
+            <th x-show="columnVisible('investment')">Required investment (ISK)</th>
+            <th x-show="columnVisible('cargo')">Cargo (m³)</th>
+            <th x-show="columnVisible('batch')">Batch profit</th>
+            <th
+              x-show="columnVisible('turnover')"
+              title="Average daily traded ISK across the destination hub region."
+            >
+              Region turnover / day
+            </th>
+            <th x-show="columnVisible('data')">Data</th>
+          </tr>
+        </thead>
+        <tbody>
+          <template
+            x-for="item in page.items"
+            :key="item.type_id+':'+item.source_hub+':'+item.destination_hub"
+          >
+            <tr>
+              <td>
+                <button
+                  type="button"
+                  class="item-name trade-item-button"
+                  @click="openHistory(item)"
+                  :aria-label="'Price history for '+item.name+' in '+hubName(item.destination_hub)"
+                >
+                  <img
+                    :src="'https://images.evetech.net/types/'+item.type_id+'/icon?size=32'"
+                    alt=""
+                    loading="lazy"
+                    @error="$el.style.visibility='hidden'"
+                  >
+                  <strong x-text="item.name"></strong>
+                </button>
+                <details class="trade-details">
+                  <summary>Details</summary>
+                  <div>
+                    <dl>
+                      <template
+                        x-if="item.price_spike_pct!==null &amp;&amp; item.price_spike_pct!==undefined"
+                      >
+                        <div>
+                          <dt>Price spike / 7-day median</dt>
+                          <dd
+                            x-text="'+'+pct(item.price_spike_pct)+' / '+money(item.historical_median_price)+' ISK'"
+                          >
+                          </dd>
+                        </div>
+                      </template>
+                      <dt>Cost / unit</dt>
+                      <dd x-text="money(item.cost_per_unit)+' ISK'">
+                      </dd>
+                      <dt>Purchase fee / unit</dt>
+                      <dd x-text="money(item.purchase_fee)+' ISK'">
+                      </dd>
+                      <dt>Sale fee / unit (best price)</dt>
+                      <dd x-text="money(item.sale_fee)+' ISK'">
+                      </dd>
+                      <dt>Volume / unit</dt>
+                      <dd x-text="money(item.volume_m3)+' m³'">
+                      </dd>
+                      <dt>Stock in purchase price range</dt>
+                      <dd x-text="money(item.source_stock)">
+                      </dd>
+                      <dt>Profitable buy demand</dt>
+                      <dd x-text="money(item.destination_demand)">
+                      </dd>
+                      <dt>Average batch sale price</dt>
+                      <dd x-text="money(item.average_sale_price)+' ISK'">
+                      </dd>
+                      <dt>History updated</dt>
+                      <dd x-text="age(item.history_updated_at)">
+                      </dd>
+                      <dt>Net batch revenue</dt>
+                      <dd x-text="money(item.batch_revenue)+' ISK'">
+                      </dd>
+                    </dl>
+                    <p x-show="!item.instant_trade">Scenario: orders must fill.</p>
+                    <template x-for="warning in item.warnings" :key="warning">
+                      <p x-text="warning"></p>
+                    </template>
+                  </div>
+                </details>
+              </td>
+              <td x-show="columnVisible('jumps')"><span x-text="item.jumps ?? '--'"></span><small x-show="item.route_highsec===false" class="error-text">Low/null-sec</small></td>
+              <td
+                x-show="columnVisible('jumpProfit')"
+                class="positive"
+                x-text="compactMoney(item.profit_per_jump)"
+                :title="money(item.profit_per_jump)+' ISK / jump'"
+              ></td>
+              <td x-show="columnVisible('route')" class="trade-route-cell"><span x-text="hubName(item.source_hub)"></span> → <span x-text="hubName(item.destination_hub)"></span></td>
+              <td
+                x-show="columnVisible('purchase')"
+                x-text="compactMoney(item.purchase_price)"
+                :title="money(item.purchase_price)+' ISK'"
+              ></td>
+              <td
+                x-show="columnVisible('sale')"
+                x-text="compactMoney(item.sale_price)"
+                :title="money(item.sale_price)+' ISK'"
+              ></td>
+              <td
+                x-show="columnVisible('profit')"
+                class="positive"
+                x-text="compactMoney(item.profit_per_unit)"
+                :title="money(item.profit_per_unit)+' ISK'"
+              ></td>
+              <td
+                x-show="columnVisible('density')"
+                class="positive trade-density"
+                x-text="compactMoney(item.profit_per_m3)"
+                :title="money(item.profit_per_m3)+' ISK'"
+              ></td>
+              <td x-show="columnVisible('margin')">
+                <span class="margin-badge" x-text="pct(item.margin_pct)"></span>
+              </td>
+              <td x-show="columnVisible('quantity')" x-text="money(item.quantity)"></td>
+              <td
+                x-show="columnVisible('investment')"
+                x-text="compactMoney(item.investment)"
+                :title="money(item.investment)+' ISK'"
+              ></td>
+              <td x-show="columnVisible('cargo')" x-text="money(item.cargo_m3)"></td>
+              <td
+                x-show="columnVisible('batch')"
+                class="positive"
+                :title="money(item.batch_profit)+' ISK'"
+              >
+                <strong x-text="compactMoney(item.batch_profit)"></strong><small x-show="!item.instant_trade">Scenario</small>
+              </td>
+              <td
+                x-show="columnVisible('turnover')"
+                :title="money(item.daily_isk_volume)+' ISK / day'"
+                x-text="compactMoney(item.daily_isk_volume)"
+              ></td>
+              <td x-show="columnVisible('data')">
+                <span
+                  class="data-badge"
+                  :class="stale(item)?'stale':'fresh'"
+                  x-text="stale(item)?'Stale':'Fresh'"
+                ></span>
+              </td>
+            </tr>
+          </template>
+        </tbody>
+      </table>
+    </div>
+    <p
+      class="trade-empty"
+      x-show="!page.items.length&&!loading"
+    >No profitable matches with these settings and available inputs.</p>
+    <div class="table-footer">
+      <span><span x-text="page.total? page.offset+1:0"></span>–<span x-text="Math.min(page.offset+page.limit,page.total)"></span> of <span x-text="page.total"></span></span>
+      <div>
+        <button
+          type="button"
+          class="button secondary"
+          :disabled="loading||changed||page.offset===0"
+          @click="load(Math.max(0,page.offset-page.limit),true)"
+        >
+          Previous
+        </button><button
+          type="button"
+          class="button secondary"
+          :disabled="loading||changed||page.offset+page.limit>=page.total"
+          @click="load(page.offset+page.limit,true)"
+        >
+          Next
+        </button>
+      </div>
+    </div>
+  </section>
+</template>

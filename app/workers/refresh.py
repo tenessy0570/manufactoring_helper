@@ -1,7 +1,9 @@
 from collections.abc import Awaitable, Callable
 from typing import Any
 
-RETRY_DELAY_SECONDS = 300
+from app.core.config import DEFAULT_REFRESH
+
+RETRY_DELAY_SECONDS = DEFAULT_REFRESH.retry_seconds
 
 
 async def with_retry_delay[T](
@@ -15,5 +17,7 @@ async def with_retry_delay[T](
         return await operation()
     except Exception:
         if redis is not None:
-            await redis.set(retry_key, "1", ex=RETRY_DELAY_SECONDS)
+            await redis.set(
+                retry_key, "1", ex=ctx.get("refresh_retry_seconds", RETRY_DELAY_SECONDS)
+            )
         raise

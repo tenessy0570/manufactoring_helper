@@ -1,0 +1,78 @@
+<section class="market-panel">
+  <div class="production-list-heading">
+    <h2>Your productions</h2>
+    <button class="text-button" @click="load(offset)" :disabled="busy">Refresh</button>
+  </div>
+  <p
+    class="muted production-editor"
+    x-show="!items.length"
+    x-text="busy?'Loading...':'No productions on this page. Create your first batch above.'"
+  ></p>
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr>
+          <th>Product</th>
+          <th>Units</th>
+          <th>Status</th>
+          <th>Invention</th>
+          <th>Materials</th>
+          <th>Manufacturing</th>
+          <th>Income</th>
+          <th>Cash balance</th>
+          <th>Return on costs</th>
+        </tr>
+      </thead>
+      <tbody>
+        <template x-for="item in items" :key="item.id">
+          <tr>
+            <td>
+              <button
+                class="text-button production-product"
+                @click="open(item)"
+                :disabled="busy"
+              >
+                <img
+                  :src="'https://images.evetech.net/types/'+item.type_id+'/icon?size=32'"
+                  alt=""
+                  loading="lazy"
+                  @error="$el.style.visibility='hidden'"
+                >
+                <span x-text="item.name"></span>
+              </button>
+              <div class="muted production-comment" x-text="item.comment"></div>
+            </td>
+            <td x-text="item.units??'—'"></td>
+            <td x-text="item.status==='completed'?'Completed':'In progress'"></td>
+            <td class="expense-tone" x-text="money(item.totals.invention)"></td>
+            <td class="expense-tone" x-text="money(item.totals.materials)"></td>
+            <td class="expense-tone" x-text="money(item.totals.manufacturing)"></td>
+            <td class="income-tone" x-text="money(item.totals.income)"></td>
+            <td
+              :class="Number(item.totals.balance)<0?'expense-tone':'income-tone'"
+              x-text="money(item.totals.balance)"
+            ></td>
+            <td
+              x-text="item.totals.margin===null?'Not available':Number(item.totals.margin).toFixed(1)+'%'"
+            ></td>
+          </tr>
+        </template>
+      </tbody>
+    </table>
+  </div>
+  <div class="production-actions">
+    <button
+      class="button secondary"
+      @click="load(Math.max(0,offset-50))"
+      :disabled="busy||offset===0"
+    >
+      Previous
+    </button><span class="muted" x-text="'Page '+(offset/50+1)"></span><button
+      class="button secondary"
+      @click="load(offset+50)"
+      :disabled="busy||items.length<50"
+    >
+      Next
+    </button>
+  </div>
+</section>

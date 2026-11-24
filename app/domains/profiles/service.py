@@ -3,8 +3,6 @@ from datetime import UTC, datetime
 from uuid import UUID, uuid4
 
 from app.core.repository import UnitOfWork
-from app.domains.manufacturing.models import ManufacturingQuery, OpportunityPage
-from app.domains.manufacturing.service import ManufacturingService
 from app.domains.profiles.models import Profile, ProfileCreate, ProfilePage, ProfileUpdate
 from app.domains.profiles.repository import ProfileRepository
 
@@ -105,18 +103,3 @@ class ProfileService:
         except BaseException:
             await self._uow.rollback()
             raise
-
-
-class ProfileCalculationService:
-    def __init__(self, profiles: ProfileService, manufacturing: ManufacturingService) -> None:
-        self._profiles, self._manufacturing = profiles, manufacturing
-
-    async def opportunities(
-        self, profile_id: UUID | None, limit: int | None, offset: int
-    ) -> OpportunityPage:
-        profile = await self._profiles.get(profile_id)
-        values = profile.settings.model_dump()
-        values["offset"] = offset
-        if limit is not None:
-            values["limit"] = limit
-        return await self._manufacturing.opportunities(ManufacturingQuery.model_validate(values))

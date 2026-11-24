@@ -1,7 +1,8 @@
 from collections.abc import Callable
 from datetime import UTC, datetime, timedelta
 
-from app.core.freshness import HISTORY_FRESHNESS, refresh_deadline
+from app.core.config import DEFAULT_REFRESH, RefreshPolicy
+from app.core.freshness import refresh_deadline
 from app.core.repository import UnitOfWork
 from app.domains.history.gateway import HistoryGateway
 from app.domains.history.models import HistorySeries, HistoryState, LiquidityPage, LiquidityQuery
@@ -14,8 +15,10 @@ class HistoryService:
         self,
         repository: HistoryRepository,
         clock: Callable[[], datetime] = lambda: datetime.now(UTC),
+        refresh_policy: RefreshPolicy = DEFAULT_REFRESH,
     ) -> None:
         self._repository, self._clock = repository, clock
+        self._refresh = refresh_policy
 
     async def liquidity(self, query: LiquidityQuery) -> LiquidityPage:
         now = self._clock()
@@ -38,7 +41,7 @@ class HistoryService:
             hub=hub,
             type_id=type_id,
             state=state,
-            stale=state is None or refresh_deadline(state.synced_at, HISTORY_FRESHNESS) <= now,
+            stale=state is None or refresh_deadline(state.synced_at, self._refresh.history) <= now,
             days=await self._repository.series(
                 hub.region_id,
                 type_id,
@@ -55,7 +58,9 @@ class HistorySyncService:
         gateway: HistoryGateway,
         unit_of_work: UnitOfWork,
         clock: Callable[[], datetime] = lambda: datetime.now(UTC),
+        refresh_policy: RefreshPolicy = DEFAULT_REFRESH,
     ) -> None:
+        self._refresh = refresh_policy
         self._repository, self._gateway, self._uow, self._clock = (
             repository,
             gateway,
@@ -68,7 +73,8 @@ class HistorySyncService:
         now = self._clock()
         if (
             state is not None
-            and max(state.expires_at, refresh_deadline(state.synced_at, HISTORY_FRESHNESS)) > now
+            and max(state.expires_at, refresh_deadline(state.synced_at, self._refresh.history))
+            > now
         ):
             return False
         downloaded = await self._gateway.fetch(region_id, type_id)

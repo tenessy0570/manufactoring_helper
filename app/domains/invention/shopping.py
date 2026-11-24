@@ -1,7 +1,8 @@
 from datetime import UTC, datetime
 from decimal import ROUND_CEILING, Decimal
 
-from app.core.freshness import MARKET_FRESHNESS, refresh_deadline
+from app.core.config import DEFAULT_REFRESH, RefreshPolicy
+from app.core.freshness import refresh_deadline
 from app.domains.invention.models import (
     InventionSettings,
     ShoppingMaterial,
@@ -18,9 +19,15 @@ def ceiling(value: Decimal) -> int:
 
 
 class ShoppingService:
-    def __init__(self, repository: InventionRepository, market: ManufacturingRepository) -> None:
+    def __init__(
+        self,
+        repository: InventionRepository,
+        market: ManufacturingRepository,
+        refresh_policy: RefreshPolicy = DEFAULT_REFRESH,
+    ) -> None:
         self._repository = repository
         self._market = market
+        self._refresh = refresh_policy
 
     async def plan(self, type_id: int, units: int, hub: HubId = "jita") -> ShoppingPlan:
         source = await self._repository.plan(InventionSettings(type_id=type_id).plan_key)
@@ -69,7 +76,7 @@ class ShoppingService:
                     total += material.quantity * price
                     assert quote is not None
                     result.stale = result.stale or refresh_deadline(
-                        quote.synced_at, MARKET_FRESHNESS
+                        quote.synced_at, self._refresh.market
                     ) <= datetime.now(UTC)
             if not option.missing_prices:
                 option.estimated_cost = total

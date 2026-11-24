@@ -25,6 +25,7 @@ logger = logging.getLogger(__name__)
 async def startup(ctx: dict[str, Any]) -> None:
     settings = get_settings()
     ctx["container"] = create_container(settings)
+    ctx["refresh_retry_seconds"] = settings.refresh_retry_seconds
     ctx["catalog_max_age"] = timedelta(hours=settings.catalog_max_age_hours)
 
 

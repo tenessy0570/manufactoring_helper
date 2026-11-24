@@ -5,7 +5,7 @@ from datetime import UTC, datetime
 from sqlalchemy import ColumnElement, delete, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.freshness import MARKET_FRESHNESS
+from app.core.config import DEFAULT_REFRESH, RefreshPolicy
 from app.domains.market.models import HubId, MarketPrice, MarketState, PriceQuery
 from app.domains.market.tables import MarketPriceTable, MarketStateTable
 
@@ -25,8 +25,11 @@ class MarketRepository(ABC):
 
 
 class SQLMarketRepository(MarketRepository):
-    def __init__(self, session: AsyncSession) -> None:
+    def __init__(
+        self, session: AsyncSession, refresh_policy: RefreshPolicy = DEFAULT_REFRESH
+    ) -> None:
         self._session = session
+        self._refresh = refresh_policy
 
     async def state(self, hub_id: HubId) -> MarketState | None:
         row = await self._session.get(MarketStateTable, hub_id)
@@ -87,7 +90,7 @@ class SQLMarketRepository(MarketRepository):
             if present is not None:
                 conditions.append(column.is_not(None) if present else column.is_(None))
         if query.fresh_only:
-            conditions.append(table.synced_at > now - MARKET_FRESHNESS)
+            conditions.append(table.synced_at > now - self._refresh.market)
         return conditions
 
     async def find(self, query: PriceQuery, now: datetime) -> list[MarketPrice]:

@@ -6,6 +6,7 @@ from datetime import UTC, datetime, timedelta
 from pydantic import JsonValue
 
 from app.core.cache import CacheService
+from app.core.config import DEFAULT_REFRESH, RefreshPolicy
 from app.core.repository import UnitOfWork
 from app.domains.invention.calculation import price_plans
 from app.domains.invention.gateway import InventionGateway
@@ -80,11 +81,13 @@ class InventionSyncService:
         gateway: InventionGateway,
         manufacturing: ManufacturingRepository,
         unit_of_work: UnitOfWork,
-        plan_ttl_seconds: int = 604800,
+        plan_ttl_seconds: int = DEFAULT_REFRESH.invention_plan_seconds,
         clock: Callable[[], datetime] = lambda: datetime.now(UTC),
+        refresh_policy: RefreshPolicy = DEFAULT_REFRESH,
     ) -> None:
         self._repository, self._gateway, self._manufacturing = repository, gateway, manufacturing
         self._uow, self._ttl, self._clock = unit_of_work, plan_ttl_seconds, clock
+        self._refresh = refresh_policy
 
     async def sync(self, settings: InventionSettings) -> InventionRequest:
         now = self._clock()
@@ -117,7 +120,7 @@ class InventionSyncService:
         quotes = await self._manufacturing.quotes(settings.hub_id, material_ids)
         result = price_plans(plan.plans, quotes, settings)
         now = self._clock()
-        expires_at = now + timedelta(days=1)
+        expires_at = now + timedelta(seconds=self._refresh.invention_price_seconds)
         status = (
             "ready"
             if result.best is not None
@@ -126,7 +129,7 @@ class InventionSyncService:
             else "unsupported"
         )
         if status == "missing_prices":
-            expires_at = now + timedelta(minutes=5)
+            expires_at = now + timedelta(seconds=self._refresh.retry_seconds)
         request = InventionRequest(
             key=settings.key,
             settings=settings,
@@ -150,6 +153,6 @@ class InventionSyncService:
             key=settings.key, settings=settings, updated_at=now, expires_at=now
         )
         request.status, request.error_type = "error", error_type
-        request.expires_at = now + timedelta(minutes=5)
+        request.expires_at = now + timedelta(seconds=self._refresh.retry_seconds)
         await self._repository.save_request(request)
         await self._uow.commit()

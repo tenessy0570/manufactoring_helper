@@ -9,6 +9,7 @@ from dishka import Provider, Scope, make_async_container
 from pydantic import ValidationError
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
 
+from app.application.profile_calculation import ProfileCalculationService
 from app.core.orm import Base
 from app.core.repository import SQLAlchemyUnitOfWork, UnitOfWork
 from app.domains.manufacturing.models import ManufacturingQuery, OpportunityPage
@@ -17,7 +18,6 @@ from app.domains.profiles.models import Profile, ProfileCreate, ProfileSettings,
 from app.domains.profiles.repository import ProfileRepository, SQLProfileRepository
 from app.domains.profiles.service import (
     LastProfileError,
-    ProfileCalculationService,
     ProfileNotFoundError,
     ProfileService,
 )
@@ -300,3 +300,22 @@ def test_legacy_profile_skills_are_ignored_without_losing_other_settings() -> No
     assert "invention_encryption_level" not in profile.model_dump()
     with pytest.raises(ValidationError):
         ProfileSettings.model_validate({"unknown_setting": 1})
+
+
+def test_persisted_settings_keep_the_shared_calculation_contract() -> None:
+    assert not issubclass(ProfileSettings, ManufacturingQuery)
+    settings = ProfileSettings.model_validate(
+        {
+            "hub_id": "amarr",
+            "broker_fee": "2.1",
+            "production_lines": "",
+            "invention_slots": None,
+            "include_copying_time": True,
+            "invention_science_level": 2,
+            "invention_encryption_level": 2,
+        }
+    )
+    query = ManufacturingQuery.model_validate(settings.model_dump())
+    assert settings.model_dump() == query.model_dump()
+    assert query.buy_broker_fee == query.sell_broker_fee == Decimal("2.1")
+    assert query.production_lines == query.invention_slots == 1

@@ -4,6 +4,7 @@ from uuid import UUID
 from dishka.integrations.fastapi import DishkaRoute, FromDishka
 from fastapi import APIRouter, HTTPException, Query, Response
 
+from app.application.profile_calculation import ProfileCalculationService
 from app.domains.manufacturing.models import OpportunityPage
 from app.domains.profiles.models import (
     Profile,
@@ -14,7 +15,6 @@ from app.domains.profiles.models import (
 )
 from app.domains.profiles.service import (
     LastProfileError,
-    ProfileCalculationService,
     ProfileNotFoundError,
     ProfileService,
 )

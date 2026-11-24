@@ -6,6 +6,7 @@ from email.utils import parsedate_to_datetime
 
 from pydantic import TypeAdapter
 
+from app.core.config import DEFAULT_REFRESH
 from app.domains.history.models import HistoryDay, HistoryDownload
 from app.infrastructure.esi import EsiClient
 from app.infrastructure.http import HttpStatusError
@@ -20,7 +21,7 @@ class EsiHistoryGateway(HistoryGateway):
     def __init__(
         self,
         esi: EsiClient,
-        ttl_seconds: int = 86400,
+        ttl_seconds: int = DEFAULT_REFRESH.history_seconds,
         clock: Callable[[], datetime] = lambda: datetime.now(UTC),
     ) -> None:
         self._esi, self._ttl, self._clock = esi, ttl_seconds, clock

@@ -1,13 +1,17 @@
 from datetime import datetime
 from decimal import Decimal
 
-from app.core.freshness import MARKET_FRESHNESS, refresh_deadline
+from app.core.config import DEFAULT_REFRESH, RefreshPolicy
+from app.core.freshness import refresh_deadline
 from app.domains.market.models import BuyPriceLevel
 from app.domains.trading.models import TradeInput, TradeOpportunity, TradingQuery
 
 
 def calculate_trade(
-    data: TradeInput, query: TradingQuery, now: datetime
+    data: TradeInput,
+    query: TradingQuery,
+    now: datetime,
+    refresh_policy: RefreshPolicy = DEFAULT_REFRESH,
 ) -> TradeOpportunity | None:
     source, destination = data.source, data.destination
     if source.hub_id == destination.hub_id:
@@ -35,7 +39,7 @@ def calculate_trade(
     ):
         return None
     stale = any(
-        refresh_deadline(q.synced_at, MARKET_FRESHNESS) <= now for q in (source, destination)
+        refresh_deadline(q.synced_at, refresh_policy.market) <= now for q in (source, destination)
     )
     if query.fresh_only and stale:
         return None

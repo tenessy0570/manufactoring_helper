@@ -6,6 +6,7 @@ from unittest.mock import AsyncMock
 import pytest
 from dishka import Provider, Scope, make_async_container
 
+from app.application.profile_calculation import ProfileCalculationService
 from app.core.di import create_container
 from app.domains.catalog.gateway import CatalogGateway, EsiEverefCatalogGateway
 from app.domains.catalog.models import CatalogSyncReport
@@ -26,7 +27,7 @@ from app.domains.market.models import MarketSyncReport
 from app.domains.market.repository import MarketRepository, SQLMarketRepository
 from app.domains.market.service import MarketService, MarketSyncService
 from app.domains.profiles.repository import ProfileRepository, SQLProfileRepository
-from app.domains.profiles.service import ProfileCalculationService, ProfileService
+from app.domains.profiles.service import ProfileService
 from app.infrastructure.esi import EsiClient
 from app.workers import settings as worker
 from tests.helpers import make_settings

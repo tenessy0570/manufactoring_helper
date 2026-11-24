@@ -1,0 +1,64 @@
+<section class="market-panel production-editor" x-show="creating" x-cloak>
+  <h2>Create production</h2>
+  <form @submit.prevent="create()">
+    <fieldset :disabled="busy">
+      <div class="filter-grid">
+        <div class="blueprint-picker" @click.outside="suggestionsOpen=false">
+          <label for="production-search">Blueprint or product</label><input
+            id="production-search"
+            x-model="searchText"
+            @input="invalidate()"
+            @input.debounce.300ms="search()"
+            @keydown="searchKey($event)"
+            @focus="suggestionsOpen=true"
+            type="search"
+            required
+            autocomplete="off"
+            role="combobox"
+            aria-controls="production-suggestions"
+            aria-autocomplete="list"
+            :aria-expanded="suggestionsOpen&&matches.length>0"
+            :aria-activedescendant="suggestionsOpen&&activeMatch>=0?'production-option-'+activeMatch:null"
+            placeholder="Start typing a name..."
+          >
+          <div
+            class="blueprint-suggestions"
+            id="production-suggestions"
+            role="listbox"
+            x-show="suggestionsOpen&&matches.length"
+          >
+            <template x-for="(item,index) in matches" :key="item.type_id">
+              <div
+                role="option"
+                :id="'production-option-'+index"
+                :aria-selected="activeMatch===index"
+                :class="{'blueprint-highlight':activeMatch===index}"
+                @mousedown.prevent
+                @click="choose(item)"
+              >
+                <img
+                  :src="'https://images.evetech.net/types/'+item.type_id+'/icon?size=32'"
+                  alt=""
+                  @error="$el.style.visibility='hidden'"
+                >
+                <span x-text="item.name"></span>
+              </div>
+            </template>
+          </div>
+        </div>
+        <label>
+          Planned finished units (optional)<input
+            type="number"
+            min="1"
+            max="1000000000"
+            step="1"
+            x-model="details.units"
+          ></label><label>Comment (optional)<input x-model="details.comment" maxlength="2000">
+          </label>
+        </div>
+        <div class="production-actions">
+          <button class="button primary" :disabled="busy">Create empty production</button><button type="button" class="text-button" @click="creating=false">Cancel</button>
+        </div>
+      </fieldset>
+    </form>
+  </section>

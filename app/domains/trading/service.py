@@ -2,7 +2,8 @@ from collections.abc import Callable
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 
-from app.core.freshness import HISTORY_FRESHNESS, refresh_deadline
+from app.core.config import DEFAULT_REFRESH, RefreshPolicy
+from app.core.freshness import refresh_deadline
 from app.core.repository import UnitOfWork
 from app.domains.catalog.names import ItemNameService, ItemNamesUnavailableError
 from app.domains.market.models import get_hub
@@ -20,8 +21,10 @@ class TradingService:
         names: ItemNameService | None = None,
         clock: Callable[[], datetime] = lambda: datetime.now(UTC),
         routes: TradingRoutes | None = None,
+        refresh_policy: RefreshPolicy = DEFAULT_REFRESH,
     ) -> None:
         self._routes = routes
+        self._refresh = refresh_policy
         self._repository, self._names, self._clock = repository, names, clock
 
     async def opportunities(self, query: TradingQuery) -> TradingPage:
@@ -38,7 +41,7 @@ class TradingService:
                 value.name is None or query.search.casefold() not in value.name.casefold()
             ):
                 continue
-            result = calculate_trade(value, query, now)
+            result = calculate_trade(value, query, now, self._refresh)
             if result is not None:
                 items.append(result)
         turnover = await self._repository.turnover(
@@ -93,7 +96,7 @@ class TradingService:
                 item.history_updated_at = record.updated_at
                 if turnover_minimum is not None and record.daily_isk_volume < turnover_minimum:
                     continue
-                if refresh_deadline(record.updated_at, HISTORY_FRESHNESS) <= now:
+                if refresh_deadline(record.updated_at, self._refresh.history) <= now:
                     item.stale = True
                     if query.fresh_only:
                         continue
@@ -151,7 +154,9 @@ class TradingMetadataService:
         gateway: TradingGateway,
         unit_of_work: UnitOfWork,
         clock: Callable[[], datetime] = lambda: datetime.now(UTC),
+        refresh_policy: RefreshPolicy = DEFAULT_REFRESH,
     ) -> None:
+        self._refresh = refresh_policy
         self._repository, self._gateway, self._uow, self._clock = (
             repository,
             gateway,
@@ -173,7 +178,7 @@ class TradingMetadataService:
             if details.packaged_volume is not None
             else details.volume,
             updated_at=now,
-            expires_at=now + timedelta(days=7),
+            expires_at=now + timedelta(seconds=self._refresh.metadata_seconds),
         )
         try:
             await self._repository.save_metadata(metadata)

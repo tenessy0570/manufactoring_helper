@@ -6,9 +6,10 @@ from fastapi import APIRouter, Request
 from fastapi.responses import HTMLResponse, Response
 from fastapi.templating import Jinja2Templates
 
+from app.core.config import DEFAULT_REFRESH
 from app.domains.health.models import HealthStatus
 from app.domains.health.service import HealthService
-from app.web.config import BROWSER_CONFIG
+from app.web.config import browser_settings
 
 WEB_ROOT = Path(__file__).resolve().parent
 templates = Jinja2Templates(directory=str(WEB_ROOT / "templates"))
@@ -80,9 +81,13 @@ async def interhub_trading(request: Request) -> HTMLResponse:
 
 
 @router.get("/ui/config.js")
-async def browser_config() -> Response:
+async def browser_config(request: Request) -> Response:
     # Explicit public allowlist; never serialize Settings into a browser response.
     return Response(
-        "window.eveConfig = Object.freeze(" + json.dumps(BROWSER_CONFIG) + ");",
+        "window.eveConfig = Object.freeze("
+        + json.dumps(
+            browser_settings(getattr(request.app.state, "refresh_policy", DEFAULT_REFRESH))
+        )
+        + ");",
         media_type="application/javascript",
     )

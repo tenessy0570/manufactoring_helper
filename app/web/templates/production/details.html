@@ -1,0 +1,116 @@
+<template x-if="selected">
+  <section class="market-panel production-editor">
+    <div class="shopping-heading">
+      <div class="material-name">
+        <img
+          :src="'https://images.evetech.net/types/'+selected.type_id+'/icon?size=64'"
+          alt=""
+          @error="$el.style.visibility='hidden'"
+        >
+        <h2 x-text="selected.name"></h2>
+      </div>
+      <div class="production-header-actions">
+        <button
+          type="button"
+          class="button production-delete"
+          @click="removeProduction()"
+          :disabled="busy"
+        >
+          Delete production
+        </button><button
+          type="button"
+          class="button secondary"
+          @click="selected=null"
+          :disabled="busy"
+        >
+          Close
+        </button>
+      </div>
+    </div>
+    <details class="production-details">
+      <summary>Batch details <span
+        class="muted"
+        x-text="(selected.units??'Not set')+' units | '+(selected.status==='completed'?'Completed':'In progress')"
+      ></span></summary>
+      <form @submit.prevent="saveDetails()">
+        <fieldset :disabled="busy">
+          <div class="filter-grid">
+            <label>
+              Planned finished units<input
+                type="number"
+                min="1"
+                max="1000000000"
+                step="1"
+                x-model="details.units"
+                placeholder="Not set"
+              ></label><label>Status<select x-model="details.status">
+              <option value="in_progress">In progress</option>
+              <option value="completed">Completed</option>
+              </select></label><label>Comment<input x-model="details.comment" maxlength="2000">
+              </label>
+            </div>
+            <div class="production-actions">
+              <button class="button secondary" :disabled="busy">Save details</button>
+            </div>
+          </fieldset>
+        </form>
+      </details>
+      <div class="shopping-stats production-totals">
+        <div class="expense-card"><span>Total expenses</span><strong x-text="money(selected.totals.cost)+' ISK'"></strong></div>
+        <div class="income-card"><span>Received from sales</span><strong x-text="money(selected.totals.income)+' ISK'"></strong></div>
+        <div
+          :class="Number(selected.totals.balance)<0?'expense-card':'income-card'"
+        >
+          <span>Cash balance</span><strong
+            :class="{'production-loss':Number(selected.totals.balance)<0}"
+            x-text="money(selected.totals.balance)+' ISK'"
+          ></strong>
+        </div>
+        <div><span>Return on recorded costs</span><strong
+          x-text="selected.totals.margin===null?'—':Number(selected.totals.margin).toFixed(1)+'%'"
+        ></strong></div>
+      </div>
+      {% include "production/entry_form.html" %}
+      <h3>Transaction history</h3>
+      <p class="muted" x-show="!selected.entries.length">No expenses or income recorded yet.</p>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>Date</th>
+              <th>Type</th>
+              <th>Amount (ISK)</th>
+              <th>Note</th>
+              <th>Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+            <template x-for="item in selected.entries" :key="item.id">
+              <tr>
+                <td x-text="new Date(item.created_at).toLocaleString()"></td>
+                <td>
+                  <span
+                    class="production-kind"
+                    :class="item.kind==='income'?'income-tone':'expense-tone'"
+                    x-text="label(item.kind)"
+                  ></span>
+                </td>
+                <td
+                  :class="item.kind==='income'?'income-tone':'expense-tone'"
+                  x-text="(item.kind==='income'?'+':'-')+money(item.amount)"
+                ></td>
+                <td class="production-comment" x-text="item.comment"></td>
+                <td>
+                  <button class="text-button" @click="editEntry(item)" :disabled="busy">
+                    Edit
+                  </button><button class="text-button" @click="removeEntry(item)" :disabled="busy">
+                    Delete
+                  </button>
+                </td>
+              </tr>
+            </template>
+          </tbody>
+        </table>
+      </div>
+    </section>
+  </template>

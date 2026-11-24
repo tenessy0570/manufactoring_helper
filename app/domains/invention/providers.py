@@ -5,7 +5,7 @@ from dishka import Provider, Scope, provide
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.cache import CacheService
-from app.core.config import Settings
+from app.core.config import RefreshPolicy, Settings
 from app.core.repository import UnitOfWork
 from app.domains.invention.gateway import EverefInventionGateway, InventionGateway
 from app.domains.invention.queue import InventionQueue, RedisInventionQueue
@@ -57,13 +57,22 @@ class InventionProvider(Provider):
         manufacturing: ManufacturingRepository,
         unit_of_work: UnitOfWork,
         settings: Settings,
+        refresh_policy: RefreshPolicy,
     ) -> InventionSyncService:
         return InventionSyncService(
-            repository, gateway, manufacturing, unit_of_work, settings.invention_plan_ttl_seconds
+            repository,
+            gateway,
+            manufacturing,
+            unit_of_work,
+            settings.invention_plan_ttl_seconds,
+            refresh_policy=refresh_policy,
         )
 
     @provide(scope=Scope.REQUEST)
     def shopping_service(
-        self, repository: InventionRepository, market: ManufacturingRepository
+        self,
+        repository: InventionRepository,
+        market: ManufacturingRepository,
+        refresh_policy: RefreshPolicy,
     ) -> ShoppingService:
-        return ShoppingService(repository, market)
+        return ShoppingService(repository, market, refresh_policy)

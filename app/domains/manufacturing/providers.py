@@ -4,7 +4,7 @@ import httpx
 from dishka import Provider, Scope, provide
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.config import Settings
+from app.core.config import RefreshPolicy, Settings
 from app.core.repository import UnitOfWork
 from app.domains.history.repository import HistoryRepository
 from app.domains.invention.repository import InventionRepository
@@ -41,8 +41,11 @@ class ManufacturingProvider(Provider):
         history: HistoryRepository,
         invention: InventionRepository,
         sync: ManufacturingSyncService,
+        refresh_policy: RefreshPolicy,
     ) -> ManufacturingService:
-        return ManufacturingService(repository, history, invention=invention, sync=sync)
+        return ManufacturingService(
+            repository, history, invention=invention, sync=sync, refresh_policy=refresh_policy
+        )
 
     @provide(scope=Scope.REQUEST)
     def sync_service(

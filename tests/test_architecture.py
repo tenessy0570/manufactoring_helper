@@ -33,3 +33,9 @@ def test_manufacturing_storage_does_not_import_market_tables() -> None:
     assert "app.domains.market.tables" not in imports(
         Path("app/domains/manufacturing/repository.py")
     )
+
+
+def test_profile_storage_and_service_do_not_depend_on_manufacturing() -> None:
+    for name in ("models", "repository", "service"):
+        for module in imports(Path("app/domains/profiles") / (name + ".py")):
+            assert not module.startswith("app.domains.manufacturing")

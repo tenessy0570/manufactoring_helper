@@ -2,7 +2,7 @@ from dishka import Provider, Scope, provide
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.cache import Cache, CacheService
-from app.core.config import Settings
+from app.core.config import RefreshPolicy, Settings
 from app.core.repository import UnitOfWork
 from app.domains.catalog.names import ItemNameService
 from app.domains.trading.cargo import CargoService
@@ -33,12 +33,22 @@ class TradingProvider(Provider):
 
     @provide(scope=Scope.REQUEST)
     def service(
-        self, repository: TradingRepository, names: ItemNameService, routes: TradingRoutes
+        self,
+        repository: TradingRepository,
+        names: ItemNameService,
+        routes: TradingRoutes,
+        refresh_policy: RefreshPolicy,
     ) -> TradingService:
-        return TradingService(repository, names, routes=routes)
+        return TradingService(repository, names, routes=routes, refresh_policy=refresh_policy)
 
     @provide(scope=Scope.REQUEST)
     def metadata(
-        self, repository: TradingRepository, gateway: TradingGateway, unit_of_work: UnitOfWork
+        self,
+        repository: TradingRepository,
+        gateway: TradingGateway,
+        unit_of_work: UnitOfWork,
+        refresh_policy: RefreshPolicy,
     ) -> TradingMetadataService:
-        return TradingMetadataService(repository, gateway, unit_of_work)
+        return TradingMetadataService(
+            repository, gateway, unit_of_work, refresh_policy=refresh_policy
+        )
