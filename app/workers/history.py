@@ -29,13 +29,13 @@ async def enqueue_history(ctx: dict[str, Any]) -> int:
     async with container() as scope:
         repository = await scope.get(ItemTypeRepository)
         catalogue_ids = {item.type_id for item in await repository.find(ItemTypeClause())}
-        market_ids = await (await scope.get(TradingRepository)).market_type_ids()
+        market_ids = await (await scope.get(TradingRepository)).get_market_type_ids()
         ids = sorted(catalogue_ids | set(market_ids))
     count = 0
     now = datetime.now(UTC)
     for region_id in dict.fromkeys(hub.region_id for hub in HUBS):
         async with container() as scope:
-            due = await (await scope.get(HistoryRepository)).due(region_id, ids, now)
+            due = await (await scope.get(HistoryRepository)).find_due_type_ids(region_id, ids, now)
         for start in range(0, len(ids), BATCH_SIZE):
             group = ids[start : start + BATCH_SIZE]
             batch = [type_id for type_id in group if type_id in due]

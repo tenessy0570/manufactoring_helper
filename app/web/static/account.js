@@ -14,7 +14,7 @@ document.addEventListener('alpine:init', () => Alpine.data('accountApp', () => (
   superuser: false,
   editing: null,
   resetPassword: '',
-  async api(path, options = {}) {
+  async requestApi(path, options = {}) {
     const response = await fetch('/api/v1/accounts' + path, {
       credentials: 'same-origin',
       ...options,
@@ -35,7 +35,7 @@ document.addEventListener('alpine:init', () => Alpine.data('accountApp', () => (
   async init() {
     if (this.mode === 'login') return;
     try {
-      this.user = await this.api('/me');
+      this.user = await this.requestApi('/me');
       if (this.mode === 'admin') await this.loadUsers();
     } catch (e) {
       this.error = e.message;
@@ -45,7 +45,7 @@ document.addEventListener('alpine:init', () => Alpine.data('accountApp', () => (
     this.error = '';
     this.busy = true;
     try {
-      await this.api('/login', {
+      await this.requestApi('/login', {
         method: 'POST',
         body: JSON.stringify({
           username: this.username,
@@ -64,7 +64,7 @@ document.addEventListener('alpine:init', () => Alpine.data('accountApp', () => (
   async logout() {
     this.error = '';
     try {
-      await this.api('/logout', {
+      await this.requestApi('/logout', {
         method: 'POST'
       });
       location.assign('/login');
@@ -76,7 +76,7 @@ document.addEventListener('alpine:init', () => Alpine.data('accountApp', () => (
     this.error = '';
     this.busy = true;
     try {
-      await this.api('/password', {
+      await this.requestApi('/password', {
         method: 'POST',
         body: JSON.stringify({
           current_password: this.currentPassword,
@@ -93,13 +93,13 @@ document.addEventListener('alpine:init', () => Alpine.data('accountApp', () => (
     }
   },
   async loadUsers() {
-    this.users = await this.api('/users');
+    this.users = await this.requestApi('/users');
   },
   async createUser() {
     this.error = '';
     this.busy = true;
     try {
-      await this.api('/users', {
+      await this.requestApi('/users', {
         method: 'POST',
         body: JSON.stringify({
           username: this.newUsername,
@@ -122,7 +122,7 @@ document.addEventListener('alpine:init', () => Alpine.data('accountApp', () => (
     if (!confirm((target.is_active ? 'Disable ' : 'Enable ') + target.username + '?')) return;
     this.error = '';
     try {
-      await this.api('/users/' + target.id, {
+      await this.requestApi('/users/' + target.id, {
         method: 'PATCH',
         body: JSON.stringify({
           is_active: !target.is_active
@@ -137,7 +137,7 @@ document.addEventListener('alpine:init', () => Alpine.data('accountApp', () => (
     this.error = '';
     this.busy = true;
     try {
-      await this.api('/users/' + this.editing.id, {
+      await this.requestApi('/users/' + this.editing.id, {
         method: 'PATCH',
         body: JSON.stringify({
           password: this.resetPassword

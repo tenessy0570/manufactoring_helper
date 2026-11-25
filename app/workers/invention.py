@@ -40,8 +40,8 @@ async def schedule_inventions(ctx: dict[str, Any], query: dict[str, Any] | None 
             )
         }
         if query is None:
-            settings.update({value.key: value for value in await repository.active_settings()})
-        previous = await repository.requests(list(settings))
+            settings.update({value.key: value for value in await repository.get_active_settings()})
+        previous = await repository.get_requests(list(settings))
         pending: list[InventionSettings] = []
         for key, value in settings.items():
             existing = previous.get(key)

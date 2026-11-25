@@ -1,4 +1,4 @@
-window.productionPurchases = () => ({
+window.createProductionPurchases = () => ({
   purchaseText: '',
   purchaseNote: '',
   async prepareExpense(kind) {
@@ -23,7 +23,7 @@ window.productionPurchases = () => ({
     await this.action(async () => {
       this.purchaseText = '';
       this.purchaseNote = '';
-      const result = await this.api('/' + this.selected.id + '/purchase-list', 'POST', {
+      const result = await this.requestApi('/' + this.selected.id + '/purchase-list', 'POST', {
         kind,
         ...(kind === 'invention' ? {
           units

@@ -19,6 +19,7 @@ from app.domains.manufacturing.models import (
     RecipeState,
 )
 from app.domains.manufacturing.repository import ManufacturingRepository
+from app.domains.market.enums import OrderSide
 
 
 class ManufacturingSyncService:
@@ -30,12 +31,12 @@ class ManufacturingSyncService:
         ttl_seconds: int = DEFAULT_REFRESH.recipe_seconds,
         clock: Callable[[], datetime] = lambda: datetime.now(UTC),
     ) -> None:
-        self._repository, self._gateway, self._uow = repository, gateway, unit_of_work
-        self._ttl, self._clock = ttl_seconds, clock
+        self._repository, self._gateway, self._unit_of_work = repository, gateway, unit_of_work
+        self._cache_ttl_seconds, self._clock = ttl_seconds, clock
 
     async def sync_if_stale(self, type_id: int) -> bool:
         now = self._clock()
-        previous = (await self._repository.recipes([type_id])).get(type_id)
+        previous = (await self._repository.get_recipes([type_id])).get(type_id)
         if (
             previous is not None
             and previous.expires_at > now
@@ -48,13 +49,13 @@ class ManufacturingSyncService:
             type_id=type_id,
             recipe=recipe,
             synced_at=now,
-            expires_at=now + timedelta(seconds=self._ttl),
+            expires_at=now + timedelta(seconds=self._cache_ttl_seconds),
         )
         try:
             await self._repository.save(state)
-            await self._uow.commit()
+            await self._unit_of_work.commit()
         except BaseException:
-            await self._uow.rollback()
+            await self._unit_of_work.rollback()
             raise
         return True
 
@@ -72,12 +73,14 @@ class ManufacturingService:
         self._repository, self._history, self._clock = repository, history, clock
         self._invention = invention
         self._sync = sync
-        self._refresh = refresh_policy
+        self._refresh_policy = refresh_policy
 
-    async def calculator(self, type_id: int, query: CalculatorQuery) -> CalculatorPage:
+    async def get_calculator_page(
+        self, type_id: int, calculator_query: CalculatorQuery
+    ) -> CalculatorPage:
         if self._sync is not None:
             await self._sync.sync_if_stale(type_id)
-        settings = {
+        query_field_names = {
             "hub_id",
             "material_hub_id",
             "material_order_type",
@@ -95,106 +98,122 @@ class ManufacturingService:
             "days",
         }
         calculation_query = ManufacturingQuery(
-            **query.model_dump(include=settings), type_ids=[type_id], limit=1
+            **calculator_query.model_dump(include=query_field_names), type_ids=[type_id], limit=1
         )
-        page = await self.opportunities(calculation_query, restrict_to_mass_production=False)
-        result = CalculatorPage(**page.model_dump())
-        if not page.items:
-            return result
-        item = page.items[0]
-        runs = query.manufacturing_runs
-        units = item.units * runs
-        covered_units = units
-        gross: Decimal | None = item.revenue_per_unit * units
-        if query.product_order_type == "buy":
-            products = await self._repository.quotes(query.hub_id, [type_id])
-            demand = estimate_buy_demand(products[type_id], item, calculation_query, units)
+        opportunities_page = await self.get_opportunities(
+            calculation_query, restrict_to_mass_production=False
+        )
+        calculator_page = CalculatorPage(**opportunities_page.model_dump())
+        if not opportunities_page.items:
+            return calculator_page
+        opportunity = opportunities_page.items[0]
+        manufacturing_runs = calculator_query.manufacturing_runs
+        finished_units = opportunity.units * manufacturing_runs
+        covered_units = finished_units
+        gross_revenue: Decimal | None = opportunity.revenue_per_unit * finished_units
+        if calculator_query.product_order_type == OrderSide.BUY.value:
+            products = await self._repository.get_quotes(calculator_query.hub_id, [type_id])
+            demand = estimate_buy_demand(
+                products[type_id], opportunity, calculation_query, finished_units
+            )
             covered_units = demand.units
-            gross = demand.revenue if covered_units == units else None
-        sales_tax = gross * query.sales_tax / 100 if gross is not None else None
-        sales_broker = (
-            gross * query.sell_broker_fee / 100
-            if gross is not None and query.product_order_type == "sell"
+            gross_revenue = demand.revenue if covered_units == finished_units else None
+        sales_tax = (
+            gross_revenue * calculator_query.sales_tax / 100 if gross_revenue is not None else None
+        )
+        sales_broker_fee = (
+            gross_revenue * calculator_query.sell_broker_fee / 100
+            if gross_revenue is not None
+            and calculator_query.product_order_type == OrderSide.SELL.value
             else Decimal(0)
-            if gross is not None
+            if gross_revenue is not None
             else None
         )
-        net = (
-            gross - sales_tax - sales_broker
-            if gross is not None and sales_tax is not None and sales_broker is not None
+        net_revenue = (
+            gross_revenue - sales_tax - sales_broker_fee
+            if gross_revenue is not None and sales_tax is not None and sales_broker_fee is not None
             else None
         )
-        total = item.total_cost_per_unit * units
-        profit = net - total if net is not None else None
-        material_cost = item.material_cost_per_unit * units
-        result.batch = BatchCalculation(
-            runs=runs,
-            units=units,
+        total_cost = opportunity.total_cost_per_unit * finished_units
+        net_profit = net_revenue - total_cost if net_revenue is not None else None
+        material_cost = opportunity.material_cost_per_unit * finished_units
+        calculator_page.batch = BatchCalculation(
+            runs=manufacturing_runs,
+            units=finished_units,
             materials=[
-                m.model_copy(update={"quantity": m.quantity * runs, "cost": m.cost * runs})
-                for m in item.materials
+                material.model_copy(
+                    update={
+                        "quantity": material.quantity * manufacturing_runs,
+                        "cost": material.cost * manufacturing_runs,
+                    }
+                )
+                for material in opportunity.materials
             ],
             material_cost=material_cost,
-            base_job_cost=item.base_job_cost_per_unit * units,
-            facility_tax=item.facility_tax_per_unit * units,
-            system_cost=item.system_cost_per_unit * units,
-            job_cost=item.job_cost_per_unit * units,
-            invention_cost=item.invention_cost_per_unit * units,
-            procurement_broker_fee=item.procurement_broker_fee_per_unit * units,
-            total_cost=total,
-            gross_revenue=gross,
+            base_job_cost=opportunity.base_job_cost_per_unit * finished_units,
+            facility_tax=opportunity.facility_tax_per_unit * finished_units,
+            system_cost=opportunity.system_cost_per_unit * finished_units,
+            job_cost=opportunity.job_cost_per_unit * finished_units,
+            invention_cost=opportunity.invention_cost_per_unit * finished_units,
+            procurement_broker_fee=opportunity.procurement_broker_fee_per_unit * finished_units,
+            total_cost=total_cost,
+            gross_revenue=gross_revenue,
             sales_tax=sales_tax,
-            sales_broker_fee=sales_broker,
-            net_revenue=net,
-            profit=profit,
-            margin_pct=profit / material_cost * 100
-            if profit is not None and material_cost
+            sales_broker_fee=sales_broker_fee,
+            net_revenue=net_revenue,
+            profit=net_profit,
+            margin_pct=net_profit / material_cost * 100
+            if net_profit is not None and material_cost
             else None,
             covered_units=covered_units,
         )
-        return result
+        return calculator_page
 
-    async def opportunities(
-        self, query: ManufacturingQuery, *, restrict_to_mass_production: bool = True
+    async def get_opportunities(
+        self, opportunity_query: ManufacturingQuery, *, restrict_to_mass_production: bool = True
     ) -> OpportunityPage:
         now = self._clock()
-        inputs = await OpportunityDataLoader(self._repository, self._history, self._invention).load(
-            query, now, restrict_to_mass_production
+        opportunity_inputs = await OpportunityDataLoader(
+            self._repository, self._history, self._invention
+        ).load(opportunity_query, now, restrict_to_mass_production)
+        evaluation_result = evaluate_opportunities(
+            opportunity_inputs, opportunity_query, now, self._refresh_policy
         )
-        evaluation = evaluate_opportunities(inputs, query, now, self._refresh)
-        results = evaluation.items
-        field = {
+        opportunities = evaluation_result.items
+        ranking_field = {
             "profit_per_day": "rank_profit_per_day",
             "margin": "margin_pct",
             "profit": "profit_per_unit",
             "demand_profit": "profit_at_current_buy_price",
-        }[query.rank_by]
-        results.sort(
-            key=lambda result: (
-                getattr(result, field) is None,
-                -(getattr(result, field) or Decimal(0)),
-                result.type_id,
+        }[opportunity_query.rank_by]
+        opportunities.sort(
+            key=lambda opportunity: (
+                getattr(opportunity, ranking_field) is None,
+                -(getattr(opportunity, ranking_field) or Decimal(0)),
+                opportunity.type_id,
             )
         )
         return OpportunityPage(
-            hub_id=query.hub_id,
-            material_hub_id=query.material_hub_id or query.hub_id,
-            material_order_type=query.material_order_type,
-            product_order_type=query.product_order_type,
-            sales_tax=query.sales_tax,
-            broker_fee=query.broker_fee,
-            buy_broker_fee=query.buy_broker_fee,
-            sell_broker_fee=query.sell_broker_fee,
-            facility_tax=query.facility_tax,
-            system_cost_index=query.system_cost_index,
-            items=results[query.offset : query.offset + query.limit],
-            total=len(results),
-            missing_recipes=evaluation.missing_recipes,
-            non_manufacturable=evaluation.non_manufacturable,
-            missing_prices=evaluation.missing_prices,
-            missing_job_costs=evaluation.missing_job_costs,
-            missing_invention=evaluation.missing_invention,
-            invention_unavailable=evaluation.invention_unavailable,
-            limit=query.limit,
-            offset=query.offset,
+            hub_id=opportunity_query.hub_id,
+            material_hub_id=opportunity_query.material_hub_id or opportunity_query.hub_id,
+            material_order_type=opportunity_query.material_order_type,
+            product_order_type=opportunity_query.product_order_type,
+            sales_tax=opportunity_query.sales_tax,
+            broker_fee=opportunity_query.broker_fee,
+            buy_broker_fee=opportunity_query.buy_broker_fee,
+            sell_broker_fee=opportunity_query.sell_broker_fee,
+            facility_tax=opportunity_query.facility_tax,
+            system_cost_index=opportunity_query.system_cost_index,
+            items=opportunities[
+                opportunity_query.offset : opportunity_query.offset + opportunity_query.limit
+            ],
+            total=len(opportunities),
+            missing_recipes=evaluation_result.missing_recipes,
+            non_manufacturable=evaluation_result.non_manufacturable,
+            missing_prices=evaluation_result.missing_prices,
+            missing_job_costs=evaluation_result.missing_job_costs,
+            missing_invention=evaluation_result.missing_invention,
+            invention_unavailable=evaluation_result.invention_unavailable,
+            limit=opportunity_query.limit,
+            offset=opportunity_query.offset,
         )

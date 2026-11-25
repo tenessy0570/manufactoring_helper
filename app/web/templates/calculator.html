@@ -299,19 +299,19 @@
                     Invention cost is not included.
                   </p>
                   <div class="calc-totals">
-                    <div><span>Total cost</span><strong x-text="fullMoney(page.batch.total_cost)+' ISK'"></strong></div>
+                    <div><span>Total cost</span><strong x-text="formatFullMoney(page.batch.total_cost)+' ISK'"></strong></div>
                     <div><span>Net sales</span><strong
-                      x-text="page.batch.net_revenue===null?'Insufficient buy demand':fullMoney(page.batch.net_revenue)+' ISK'"
+                      x-text="page.batch.net_revenue===null?'Insufficient buy demand':formatFullMoney(page.batch.net_revenue)+' ISK'"
                     ></strong></div>
                     <div
                       :class="page.batch.profit===null?'':Number(page.batch.profit)>=0?'calc-positive':'calc-negative'"
                     >
                       <span>Batch profit</span><strong
-                        x-text="page.batch.profit===null?'Unavailable':fullMoney(page.batch.profit)+' ISK'"
+                        x-text="page.batch.profit===null?'Unavailable':formatFullMoney(page.batch.profit)+' ISK'"
                       ></strong>
                     </div>
                     <div><span>Margin</span><strong
-                      x-text="page.batch.margin_pct===null?'Unavailable':percent(page.batch.margin_pct)"
+                      x-text="page.batch.margin_pct===null?'Unavailable':formatPercent(page.batch.margin_pct)"
                     ></strong></div>
                   </div>
                   <p class="muted">Margin = profit / material cost. Sales are estimates, not guaranteed income.</p>
@@ -326,19 +326,19 @@
                   <h2>Manufacturing output</h2>
                   <dl class="calc-breakdown">
                     <dt>Sale price / unit (best order)</dt>
-                    <dd x-text="fullMoney(page.items[0].revenue_per_unit)+' ISK'">
+                    <dd x-text="formatFullMoney(page.items[0].revenue_per_unit)+' ISK'">
                     </dd>
                     <dt>Gross batch sales</dt>
-                    <dd x-text="fullMoney(page.batch.gross_revenue)+' ISK'">
+                    <dd x-text="formatFullMoney(page.batch.gross_revenue)+' ISK'">
                     </dd>
                     <dt>Sales tax</dt>
-                    <dd x-text="fullMoney(page.batch.sales_tax)+' ISK'">
+                    <dd x-text="formatFullMoney(page.batch.sales_tax)+' ISK'">
                     </dd>
                     <dt>Sell broker</dt>
-                    <dd x-text="fullMoney(page.batch.sales_broker_fee)+' ISK'">
+                    <dd x-text="formatFullMoney(page.batch.sales_broker_fee)+' ISK'">
                     </dd>
                     <dt>Net sales</dt>
-                    <dd x-text="fullMoney(page.batch.net_revenue)+' ISK'">
+                    <dd x-text="formatFullMoney(page.batch.net_revenue)+' ISK'">
                     </dd>
                   </dl>
                 </section>
@@ -367,8 +367,8 @@
                               </div>
                             </td>
                             <td x-text="material.quantity.toLocaleString('en-US')"></td>
-                            <td x-text="fullMoney(material.price)"></td>
-                            <td x-text="fullMoney(material.cost)"></td>
+                            <td x-text="formatFullMoney(material.price)"></td>
+                            <td x-text="formatFullMoney(material.cost)"></td>
                           </tr>
                         </template>
                       </tbody>
@@ -389,10 +389,10 @@
                   </button>
                   <dl class="calc-breakdown">
                     <dt>Total materials</dt>
-                    <dd x-text="fullMoney(page.batch.material_cost)+' ISK'">
+                    <dd x-text="formatFullMoney(page.batch.material_cost)+' ISK'">
                     </dd>
                     <dt>Buy broker</dt>
-                    <dd x-text="fullMoney(page.batch.procurement_broker_fee)+' ISK'">
+                    <dd x-text="formatFullMoney(page.batch.procurement_broker_fee)+' ISK'">
                     </dd>
                   </dl>
                 </section>
@@ -400,19 +400,19 @@
                   <h2>Job installation &amp; invention</h2>
                   <dl class="calc-breakdown">
                     <dt>Base / SCC charge</dt>
-                    <dd x-text="fullMoney(page.batch.base_job_cost)+' ISK'">
+                    <dd x-text="formatFullMoney(page.batch.base_job_cost)+' ISK'">
                     </dd>
                     <dt>Facility tax</dt>
-                    <dd x-text="fullMoney(page.batch.facility_tax)+' ISK'">
+                    <dd x-text="formatFullMoney(page.batch.facility_tax)+' ISK'">
                     </dd>
                     <dt>System cost</dt>
-                    <dd x-text="fullMoney(page.batch.system_cost)+' ISK'">
+                    <dd x-text="formatFullMoney(page.batch.system_cost)+' ISK'">
                     </dd>
                     <dt>Total installation</dt>
-                    <dd x-text="fullMoney(page.batch.job_cost)+' ISK'">
+                    <dd x-text="formatFullMoney(page.batch.job_cost)+' ISK'">
                     </dd>
                     <dt>Invention</dt>
-                    <dd x-text="fullMoney(page.batch.invention_cost)+' ISK'">
+                    <dd x-text="formatFullMoney(page.batch.invention_cost)+' ISK'">
                     </dd>
                   </dl>
                   <p class="muted" x-show="page.items[0].invention_included">Cached best-value option: <span x-text="page.items[0].invention_decryptor || 'No decryptor'"></span>.</p>

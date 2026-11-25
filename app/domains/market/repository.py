@@ -12,7 +12,7 @@ from app.domains.market.tables import MarketPriceTable, MarketStateTable
 
 class MarketRepository(ABC):
     @abstractmethod
-    async def state(self, hub_id: HubId) -> MarketState | None: ...
+    async def get_state(self, hub_id: HubId) -> MarketState | None: ...
 
     @abstractmethod
     async def replace(self, state: MarketState, prices: Sequence[MarketPrice]) -> None: ...
@@ -29,9 +29,9 @@ class SQLMarketRepository(MarketRepository):
         self, session: AsyncSession, refresh_policy: RefreshPolicy = DEFAULT_REFRESH
     ) -> None:
         self._session = session
-        self._refresh = refresh_policy
+        self._refresh_policy = refresh_policy
 
-    async def state(self, hub_id: HubId) -> MarketState | None:
+    async def get_state(self, hub_id: HubId) -> MarketState | None:
         row = await self._session.get(MarketStateTable, hub_id)
         if row is None:
             return None
@@ -65,7 +65,7 @@ class SQLMarketRepository(MarketRepository):
         await self._session.merge(MarketStateTable(**state.model_dump()))
         await self._session.flush()
 
-    def _conditions(self, query: PriceQuery, now: datetime) -> list[ColumnElement[bool]]:
+    def _build_conditions(self, query: PriceQuery, now: datetime) -> list[ColumnElement[bool]]:
         table = MarketPriceTable
         conditions: list[ColumnElement[bool]] = [table.hub_id == query.hub_id]
         if query.type_ids is not None:
@@ -90,13 +90,13 @@ class SQLMarketRepository(MarketRepository):
             if present is not None:
                 conditions.append(column.is_not(None) if present else column.is_(None))
         if query.fresh_only:
-            conditions.append(table.synced_at > now - self._refresh.market)
+            conditions.append(table.synced_at > now - self._refresh_policy.market)
         return conditions
 
     async def find(self, query: PriceQuery, now: datetime) -> list[MarketPrice]:
         rows = await self._session.scalars(
             select(MarketPriceTable)
-            .where(*self._conditions(query, now))
+            .where(*self._build_conditions(query, now))
             .order_by(MarketPriceTable.type_id)
             .limit(query.limit)
             .offset(query.offset)
@@ -108,7 +108,7 @@ class SQLMarketRepository(MarketRepository):
             await self._session.scalar(
                 select(func.count())
                 .select_from(MarketPriceTable)
-                .where(*self._conditions(query, now))
+                .where(*self._build_conditions(query, now))
             )
             or 0
         )

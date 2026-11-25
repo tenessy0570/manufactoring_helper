@@ -28,7 +28,7 @@ async def enqueue_manufacturing(ctx: dict[str, Any]) -> int:
     async with container() as scope:
         repository = await scope.get(ItemTypeRepository)
         ids = sorted(item.type_id for item in await repository.find(ItemTypeClause()))
-        recipes = await (await scope.get(ManufacturingRepository)).recipes(ids)
+        recipes = await (await scope.get(ManufacturingRepository)).get_recipes(ids)
     now = datetime.now(UTC)
     due = {
         type_id

@@ -19,7 +19,7 @@ class HealthService:
         self._checks = checks
         self._timeout_seconds = timeout_seconds
 
-    async def readiness(self) -> HealthReport:
+    async def check_readiness(self) -> HealthReport:
         components = await asyncio.gather(*(self._run(check) for check in self._checks))
         failed = any(component.status is HealthStatus.FAIL for component in components)
         return HealthReport(
@@ -42,8 +42,8 @@ class ProgressService:
     def __init__(self, repository: ProgressRepository) -> None:
         self._repository = repository
 
-    async def snapshot(self, hub: HubId) -> DataProgress:
-        return await self._repository.snapshot(hub)
+    async def get_data_progress(self, hub: HubId) -> DataProgress:
+        return await self._repository.get_data_progress(hub)
 
-    async def freshness(self, hub: HubId) -> FreshnessReport:
-        return await self._repository.freshness(hub, datetime.now(UTC))
+    async def get_freshness_report(self, hub: HubId) -> FreshnessReport:
+        return await self._repository.get_freshness_report(hub, datetime.now(UTC))

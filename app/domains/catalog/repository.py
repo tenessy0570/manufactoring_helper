@@ -19,7 +19,7 @@ class ItemTypeRepository(Repository[ItemType, ItemTypeClause]):
     async def deactivate_before(self, synced_at: datetime) -> None: ...
 
     @abstractmethod
-    async def latest_synced_at(self) -> datetime | None: ...
+    async def get_latest_sync_time(self) -> datetime | None: ...
 
 
 class SQLItemTypeRepository(
@@ -31,12 +31,14 @@ class SQLItemTypeRepository(
     async def find(
         self, clause: ItemTypeClause | None = None, page: Page | None = None
     ) -> list[ItemType]:
-        statement = select(self.table).where(*self._conditions(clause)).order_by(self.table.type_id)
+        statement = (
+            select(self.table).where(*self._build_conditions(clause)).order_by(self.table.type_id)
+        )
         if page is not None:
             statement = statement.limit(page.limit).offset(page.offset)
-        return [self._to_entity(row) for row in await self._session.scalars(statement)]
+        return [self._map_to_entity(row) for row in await self._session.scalars(statement)]
 
-    def _conditions(self, clause: ItemTypeClause | None) -> list[ColumnElement[bool]]:
+    def _build_conditions(self, clause: ItemTypeClause | None) -> list[ColumnElement[bool]]:
         clause = clause or ItemTypeClause()
         conditions: list[ColumnElement[bool]] = []
         if clause.search is not None:
@@ -88,7 +90,7 @@ class SQLItemTypeRepository(
             update(self.table).where(self.table.synced_at < synced_at).values(is_active=False)
         )
 
-    async def latest_synced_at(self) -> datetime | None:
+    async def get_latest_sync_time(self) -> datetime | None:
         result = await self._session.scalar(select(func.max(self.table.synced_at)))
         return (
             None

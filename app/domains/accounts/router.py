@@ -31,8 +31,8 @@ async def login(
     return user
 
 
-@router.get("/me")
-async def me(request: Request) -> User:
+@router.get("/me", name="me")
+async def get_current_user(request: Request) -> User:
     return User.model_validate(request.state.user)
 
 
@@ -42,16 +42,16 @@ async def logout(request: Request, response: Response, service: FromDishka[Accou
     response.delete_cookie(COOKIE_NAME, path="/")
 
 
-@router.post("/password", status_code=204)
-async def password(
+@router.post("/password", status_code=204, name="password")
+async def change_password(
     data: PasswordChange, request: Request, response: Response, service: FromDishka[AccountService]
 ) -> None:
     await service.change_password(request.state.user, data)
     response.delete_cookie(COOKIE_NAME, path="/")
 
 
-@router.get("/users")
-async def users(service: FromDishka[AccountService]) -> list[User]:
+@router.get("/users", name="users")
+async def get_users(service: FromDishka[AccountService]) -> list[User]:
     return await service.find()
 
 

@@ -5,6 +5,7 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, Field, model_validator
 
+from app.domains.market.enums import OrderType
 from app.domains.market.models import HubId
 
 
@@ -27,7 +28,7 @@ class LiquidityFilters(BaseModel):
     offset: int = Field(default=0, ge=0)
 
     @model_validator(mode="after")
-    def ranges(self) -> "LiquidityFilters":
+    def validate_ranges(self) -> "LiquidityFilters":
         for low, high in (
             (self.min_daily_units, self.max_daily_units),
             (self.min_daily_isk_volume, self.max_daily_isk_volume),
@@ -73,8 +74,8 @@ class OpportunitySettings(LiquidityFilters):
     invention_slots: int = Field(default=1, ge=1, le=1000)
     production_lines: int = Field(default=1, ge=1, le=1000)
     include_invention_cost: bool = False
-    material_order_type: Literal["buy", "sell"] = "sell"
-    product_order_type: Literal["buy", "sell"] = "sell"
+    material_order_type: OrderType = "sell"
+    product_order_type: OrderType = "sell"
     material_hub_id: HubId | None = None
     sales_tax: Decimal = Field(default=Decimal(0), ge=0, le=100, allow_inf_nan=False)
     broker_fee: Decimal = Field(default=Decimal(0), ge=0, le=100, allow_inf_nan=False)
@@ -96,7 +97,7 @@ class OpportunitySettings(LiquidityFilters):
     rank_by: Literal["profit_per_day", "margin", "profit", "demand_profit"] = "profit_per_day"
 
     @model_validator(mode="after")
-    def profit_ranges(self) -> "OpportunitySettings":
+    def validate_profit_ranges(self) -> "OpportunitySettings":
         for low, high in ((self.min_profit, self.max_profit), (self.min_margin, self.max_margin)):
             if low is not None and high is not None and low > high:
                 raise ValueError("Minimum must not exceed maximum")

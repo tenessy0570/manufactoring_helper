@@ -9,13 +9,13 @@ from app.domains.market.service import MarketService
 router = APIRouter(prefix="/api/v1/market", tags=["market"], route_class=DishkaRoute)
 
 
-@router.get("/hubs")
-async def hubs() -> list[TradeHub]:
+@router.get("/hubs", name="hubs")
+async def get_hubs() -> list[TradeHub]:
     return list(HUBS)
 
 
-@router.get("/prices")
-async def prices(
+@router.get("/prices", name="prices")
+async def get_prices(
     service: FromDishka[MarketService], query: Annotated[PriceQuery, Query()]
 ) -> PricePage:
     return await service.find(query)

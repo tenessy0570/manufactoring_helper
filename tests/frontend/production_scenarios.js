@@ -83,7 +83,7 @@ async function checkProductionWorkflow(){
     if(a.selected.totals.income!==110)throw Error('Income deletion');
     a.selected=null;await a.load();await a.open(a.items[0]);await a.$nextTick();
     if(a.selected.entries.length!==2||a.busy)throw Error('Reopen history');
-    const oldAmount=a.entry.amount;a.api=async()=>{throw Error('Temporary failure');};await a.estimate();
+    const oldAmount=a.entry.amount;a.requestApi=async()=>{throw Error('Temporary failure');};await a.estimate();
     if(!a.error||!a.selected||a.entry.amount!==oldAmount)throw Error('Failure lost entry');
     return 'PASS: empty production, estimates, additional batch, partial income and corrections';
   }finally{clearTimeout(a.optionsTimer);a.optionsSequence++;window.fetch=original;}

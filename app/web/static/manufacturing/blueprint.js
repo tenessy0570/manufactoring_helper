@@ -32,7 +32,7 @@ window.manufacturingFeatures.push(() => ({
         search: name,
         limit: 50
       });
-      const data = await this.api('/api/v1/catalog/items?' + params);
+      const data = await this.requestApi('/api/v1/catalog/items?' + params);
       if (seq === this.blueprintSequence) {
         this.blueprintMatches = data.items;
         this.blueprintSearchDone = true;

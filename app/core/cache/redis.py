@@ -14,16 +14,16 @@ class RedisCache(Cache):
         self._key_prefix = key_prefix
 
     async def get(self, key: str) -> JsonValue | None:
-        raw = await self._client.get(self._namespaced(key))
+        raw = await self._client.get(self._build_cache_key(key))
         return None if raw is None else json.loads(raw)
 
     async def set(self, key: str, value: JsonValue, ttl_seconds: int) -> None:
         if ttl_seconds <= 0:
             raise ValueError("ttl_seconds must be positive")
-        await self._client.set(self._namespaced(key), json.dumps(value), ex=ttl_seconds)
+        await self._client.set(self._build_cache_key(key), json.dumps(value), ex=ttl_seconds)
 
     async def delete(self, key: str) -> None:
-        await self._client.delete(self._namespaced(key))
+        await self._client.delete(self._build_cache_key(key))
 
-    def _namespaced(self, key: str) -> str:
+    def _build_cache_key(self, key: str) -> str:
         return f"{self._key_prefix}{key}"

@@ -4,13 +4,14 @@ from uuid import UUID, uuid4
 
 from app.core.application_errors import ErrorKind
 from app.core.config import DEFAULT_REFRESH, RefreshPolicy
-from app.core.freshness import refresh_deadline
+from app.core.freshness import get_refresh_deadline
 from app.core.repository import UnitOfWork
 from app.domains.catalog.models import ItemTypeClause
 from app.domains.catalog.repository import ItemTypeRepository
 from app.domains.invention.models import ShoppingOption, ShoppingPlan
-from app.domains.invention.shopping import ShoppingService, ceiling
+from app.domains.invention.shopping import ShoppingService, round_up_quantity
 from app.domains.manufacturing.repository import ManufacturingRepository
+from app.domains.market.enums import OrderSide
 from app.domains.production.errors import ProductionError
 from app.domains.production.models import (
     BatchInput,
@@ -36,7 +37,7 @@ class ProductionService:
         catalog: ItemTypeRepository,
         unit_of_work: UnitOfWork,
     ) -> None:
-        self.repository, self.catalog, self.uow = repository, catalog, unit_of_work
+        self.repository, self.catalog, self.unit_of_work = repository, catalog, unit_of_work
 
     async def find(self, user_id: UUID, offset: int = 0, limit: int = 50) -> list[Production]:
         return await self.repository.find(user_id, offset, limit)
@@ -51,9 +52,9 @@ class ProductionService:
         production.updated_at = datetime.now(UTC)
         try:
             await self.repository.save(production)
-            await self.uow.commit()
+            await self.unit_of_work.commit()
         except BaseException:
-            await self.uow.rollback()
+            await self.unit_of_work.rollback()
             raise
         return production
 
@@ -86,7 +87,7 @@ class ProductionService:
         production.actual_runs = data.actual_runs
         return await self.persist(production)
 
-    async def entry(
+    async def save_entry(
         self, user_id: UUID, production_id: UUID, data: EntryInput, entry_id: UUID | None = None
     ) -> Production:
         production = await self.get(user_id, production_id, lock=True)
@@ -113,9 +114,9 @@ class ProductionService:
         await self.get(user_id, production_id, lock=True)
         try:
             await self.repository.delete(user_id, production_id)
-            await self.uow.commit()
+            await self.unit_of_work.commit()
         except BaseException:
-            await self.uow.rollback()
+            await self.unit_of_work.rollback()
             raise
 
 
@@ -128,13 +129,15 @@ class ProductionEstimateService:
         refresh_policy: RefreshPolicy = DEFAULT_REFRESH,
     ) -> None:
         self.productions, self.market, self.shopping = productions, market, shopping
-        self._refresh = refresh_policy
+        self._refresh_policy = refresh_policy
 
-    async def estimate(self, user_id: UUID, production_id: UUID, data: EstimateInput) -> Estimate:
+    async def estimate_cost(
+        self, user_id: UUID, production_id: UUID, data: EstimateInput
+    ) -> Estimate:
         production = await self.productions.get(user_id, production_id)
         if data.kind == "invention":
             assert data.units is not None
-            plan, selected = await self.invention_option(production.type_id, data)
+            plan, selected = await self.get_invention_option(production.type_id, data)
             if selected.estimated_cost is None:
                 raise ProductionError(
                     ErrorKind.CONFLICT,
@@ -169,14 +172,14 @@ class ProductionEstimateService:
                     for option in plan.options
                 ],
             )
-        state = (await self.market.recipes([production.type_id])).get(production.type_id)
+        state = (await self.market.get_recipes([production.type_id])).get(production.type_id)
         if state is None or state.recipe is None:
             raise ProductionError(
                 ErrorKind.CONFLICT,
                 "No saved manufacturing recipe. Wait for the background recipe sync.",
             )
         recipe = state.recipe
-        runs = batch_runs(data, recipe.units)
+        runs = get_manufacturing_run_count(data, recipe.units)
         stale = state.expires_at <= datetime.now(UTC)
         if data.kind == "manufacturing":
             if recipe.estimated_item_value is None and (
@@ -194,7 +197,7 @@ class ProductionEstimateService:
             )
             description = f"{runs:,} runs; base/SCC charge plus facility tax and system cost index."
         else:
-            quotes = await self.market.quotes(
+            quotes = await self.market.get_quotes(
                 data.hub_id, [material.type_id for material in recipe.materials]
             )
             amount = Decimal(0)
@@ -204,7 +207,7 @@ class ProductionEstimateService:
                     None
                     if quote is None
                     else quote.buy_price
-                    if data.material_order_type == "buy"
+                    if data.material_order_type == OrderSide.BUY.value
                     else quote.sell_price
                 )
                 if price is None or price <= 0:
@@ -214,10 +217,10 @@ class ProductionEstimateService:
                     )
                 amount += runs * material.quantity * price
                 assert quote is not None
-                stale = stale or refresh_deadline(
-                    quote.synced_at, self._refresh.market
+                stale = stale or get_refresh_deadline(
+                    quote.synced_at, self._refresh_policy.market
                 ) <= datetime.now(UTC)
-            if data.material_order_type == "buy":
+            if data.material_order_type == OrderSide.BUY.value:
                 amount *= 1 + data.buy_broker_fee / 100
             description = (
                 f"{runs:,} runs / {runs * recipe.units:,} units; "
@@ -229,11 +232,11 @@ class ProductionEstimateService:
             stale=stale,
         )
 
-    async def invention_option(
+    async def get_invention_option(
         self, type_id: int, data: EstimateInput | PurchaseListInput
     ) -> tuple[ShoppingPlan, ShoppingOption]:
         assert data.units is not None
-        plan = await self.shopping.plan(type_id, data.units, data.hub_id)
+        plan = await self.shopping.get_shopping_plan(type_id, data.units, data.hub_id)
         selected = (
             plan.best
             if data.decryptor_id == "best"
@@ -251,17 +254,17 @@ class ProductionEstimateService:
             )
         return plan, selected
 
-    async def purchase_list(
+    async def get_purchase_list(
         self, user_id: UUID, production_id: UUID, data: PurchaseListInput
     ) -> ProductionPurchaseList:
         production = await self.productions.get(user_id, production_id)
         if data.kind == "invention":
             assert data.units is not None
-            plan, selected = await self.invention_option(production.type_id, data)
+            plan, selected = await self.get_invention_option(production.type_id, data)
             return ProductionPurchaseList(
                 materials=[
-                    PurchaseMaterial(type_id=m.type_id, quantity=m.quantity)
-                    for m in selected.materials
+                    PurchaseMaterial(type_id=material.type_id, quantity=material.quantity)
+                    for material in selected.materials
                 ],
                 description=(
                     f"{selected.attempts:,} expected attempts; "
@@ -270,25 +273,25 @@ class ProductionEstimateService:
                 ),
                 stale=plan.stale,
             )
-        state = (await self.market.recipes([production.type_id])).get(production.type_id)
+        state = (await self.market.get_recipes([production.type_id])).get(production.type_id)
         if state is None or state.recipe is None:
             raise ProductionError(
                 ErrorKind.CONFLICT,
                 "No saved manufacturing recipe. Wait for the background recipe sync.",
             )
-        runs = batch_runs(data, state.recipe.units)
+        runs = get_manufacturing_run_count(data, state.recipe.units)
         return ProductionPurchaseList(
             materials=[
-                PurchaseMaterial(type_id=m.type_id, quantity=m.quantity * runs)
-                for m in state.recipe.materials
+                PurchaseMaterial(type_id=material.type_id, quantity=material.quantity * runs)
+                for material in state.recipe.materials
             ],
             description=f"{runs:,} runs / {runs * state.recipe.units:,} units; ME 0.",
             stale=state.expires_at <= datetime.now(UTC),
         )
 
 
-def batch_runs(data: BatchInput, units_per_run: int) -> int:
+def get_manufacturing_run_count(data: BatchInput, units_per_run: int) -> int:
     if data.manufacturing_runs is not None:
         return data.manufacturing_runs
     assert data.units is not None
-    return ceiling(Decimal(data.units) / units_per_run)
+    return round_up_quantity(Decimal(data.units) / units_per_run)

@@ -14,17 +14,19 @@ class MarketProvider(Provider):
     quotes = provide(SQLMarketQuoteReader, provides=MarketQuoteReader, scope=Scope.REQUEST)
 
     @provide(scope=Scope.APP)
-    def gateway(self, esi: EsiClient, settings: Settings) -> MarketGateway:
+    def provide_gateway(self, esi: EsiClient, settings: Settings) -> MarketGateway:
         return EsiMarketGateway(esi, settings.market_cache_seconds)
 
     @provide(scope=Scope.REQUEST)
-    def repository(self, session: AsyncSession, refresh_policy: RefreshPolicy) -> MarketRepository:
+    def provide_repository(
+        self, session: AsyncSession, refresh_policy: RefreshPolicy
+    ) -> MarketRepository:
         return SQLMarketRepository(session, refresh_policy)
 
     service = provide(MarketService, scope=Scope.REQUEST)
 
     @provide(scope=Scope.REQUEST)
-    def sync_service(
+    def provide_sync_service(
         self,
         repository: MarketRepository,
         gateway: MarketGateway,

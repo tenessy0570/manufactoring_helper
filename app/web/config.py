@@ -10,5 +10,5 @@ BROWSER_CONFIG = {
 }
 
 
-def browser_settings(policy: RefreshPolicy = DEFAULT_REFRESH) -> dict[str, int]:
+def get_browser_settings(policy: RefreshPolicy = DEFAULT_REFRESH) -> dict[str, int]:
     return {**BROWSER_CONFIG, "marketFreshnessMs": policy.market_seconds * 1000}

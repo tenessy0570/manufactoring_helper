@@ -25,8 +25,8 @@ async def enqueue_trade_metadata(ctx: dict[str, Any]) -> int:
     container: AsyncContainer = ctx["container"]
     async with container() as scope:
         repository = await scope.get(TradingRepository)
-        ids = await repository.market_type_ids()
-        due = set(await repository.due_metadata(datetime.now(UTC)))
+        ids = await repository.get_market_type_ids()
+        due = set(await repository.find_due_metadata_ids(datetime.now(UTC)))
     count = 0
     for start in range(0, len(ids), 20):
         group = ids[start : start + 20]

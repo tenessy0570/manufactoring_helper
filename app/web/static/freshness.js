@@ -52,7 +52,7 @@ document.addEventListener('alpine:init', () => {
       this.sources = [];
       this.refresh();
     },
-    age(stamp) {
+    formatAge(stamp) {
       if (!stamp) return 'no data';
       const minutes = Math.floor(Math.max(0, this.now - Date.parse(stamp)) / 60000);
       return minutes < 1 ? '<1m' : (minutes >= 1440 ? Math.floor(minutes / 1440) + 'd ' : '') + Math.floor(minutes % 1440 / 60) + 'h ' + minutes % 60 + 'm';
@@ -63,10 +63,10 @@ document.addEventListener('alpine:init', () => {
       }).format(Math.floor(source.fresh * 1000 / source.cached) / 10) + '%' : '--';
     },
     text(source) {
-      return this.labels[source.source] + ': ' + (source.status === 'missing' ? 'no data' : this.age(source.oldest_at)) + (source.status === 'partial' ? ' (partial)' : source.status === 'stale' ? ' (due)' : '');
+      return this.labels[source.source] + ': ' + (source.status === 'missing' ? 'no data' : this.formatAge(source.oldest_at)) + (source.status === 'partial' ? ' (partial)' : source.status === 'stale' ? ' (due)' : '');
     },
     detail(source) {
-      return this.labels[source.source] + ': ' + source.fresh + ' of ' + source.cached + ' saved entries fresh. Oldest: ' + this.age(source.oldest_at) + ', latest: ' + this.age(source.newest_at) + '. Cached entries only; this is not full catalogue coverage.';
+      return this.labels[source.source] + ': ' + source.fresh + ' of ' + source.cached + ' saved entries fresh. Oldest: ' + this.formatAge(source.oldest_at) + ', latest: ' + this.formatAge(source.newest_at) + '. Cached entries only; this is not full catalogue coverage.';
     }
   }));
 });

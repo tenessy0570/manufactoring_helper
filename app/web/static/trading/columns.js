@@ -1,4 +1,4 @@
-window.tradingColumns = () => ({
+window.createTradingColumns = () => ({
   hiddenColumns: [],
   columnOptions: [{
     id: 'route',
@@ -43,7 +43,7 @@ window.tradingColumns = () => ({
     id: 'data',
     label: 'Data freshness'
   }],
-  columnVisible(id) {
+  isColumnVisible(id) {
     return !this.hiddenColumns.includes(id);
   },
   restoreColumns() {
@@ -60,6 +60,6 @@ window.tradingColumns = () => ({
     }
   },
   get tableWidth() {
-    return Math.max(320, 230 + this.columnOptions.filter(c => this.columnVisible(c.id)).length * 100) + 'px';
+    return Math.max(320, 230 + this.columnOptions.filter(c => this.isColumnVisible(c.id)).length * 100) + 'px';
   },
 });

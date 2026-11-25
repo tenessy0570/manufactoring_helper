@@ -15,7 +15,7 @@ document.addEventListener('alpine:init', () => {
     busy: false,
     searching: false,
     searchSequence: 0,
-    async api(url, options = {}) {
+    async requestApi(url, options = {}) {
       const response = await fetch(url, {
         credentials: 'same-origin',
         ...options,
@@ -46,7 +46,7 @@ document.addEventListener('alpine:init', () => {
       }
       this.searching = true;
       try {
-        const data = await this.api('/api/v1/catalog/items?' + new URLSearchParams({
+        const data = await this.requestApi('/api/v1/catalog/items?' + new URLSearchParams({
           search: name,
           meta_group_ids: '2',
           limit: 50
@@ -101,7 +101,7 @@ document.addEventListener('alpine:init', () => {
     get selected() {
       return this.result?.best;
     },
-    name(id) {
+    getItemName(id) {
       return this.names[id] || 'Name unavailable';
     },
     async calculate() {
@@ -116,7 +116,7 @@ document.addEventListener('alpine:init', () => {
       try {
         const id = this.typeId,
           units = this.units;
-        const result = await this.api('/api/v1/invention/shopping/' + id + '?' + new URLSearchParams({
+        const result = await this.requestApi('/api/v1/invention/shopping/' + id + '?' + new URLSearchParams({
           units,
           hub_id: this.hub
         }));
@@ -127,7 +127,7 @@ document.addEventListener('alpine:init', () => {
           try {
             const params = new URLSearchParams();
             ids.forEach(id => params.append('type_ids', id));
-            const data = await this.api('/api/v1/catalog/names?' + params);
+            const data = await this.requestApi('/api/v1/catalog/names?' + params);
             this.names = {
               ...this.names,
               ...data.names
@@ -176,7 +176,7 @@ document.addEventListener('alpine:init', () => {
       this.busy = true;
       this.error = '';
       try {
-        await this.api('/api/v1/invention/' + this.typeId + '/prepare', {
+        await this.requestApi('/api/v1/invention/' + this.typeId + '/prepare', {
           method: 'POST'
         });
         this.message = 'Preparation requested using the shared invention cache. Select Check status shortly. No separate skill cache is created.';

@@ -6,7 +6,7 @@ window.manufacturingFeatures.push(() => ({
     try {
       const saved = JSON.parse(localStorage.getItem(this.storageKey()));
       if (saved?.version !== 1 || !saved.form || typeof saved.form !== 'object' || Array.isArray(saved.form)) return;
-      const form = this.defaults();
+      const form = this.getDefaultSettings();
       this.migrateBrokerSettings(saved.form);
       for (const [key, value] of Object.entries(saved.form)) {
         if (!(key in form)) continue;

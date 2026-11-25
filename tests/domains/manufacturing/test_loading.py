@@ -32,13 +32,13 @@ async def test_large_candidate_set_uses_one_history_query_without_count_or_pagin
     event.listen(engine, "before_cursor_execute", count)
     repository = SQLHistoryRepository(session)
     try:
-        candidates = await repository.candidates(LiquidityQuery(limit=1, offset=999), NOW)
+        candidates = await repository.find_candidates(LiquidityQuery(limit=1, offset=999), NOW)
         assert len(candidates) == 1201
         assert len(statements) == 1
         assert "LIMIT" not in statements[0]
         assert "OFFSET" not in statements[0]
-        first, total = await repository.liquidity(LiquidityQuery(limit=1000), NOW)
-        second, _ = await repository.liquidity(LiquidityQuery(limit=1000, offset=1000), NOW)
+        first, total = await repository.get_liquidity(LiquidityQuery(limit=1000), NOW)
+        second, _ = await repository.get_liquidity(LiquidityQuery(limit=1000, offset=1000), NOW)
         assert total == len(candidates)
         assert first + second == candidates
     finally:
@@ -48,7 +48,7 @@ async def test_large_candidate_set_uses_one_history_query_without_count_or_pagin
 @pytest.mark.parametrize("hub", ["jita", "amarr"])
 async def test_quote_batches_keep_product_and_material_hubs_separate(hub: str) -> None:
     history = AsyncMock(spec=HistoryRepository)
-    history.candidates.return_value = [
+    history.find_candidates.return_value = [
         LiquidityItem(
             type_id=10,
             name="Test",
@@ -63,17 +63,17 @@ async def test_quote_batches_keep_product_and_material_hubs_separate(hub: str) -
     repository = AsyncMock(spec=ManufacturingRepository)
     from tests.domains.manufacturing.test_manufacturing import recipe_state
 
-    repository.recipes.return_value = {10: recipe_state()}
+    repository.get_recipes.return_value = {10: recipe_state()}
 
-    async def quotes(hub_id: str, ids: list[int]) -> dict[int, Any]:
+    async def get_quotes(hub_id: str, ids: list[int]) -> dict[int, Any]:
         return {i: price(i, hub_id=hub_id) for i in ids}
 
-    repository.quotes.side_effect = quotes
+    repository.get_quotes.side_effect = get_quotes
     query = ManufacturingQuery.model_validate({"material_hub_id": hub})
     inputs = await OpportunityDataLoader(repository, history, None).load(query, NOW, True)
     assert inputs.quotes[34].hub_id == hub
     assert inputs.products[10].hub_id == "jita"
-    assert repository.quotes.await_count == (1 if hub == "jita" else 2)
+    assert repository.get_quotes.await_count == (1 if hub == "jita" else 2)
 
 
 async def test_light_quotes_keep_buy_depth_and_prices_without_reading_sell_depth(
@@ -82,10 +82,10 @@ async def test_light_quotes_keep_buy_depth_and_prices_without_reading_sell_depth
     from app.domains.manufacturing.repository import SQLManufacturingRepository
     from app.domains.market.quotes import SQLMarketQuoteReader
     from app.domains.market.repository import SQLMarketRepository
-    from tests.domains.market.test_market import state
+    from tests.domains.market.test_market import get_state
 
     await SQLMarketRepository(session).replace(
-        state(),
+        get_state(),
         [
             price(
                 10,
@@ -95,8 +95,8 @@ async def test_light_quotes_keep_buy_depth_and_prices_without_reading_sell_depth
         ],
     )
     reader = SQLMarketQuoteReader(session)
-    full = (await reader.quotes("jita", [10]))[10]
-    projected = (await SQLManufacturingRepository(session, reader).quotes("jita", [10]))[10]
+    full = (await reader.get_quotes("jita", [10]))[10]
+    projected = (await SQLManufacturingRepository(session, reader).get_quotes("jita", [10]))[10]
     assert full.sell_levels is not None
     assert projected.sell_levels is None
     assert projected.buy_levels == full.buy_levels

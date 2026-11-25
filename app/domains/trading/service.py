@@ -3,7 +3,7 @@ from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 
 from app.core.config import DEFAULT_REFRESH, RefreshPolicy
-from app.core.freshness import refresh_deadline
+from app.core.freshness import get_refresh_deadline
 from app.core.repository import UnitOfWork
 from app.domains.catalog.names import ItemNameService, ItemNamesUnavailableError
 from app.domains.market.models import get_hub
@@ -24,13 +24,13 @@ class TradingService:
         refresh_policy: RefreshPolicy = DEFAULT_REFRESH,
     ) -> None:
         self._routes = routes
-        self._refresh = refresh_policy
+        self._refresh_policy = refresh_policy
         self._repository, self._names, self._clock = repository, names, clock
 
-    async def opportunities(self, query: TradingQuery) -> TradingPage:
+    async def get_opportunities(self, query: TradingQuery) -> TradingPage:
         now = self._clock()
         turnover_minimum = query.min_daily_isk_volume if query.filter_daily_turnover else None
-        inputs = await self._repository.inputs(query)
+        inputs = await self._repository.get_trade_inputs(query)
         missing_metadata = len(
             {value.source.type_id for value in inputs if value.metadata_expires_at is None}
         )
@@ -41,10 +41,10 @@ class TradingService:
                 value.name is None or query.search.casefold() not in value.name.casefold()
             ):
                 continue
-            result = calculate_trade(value, query, now, self._refresh)
+            result = calculate_trade(value, query, now, self._refresh_policy)
             if result is not None:
                 items.append(result)
-        turnover = await self._repository.turnover(
+        turnover = await self._repository.get_turnover(
             query, sorted({item.type_id for item in items}), now
         )
         route_data = {}
@@ -52,7 +52,7 @@ class TradingService:
             for source_hub, destination_hub in sorted(
                 {(item.source_hub, item.destination_hub) for item in items}
             ):
-                route_data[source_hub, destination_hub] = await self._routes.cached(
+                route_data[source_hub, destination_hub] = await self._routes.get_cached_route(
                     source_hub, destination_hub, query.route_mode
                 )
         missing_routes = set()
@@ -96,7 +96,7 @@ class TradingService:
                 item.history_updated_at = record.updated_at
                 if turnover_minimum is not None and record.daily_isk_volume < turnover_minimum:
                     continue
-                if refresh_deadline(record.updated_at, self._refresh.history) <= now:
+                if get_refresh_deadline(record.updated_at, self._refresh_policy.history) <= now:
                     item.stale = True
                     if query.fresh_only:
                         continue
@@ -129,7 +129,7 @@ class TradingService:
                     item.name = resolved.names.get(item.type_id, item.name)
             except ItemNamesUnavailableError:
                 pass
-        source, destination = await self._repository.snapshots(query)
+        source, destination = await self._repository.get_snapshot_times(query)
         return TradingPage(
             source_hub=query.source_hub,
             destination_hub=query.destination_hub,
@@ -156,8 +156,8 @@ class TradingMetadataService:
         clock: Callable[[], datetime] = lambda: datetime.now(UTC),
         refresh_policy: RefreshPolicy = DEFAULT_REFRESH,
     ) -> None:
-        self._refresh = refresh_policy
-        self._repository, self._gateway, self._uow, self._clock = (
+        self._refresh_policy = refresh_policy
+        self._repository, self._gateway, self._unit_of_work, self._clock = (
             repository,
             gateway,
             unit_of_work,
@@ -165,11 +165,11 @@ class TradingMetadataService:
         )
 
     async def sync(self, type_id: int) -> bool:
-        previous = await self._repository.metadata(type_id)
+        previous = await self._repository.get_metadata(type_id)
         now = self._clock()
         if previous is not None and previous.expires_at > now:
             return False
-        details = await self._gateway.type_details(type_id)
+        details = await self._gateway.get_type_details(type_id)
         now = self._clock()
         metadata = TradeMetadata(
             type_id=type_id,
@@ -178,12 +178,12 @@ class TradingMetadataService:
             if details.packaged_volume is not None
             else details.volume,
             updated_at=now,
-            expires_at=now + timedelta(seconds=self._refresh.metadata_seconds),
+            expires_at=now + timedelta(seconds=self._refresh_policy.metadata_seconds),
         )
         try:
             await self._repository.save_metadata(metadata)
-            await self._uow.commit()
+            await self._unit_of_work.commit()
         except BaseException:
-            await self._uow.rollback()
+            await self._unit_of_work.rollback()
             raise
         return True

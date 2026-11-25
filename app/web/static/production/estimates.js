@@ -1,4 +1,4 @@
-window.productionEstimates = () => ({
+window.createProductionEstimates = () => ({
   estimateUnits: '',
   estimateRuns: '',
   hub: 'jita',
@@ -36,7 +36,7 @@ window.productionEstimates = () => ({
       hub = this.hub;
     if (!id || this.entry.kind !== 'invention') return;
     try {
-      const result = await this.api('/' + id + '/estimate', 'POST', {
+      const result = await this.requestApi('/' + id + '/estimate', 'POST', {
         kind: 'invention',
         units,
         hub_id: hub,
@@ -55,7 +55,7 @@ window.productionEstimates = () => ({
   },
   async estimate() {
     await this.action(async () => {
-      const result = await this.api('/' + this.selected.id + '/estimate', 'POST', {
+      const result = await this.requestApi('/' + this.selected.id + '/estimate', 'POST', {
         kind: this.entry.kind,
         decryptor_id: this.decryptorChoice === 'best' ? 'best' : this.decryptorChoice === 'none' ? null : Number(this.decryptorChoice),
         ...(this.entry.kind !== 'invention' && this.estimateRuns ? {

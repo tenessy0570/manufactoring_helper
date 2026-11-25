@@ -2,39 +2,39 @@
   <thead>
     <tr>
       <th class="item-cell">ITEM</th>
-      <th x-show="columnVisible('cost')">COST / UNIT</th>
+      <th x-show="isColumnVisible('cost')">COST / UNIT</th>
       <th
-        x-show="columnVisible('profit')"
+        x-show="isColumnVisible('profit')"
         title="Per-unit profit at the best quoted price. Total demand profit uses all included price levels."
       >
         PROFIT / UNIT
       </th>
       <th
-        x-show="columnVisible('demand')"
+        x-show="isColumnVisible('demand')"
         title="Net profit from full runs filling buy orders inside your selected price range, using the actual prices of those orders."
       >
         PROFIT ON DEMAND
       </th>
       <th
-        x-show="columnVisible('margin')"
+        x-show="isColumnVisible('margin')"
         title="Legacy formula: net profit divided by raw material cost, multiplied by 100. This is not profit as a percentage of sale revenue."
       >
         MARGIN
       </th>
       <th
-        x-show="columnVisible('daily')"
+        x-show="isColumnVisible('daily')"
         title="Total daily profit across the selected production lines. Buy results are capped by saved demand. Invention time is included only when enabled."
       >
         PROFIT / DAY
       </th>
       <th
-        x-show="columnVisible('volumeShare')"
+        x-show="isColumnVisible('volumeShare')"
         title="Your estimated daily output across the selected lines divided by regional average traded units per day. Includes copying/invention time when enabled. This is capacity, not a sales forecast or market share guarantee."
       >
         DAILY VOLUME SHARE
       </th>
-      <th x-show="columnVisible('turnover')">REGIONAL TURNOVER / DAY</th>
-      <th x-show="columnVisible('data')">DATA</th>
+      <th x-show="isColumnVisible('turnover')">REGIONAL TURNOVER / DAY</th>
+      <th x-show="isColumnVisible('data')">DATA</th>
       <th></th>
       <th></th>
     </tr>
@@ -66,22 +66,22 @@
           </div>
         </td>
         <td
-          x-show="columnVisible('cost')"
-          x-text="money(item.total_cost_per_unit)"
+          x-show="isColumnVisible('cost')"
+          x-text="formatMoney(item.total_cost_per_unit)"
         ></td>
         <td
-          x-show="columnVisible('profit')"
+          x-show="isColumnVisible('profit')"
           class="number"
           :class="Number(item.profit_per_unit) >= 0 ? 'positive' : 'negative'"
-          x-text="money(item.profit_per_unit)"
+          x-text="formatMoney(item.profit_per_unit)"
         ></td>
-        <td x-show="columnVisible('demand')">
+        <td x-show="isColumnVisible('demand')">
           <template x-if="item.profit_at_current_buy_price !== null">
             <div>
               <strong
                 :class="Number(item.profit_at_current_buy_price) < 0 ? 'negative' : 'positive'"
-                x-text="money(item.profit_at_current_buy_price)"
-                :title="fullMoney(item.profit_at_current_buy_price) + ' ISK total profit'"
+                x-text="formatMoney(item.profit_at_current_buy_price)"
+                :title="formatFullMoney(item.profit_at_current_buy_price) + ' ISK total profit'"
               ></strong>
               <div
                 class="muted"
@@ -90,7 +90,7 @@
               <div
                 class="muted"
                 title="Estimated batch time: production plus copying and invention when their checkboxes are enabled. Uses selected slots and cached source durations; parallel preparation time is approximate."
-                x-text="'~' + demandDuration(item) + ' on ' + productionLines() + (productionLines() === 1 ? ' line' : ' lines')"
+                x-text="'~' + formatDemandDuration(item) + ' on ' + getProductionLineCount() + (getProductionLineCount() === 1 ? ' line' : ' lines')"
               ></div>
               <div class="muted" x-show="item.buy_demand_depth_available === false">
                 Best-price data only
@@ -101,28 +101,28 @@
             x-show="item.profit_at_current_buy_price === null"
           >Buy pricing only</span>
         </td>
-        <td x-show="columnVisible('margin')">
+        <td x-show="isColumnVisible('margin')">
           <span
             class="margin-badge"
             :class="Number(item.margin_pct) < 0 && 'loss'"
-            x-text="percent(item.margin_pct)"
+            x-text="formatPercent(item.margin_pct)"
           ></span>
         </td>
         <td
-          x-show="columnVisible('daily')"
+          x-show="isColumnVisible('daily')"
           class="number positive"
           :class="Number(item.rank_profit_per_day) < 0 && 'negative'"
-          x-text="money(item.rank_profit_per_day)"
+          x-text="formatMoney(item.rank_profit_per_day)"
         ></td>
-        <td x-show="columnVisible('volumeShare')">
+        <td x-show="isColumnVisible('volumeShare')">
           <strong
             :class="Number(item.daily_volume_share_pct)>100?'negative':''"
-            x-text="item.daily_volume_share_pct == null ? 'N/A' : percent(item.daily_volume_share_pct)"
+            x-text="item.daily_volume_share_pct == null ? 'N/A' : formatPercent(item.daily_volume_share_pct)"
           ></strong>
           <div
             class="muted"
             x-show="item.daily_volume_share_pct != null"
-            x-text="money(item.daily_production_units)+' built / '+money(item.daily_units)+' traded per day'"
+            x-text="formatMoney(item.daily_production_units)+' built / '+formatMoney(item.daily_units)+' traded per day'"
           ></div>
           <div
             class="muted"
@@ -130,11 +130,11 @@
           >No traded volume available</div>
         </td>
         <td
-          x-show="columnVisible('turnover')"
-          :title="item.daily_isk_volume === null ? 'No trading history for this period' : fullMoney(item.daily_isk_volume) + ' ISK per day across the region'"
-          x-text="money(item.daily_isk_volume)"
+          x-show="isColumnVisible('turnover')"
+          :title="item.daily_isk_volume === null ? 'No trading history for this period' : formatFullMoney(item.daily_isk_volume) + ' ISK per day across the region'"
+          x-text="formatMoney(item.daily_isk_volume)"
         ></td>
-        <td x-show="columnVisible('data')"><span
+        <td x-show="isColumnVisible('data')"><span
           class="data-badge"
           :class="isStale(item) ? 'stale' : 'fresh'"
           x-text="isStale(item) ? 'Stale' : 'Fresh'"

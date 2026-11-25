@@ -11,16 +11,17 @@ from app.domains.health.models import DataProgress, FreshnessReport, SourceFresh
 from app.domains.history.tables import HistoryStateTable
 from app.domains.invention.tables import InventionRequestTable
 from app.domains.manufacturing.tables import RecipeTable
+from app.domains.market.enums import OrderSide
 from app.domains.market.models import HubId, get_hub
 from app.domains.market.tables import MarketStateTable
 
 
 class ProgressRepository(ABC):
     @abstractmethod
-    async def freshness(self, hub: HubId, now: datetime) -> FreshnessReport: ...
+    async def get_freshness_report(self, hub: HubId, now: datetime) -> FreshnessReport: ...
 
     @abstractmethod
-    async def snapshot(self, hub: HubId) -> DataProgress: ...
+    async def get_data_progress(self, hub: HubId) -> DataProgress: ...
 
 
 class SQLProgressRepository(ProgressRepository):
@@ -28,9 +29,9 @@ class SQLProgressRepository(ProgressRepository):
         self, session: AsyncSession, refresh_policy: RefreshPolicy = DEFAULT_REFRESH
     ) -> None:
         self._session = session
-        self._refresh = refresh_policy
+        self._refresh_policy = refresh_policy
 
-    async def snapshot(self, hub: HubId) -> DataProgress:
+    async def get_data_progress(self, hub: HubId) -> DataProgress:
         eligible = select(ItemTypeTable.type_id).where(
             ItemTypeTable.is_active.is_(True), ItemTypeTable.meta_group_id.in_([1, 2])
         )
@@ -64,7 +65,8 @@ class SQLProgressRepository(ProgressRepository):
                     select(InventionRequestTable.status, func.count())
                     .where(
                         InventionRequestTable.settings["hub_id"].as_string() == hub,
-                        InventionRequestTable.settings["order_type"].as_string() == "sell",
+                        InventionRequestTable.settings["order_type"].as_string()
+                        == OrderSide.SELL.value,
                         InventionRequestTable.settings["type_id"].as_integer().in_(eligible),
                     )
                     .group_by(InventionRequestTable.status)
@@ -86,21 +88,21 @@ class SQLProgressRepository(ProgressRepository):
             market_updated_at=market.synced_at if market else None,
         )
 
-    async def freshness(self, hub: HubId, now: datetime) -> FreshnessReport:
+    async def get_freshness_report(self, hub: HubId, now: datetime) -> FreshnessReport:
         sources = []
         specifications: list[tuple[str, Any, Any, Any, list[Any]]] = [
             (
                 "market",
                 MarketStateTable,
                 MarketStateTable.synced_at,
-                MarketStateTable.synced_at > now - self._refresh.market,
+                MarketStateTable.synced_at > now - self._refresh_policy.market,
                 [MarketStateTable.hub_id == hub],
             ),
             (
                 "history",
                 HistoryStateTable,
                 HistoryStateTable.synced_at,
-                HistoryStateTable.synced_at > now - self._refresh.history,
+                HistoryStateTable.synced_at > now - self._refresh_policy.history,
                 [HistoryStateTable.region_id == get_hub(hub).region_id],
             ),
             (
@@ -125,7 +127,8 @@ class SQLProgressRepository(ProgressRepository):
                     InventionRequestTable.status == "ready",
                     InventionRequestTable.result.is_not(None),
                     InventionRequestTable.settings["hub_id"].as_string() == hub,
-                    InventionRequestTable.settings["order_type"].as_string() == "sell",
+                    InventionRequestTable.settings["order_type"].as_string()
+                    == OrderSide.SELL.value,
                 ],
             ),
         ]

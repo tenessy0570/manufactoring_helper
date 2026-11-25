@@ -24,7 +24,7 @@ from app.domains.manufacturing.gateway import (
     EverefIndustryGateway,
     IndustryClient,
     IndustryGateway,
-    duration_seconds,
+    parse_duration_seconds,
 )
 from app.domains.manufacturing.models import (
     CalculationInput,
@@ -42,9 +42,9 @@ from app.infrastructure.http import HttpStatusError
 from app.main import create_app
 from tests.domains.catalog.test_catalog import NOW, item
 from tests.domains.history.test_history import day
-from tests.domains.history.test_history import state as history_state
+from tests.domains.history.test_history import get_state as history_state
+from tests.domains.market.test_market import get_state as market_state
 from tests.domains.market.test_market import price
-from tests.domains.market.test_market import state as market_state
 from tests.helpers import make_settings
 
 EXPIRES = NOW + timedelta(days=1)
@@ -153,11 +153,11 @@ def test_missing_prices_are_not_treated_as_zero() -> None:
 @pytest.mark.parametrize("value", ["", "bad", "P", "PT0S", "P1M"])
 def test_invalid_duration(value: str) -> None:
     with pytest.raises(ValueError, match=r"duration|Duration"):
-        duration_seconds(value)
+        parse_duration_seconds(value)
 
 
 def test_duration_and_legacy_profit_parity() -> None:
-    assert duration_seconds("P1DT2H3M4.5S") == Decimal("93784.5")
+    assert parse_duration_seconds("P1DT2H3M4.5S") == Decimal("93784.5")
     legacy = runpy.run_path("reference/eve_manufacturing_scan.py")
     old = legacy["Opportunity"](
         type_id=10,
@@ -184,7 +184,7 @@ def test_saved_snapshot_material_totals_match_original_script() -> None:
         type_id=2454,
         blueprint_id=production["blueprint_id"],
         units=production["units"],
-        seconds=duration_seconds(production["time"]),
+        seconds=parse_duration_seconds(production["time"]),
         job_cost=production["total_job_cost"],
         materials=[Material.model_validate(value) for value in production["materials"].values()],
     )
@@ -299,15 +299,15 @@ async def seed(session: AsyncSession) -> SQLManufacturingRepository:
 
 async def test_repository_batches_json_roundtrip_and_rollback(session: AsyncSession) -> None:
     repository = SQLManufacturingRepository(session, SQLMarketQuoteReader(session))
-    assert await repository.recipes([10]) == {}
+    assert await repository.get_recipes([10]) == {}
     await repository.save(recipe_state())
     await session.commit()
-    assert (await repository.recipes(list(range(601))))[10] == recipe_state()
+    assert (await repository.get_recipes(list(range(601))))[10] == recipe_state()
     await repository.save(recipe_state(recipe=None))
-    assert (await repository.recipes([10]))[10].recipe is None
+    assert (await repository.get_recipes([10]))[10].recipe is None
     await session.rollback()
-    assert (await repository.recipes([10]))[10].recipe == recipe()
-    assert await repository.quotes("jita", list(range(601))) == {}
+    assert (await repository.get_recipes([10]))[10].recipe == recipe()
+    assert await repository.get_quotes("jita", list(range(601))) == {}
 
 
 async def test_opportunities_sort_filter_hub_selection_and_missing_counters(
@@ -315,28 +315,30 @@ async def test_opportunities_sort_filter_hub_selection_and_missing_counters(
 ) -> None:
     repository = await seed(session)
     service = ManufacturingService(repository, SQLHistoryRepository(session), lambda: NOW)
-    page = await service.opportunities(ManufacturingQuery())
+    page = await service.get_opportunities(ManufacturingQuery())
     assert [entry.type_id for entry in page.items] == [20, 10]
     assert page.items[1].profit_per_unit == 13
     assert page.missing_recipes == page.non_manufacturable == page.missing_prices == 1
     assert page.items[0].invention_required
     assert not page.items[0].invention_included
     for rank in ("margin", "profit"):
-        page = await service.opportunities(
+        page = await service.get_opportunities(
             ManufacturingQuery.model_validate({"rank_by": rank, "limit": 1, "offset": 1})
         )
         assert page.total == 2
         assert page.items[0].type_id == 10
-    page = await service.opportunities(ManufacturingQuery(min_profit=Decimal(20)))
+    page = await service.get_opportunities(ManufacturingQuery(min_profit=Decimal(20)))
     assert [entry.type_id for entry in page.items] == [20]
-    page = await service.opportunities(ManufacturingQuery(material_hub_id="amarr", type_ids=[10]))
+    page = await service.get_opportunities(
+        ManufacturingQuery(material_hub_id="amarr", type_ids=[10])
+    )
     assert page.items[0].profit_per_unit == 23
-    page = await service.opportunities(ManufacturingQuery(min_daily_isk_volume=Decimal(1)))
+    page = await service.get_opportunities(ManufacturingQuery(min_daily_isk_volume=Decimal(1)))
     assert page.total == 1
-    page = await service.opportunities(ManufacturingQuery(fresh_only=True))
+    page = await service.get_opportunities(ManufacturingQuery(fresh_only=True))
     assert page.total == 1
     service = ManufacturingService(repository, SQLHistoryRepository(session), lambda: EXPIRES)
-    page = await service.opportunities(ManufacturingQuery(fresh_only=True))
+    page = await service.get_opportunities(ManufacturingQuery(fresh_only=True))
     assert page.total == 0
 
 
@@ -479,7 +481,7 @@ async def test_candidates_past_first_batch_are_ranked_before_pagination(
     )
     page = await ManufacturingService(
         repository, SQLHistoryRepository(session), lambda: NOW
-    ).opportunities(ManufacturingQuery(limit=1))
+    ).get_opportunities(ManufacturingQuery(limit=1))
     assert page.total == 1
     assert page.items[0].type_id == 501
     assert page.missing_recipes == 500
@@ -489,12 +491,12 @@ async def test_unavailable_material_and_expired_recipe_are_excluded(session: Asy
     repository = await seed(session)
     service = ManufacturingService(repository, SQLHistoryRepository(session), lambda: NOW)
     await repository.save(recipe_state(expires_at=NOW - timedelta(seconds=1)))
-    assert (await service.opportunities(ManufacturingQuery(fresh_only=True))).total == 0
+    assert (await service.get_opportunities(ManufacturingQuery(fresh_only=True))).total == 0
     await SQLMarketRepository(session).replace(
         market_state(),
         [price(10, sell_price="30"), price(20, sell_price="40"), price(34, sell_price=None)],
     )
-    page = await service.opportunities(ManufacturingQuery())
+    page = await service.get_opportunities(ManufacturingQuery())
     assert page.total == 0
     assert page.missing_prices == 3
 
@@ -502,15 +504,15 @@ async def test_unavailable_material_and_expired_recipe_are_excluded(session: Asy
 async def test_sync_freshness_unsupported_and_failures() -> None:
     repository = AsyncMock(spec=ManufacturingRepository)
     gateway = AsyncMock(spec=IndustryGateway)
-    uow = AsyncMock(spec=SQLAlchemyUnitOfWork)
-    repository.recipes.return_value = {}
+    unit_of_work = AsyncMock(spec=SQLAlchemyUnitOfWork)
+    repository.get_recipes.return_value = {}
     gateway.fetch.return_value = recipe()
-    service = ManufacturingSyncService(repository, gateway, uow, clock=lambda: NOW)
+    service = ManufacturingSyncService(repository, gateway, unit_of_work, clock=lambda: NOW)
     assert await service.sync_if_stale(10)
     repository.save.assert_awaited_once()
-    repository.recipes.return_value = {10: recipe_state()}
+    repository.get_recipes.return_value = {10: recipe_state()}
     assert not await service.sync_if_stale(10)
-    repository.recipes.return_value = {}
+    repository.get_recipes.return_value = {}
     gateway.fetch.side_effect = ConnectionError("offline")
     with pytest.raises(ConnectionError, match="offline"):
         await service.sync_if_stale(10)
@@ -519,10 +521,10 @@ async def test_sync_freshness_unsupported_and_failures() -> None:
     assert await service.sync_if_stale(10)
     assert repository.save.await_args is not None
     assert repository.save.await_args.args[0].recipe is None
-    uow.commit.side_effect = RuntimeError("failed")
+    unit_of_work.commit.side_effect = RuntimeError("failed")
     with pytest.raises(RuntimeError, match="failed"):
         await service.sync_if_stale(10)
-    uow.rollback.assert_awaited_once()
+    unit_of_work.rollback.assert_awaited_once()
 
 
 async def test_single_buy_order_and_small_volume_are_flagged(session: AsyncSession) -> None:
@@ -535,7 +537,9 @@ async def test_single_buy_order_and_small_volume_are_flagged(session: AsyncSessi
         ],
     )
     service = ManufacturingService(repository, SQLHistoryRepository(session), lambda: NOW)
-    page = await service.opportunities(ManufacturingQuery(type_ids=[10], product_order_type="buy"))
+    page = await service.get_opportunities(
+        ManufacturingQuery(type_ids=[10], product_order_type="buy")
+    )
     result = page.items[0]
     assert result.profit_per_unit == 13
     assert result.product_order_count == result.orders_at_price == 1
@@ -558,8 +562,8 @@ async def test_single_buy_order_and_small_volume_are_flagged(session: AsyncSessi
         query = ManufacturingQuery.model_validate(
             {"type_ids": [10], "product_order_type": "buy", **kwargs}
         )
-        assert (await service.opportunities(query)).total == 0
-    page = await service.opportunities(
+        assert (await service.get_opportunities(query)).total == 0
+    page = await service.get_opportunities(
         ManufacturingQuery(type_ids=[10], require_full_run_demand=True)
     )
     assert page.total == 1
@@ -577,7 +581,7 @@ async def test_buy_ranking_limits_profit_by_absorbable_output(session: AsyncSess
         ],
     )
     service = ManufacturingService(repository, SQLHistoryRepository(session), lambda: NOW)
-    page = await service.opportunities(
+    page = await service.get_opportunities(
         ManufacturingQuery(type_ids=[10, 20], product_order_type="buy")
     )
     assert [entry.type_id for entry in page.items] == [20, 10]
@@ -589,7 +593,7 @@ async def test_buy_ranking_limits_profit_by_absorbable_output(session: AsyncSess
     high_volume = page.items[0]
     assert high_volume.profit_at_current_buy_price == 8300
     assert high_volume.rank_profit_per_day == 3984
-    filtered = await service.opportunities(
+    filtered = await service.get_opportunities(
         ManufacturingQuery(
             type_ids=[10, 20], product_order_type="buy", min_profit_per_day=Decimal(1000)
         )
@@ -600,10 +604,12 @@ async def test_buy_ranking_limits_profit_by_absorbable_output(session: AsyncSess
 async def test_unknown_order_counts_and_healthy_buy_demand(session: AsyncSession) -> None:
     repository = await seed(session)
     service = ManufacturingService(repository, SQLHistoryRepository(session), lambda: NOW)
-    page = await service.opportunities(ManufacturingQuery(type_ids=[10], product_order_type="buy"))
+    page = await service.get_opportunities(
+        ManufacturingQuery(type_ids=[10], product_order_type="buy")
+    )
     assert "buy_order_count_unknown" in page.items[0].demand_warnings
     assert (
-        await service.opportunities(
+        await service.get_opportunities(
             ManufacturingQuery(type_ids=[10], product_order_type="buy", min_product_orders=1)
         )
     ).total == 0
@@ -614,7 +620,7 @@ async def test_unknown_order_counts_and_healthy_buy_demand(session: AsyncSession
             price(34, sell_price="3"),
         ],
     )
-    page = await service.opportunities(
+    page = await service.get_opportunities(
         ManufacturingQuery(
             type_ids=[10],
             product_order_type="buy",
@@ -658,11 +664,11 @@ async def test_mass_production_group_limit_cannot_be_overridden(
     )
     service = ManufacturingService(repository, SQLHistoryRepository(session), lambda: NOW)
     for selected in (None, [meta_group] if meta_group is not None else [], [1, 2, 3, 4, 5, 6]):
-        page = await service.opportunities(ManufacturingQuery(meta_group_ids=selected))
+        page = await service.get_opportunities(ManufacturingQuery(meta_group_ids=selected))
         assert [value.type_id for value in page.items] == ([10] if meta_group in (1, 2) else [])
     if meta_group in (1, 2):
         await repository.save(recipe_state(recipe=None))
-        page = await service.opportunities(ManufacturingQuery())
+        page = await service.get_opportunities(ManufacturingQuery())
         assert page.items == []
         assert page.non_manufacturable == 1
 
@@ -679,11 +685,11 @@ async def test_total_demand_profit_sorting_precedes_pagination(session: AsyncSes
         ],
     )
     service = ManufacturingService(repository, SQLHistoryRepository(session), lambda: NOW)
-    daily = await service.opportunities(
+    daily = await service.get_opportunities(
         ManufacturingQuery(type_ids=[10, 20], product_order_type="buy", rank_by="profit_per_day")
     )
     assert daily.items[0].type_id == 10
-    total = await service.opportunities(
+    total = await service.get_opportunities(
         ManufacturingQuery(
             type_ids=[10, 20], product_order_type="buy", rank_by="demand_profit", limit=1
         )
@@ -691,12 +697,12 @@ async def test_total_demand_profit_sorting_precedes_pagination(session: AsyncSes
     assert total.total == 2
     assert total.items[0].type_id == 20
     assert total.items[0].profit_at_current_buy_price == 8300
-    remainder = await service.opportunities(
+    remainder = await service.get_opportunities(
         ManufacturingQuery(type_ids=[10], product_order_type="buy", rank_by="demand_profit")
     )
     assert remainder.items[0].production_limit_units == 2
     assert remainder.items[0].profit_at_current_buy_price == 366
-    sells = await service.opportunities(
+    sells = await service.get_opportunities(
         ManufacturingQuery(type_ids=[10, 20], product_order_type="sell", rank_by="demand_profit")
     )
     assert [item.type_id for item in sells.items] == [10, 20]
@@ -736,7 +742,7 @@ async def test_demand_band_changes_volume_weighted_profit_and_sort(session: Asyn
     )
     service = ManufacturingService(repository, SQLHistoryRepository(session), lambda: NOW)
     query = ManufacturingQuery(type_ids=[10, 20], product_order_type="buy", rank_by="demand_profit")
-    result = await service.opportunities(query)
+    result = await service.get_opportunities(query)
     assert [i.type_id for i in result.items] == [10, 20]
     first = result.items[0]
     assert first.buy_demand_volume == 102
@@ -745,7 +751,7 @@ async def test_demand_band_changes_volume_weighted_profit_and_sort(session: Asyn
     assert first.rank_profit_per_day == 8324
     assert first.demand_warnings == []
     query.buy_demand_tolerance_pct = Decimal(0)
-    exact = await service.opportunities(query)
+    exact = await service.get_opportunities(query)
     assert [i.type_id for i in exact.items] == [20, 10]
     assert exact.items[1].profit_at_current_buy_price == 366
 
@@ -757,7 +763,7 @@ async def test_missing_eiv_is_visible_and_backfilled_without_waiting_for_ttl(
     await repository.save(recipe_state(recipe=recipe(estimated_item_value=None)))
     service = ManufacturingService(repository, SQLHistoryRepository(session), lambda: NOW)
     query = ManufacturingQuery(type_ids=[10], facility_tax=Decimal(1), system_cost_index=Decimal(2))
-    missing = await service.opportunities(query)
+    missing = await service.get_opportunities(query)
     assert missing.total == 0
     assert missing.missing_job_costs == 1
     assert missing.missing_prices == 0
@@ -767,7 +773,7 @@ async def test_missing_eiv_is_visible_and_backfilled_without_waiting_for_ttl(
         repository, gateway, SQLAlchemyUnitOfWork(session), clock=lambda: NOW
     )
     assert await sync.sync_if_stale(10)
-    updated = await service.opportunities(query)
+    updated = await service.get_opportunities(query)
     assert updated.missing_job_costs == 0
     assert updated.items[0].job_cost_per_unit == Decimal("3.5")
     assert updated.buy_broker_fee == updated.sell_broker_fee == 0
@@ -800,10 +806,12 @@ async def test_candidate_badge_and_fresh_filter_share_schedule_rules(
     )
     service = ManufacturingService(repository, history, lambda: NOW)
     query = ManufacturingQuery(type_ids=[10])
-    page = await service.opportunities(query)
+    page = await service.get_opportunities(query)
     assert not page.items[0].stale
     assert page.items[0].fresh_until == NOW + timedelta(minutes=1)
-    assert (await service.opportunities(query.model_copy(update={"fresh_only": True}))).total == 1
+    assert (
+        await service.get_opportunities(query.model_copy(update={"fresh_only": True}))
+    ).total == 1
     if expired_source in ("product", "material"):
         old = NOW - timedelta(minutes=20)
         await market.replace(
@@ -829,10 +837,12 @@ async def test_candidate_badge_and_fresh_filter_share_schedule_rules(
             from app.domains.history.tables import HistoryStateTable
 
             await session.execute(delete(HistoryStateTable))
-    page = await service.opportunities(query)
+    page = await service.get_opportunities(query)
     assert page.items[0].stale
     assert page.items[0].fresh_until == NOW
-    assert (await service.opportunities(query.model_copy(update={"fresh_only": True}))).total == 0
+    assert (
+        await service.get_opportunities(query.model_copy(update={"fresh_only": True}))
+    ).total == 0
 
 
 async def test_material_hub_freshness_does_not_use_product_hub_material_prices(
@@ -846,9 +856,13 @@ async def test_material_hub_freshness_does_not_use_product_hub_material_prices(
         ],
     )
     service = ManufacturingService(repository, SQLHistoryRepository(session), lambda: NOW)
-    assert not (await service.opportunities(ManufacturingQuery(type_ids=[10]))).items[0].stale
+    assert not (await service.get_opportunities(ManufacturingQuery(type_ids=[10]))).items[0].stale
     assert (
-        (await service.opportunities(ManufacturingQuery(type_ids=[10], material_hub_id="amarr")))
+        (
+            await service.get_opportunities(
+                ManufacturingQuery(type_ids=[10], material_hub_id="amarr")
+            )
+        )
         .items[0]
         .stale
     )
@@ -864,8 +878,8 @@ async def test_manual_calculator_accepts_non_mass_production_blueprint(
         market_state(), [price(60, sell_price="30"), price(34, sell_price="3")]
     )
     service = ManufacturingService(repository, SQLHistoryRepository(session), lambda: NOW)
-    assert (await service.opportunities(ManufacturingQuery(type_ids=[60]))).items == []
-    result = await service.calculator(60, CalculatorQuery(manufacturing_runs=2))
+    assert (await service.get_opportunities(ManufacturingQuery(type_ids=[60]))).items == []
+    result = await service.get_calculator_page(60, CalculatorQuery(manufacturing_runs=2))
     assert result.items[0].type_id == 60
     assert result.batch is not None
     assert result.batch.units == 4
@@ -895,13 +909,13 @@ async def test_calculator_refreshes_selected_recipe_and_reuses_fresh_cache(
         repository, SQLHistoryRepository(session), lambda: NOW, sync=sync
     )
     query = CalculatorQuery(facility_tax=Decimal(1), system_cost_index=Decimal(2))
-    result = await service.calculator(type_id, query)
+    result = await service.get_calculator_page(type_id, query)
     if type_id == 10:
         assert result.batch is not None
         assert result.batch.facility_tax == 1
         assert result.batch.system_cost == 2
-    assert (await repository.recipes([type_id]))[type_id].recipe == recipe(type_id=type_id)
-    await service.calculator(type_id, query)
+    assert (await repository.get_recipes([type_id]))[type_id].recipe == recipe(type_id=type_id)
+    await service.get_calculator_page(type_id, query)
     gateway.fetch.assert_awaited_once_with(type_id)
 
 
@@ -915,7 +929,7 @@ async def test_calculator_refreshes_selected_recipe_and_reuses_fresh_cache(
 )
 async def test_calculator_refresh_errors_are_actionable(error: Exception, status: int) -> None:
     service = AsyncMock(spec=ManufacturingService)
-    service.calculator.side_effect = error
+    service.get_calculator_page.side_effect = error
     provider = Provider(scope=Scope.REQUEST)
     provider.provide(lambda: service, provides=ManufacturingService)
     container = make_async_container(provider)

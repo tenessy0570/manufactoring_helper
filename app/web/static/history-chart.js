@@ -58,6 +58,6 @@ window.marketHistoryChartMethods = {
       last = Date.parse(days.at(-1).date),
       target = first + (last - first) * ratio;
     const day = days.reduce((a, b) => Math.abs(Date.parse(a.date) - target) < Math.abs(Date.parse(b.date) - target) ? a : b);
-    this.historyHoverText = day.date + ' | ' + this.fullMoney(day.average) + ' ISK average | ' + Number(day.volume).toLocaleString('en-US') + ' units traded';
+    this.historyHoverText = day.date + ' | ' + this.formatFullMoney(day.average) + ' ISK average | ' + Number(day.volume).toLocaleString('en-US') + ' units traded';
   },
 };

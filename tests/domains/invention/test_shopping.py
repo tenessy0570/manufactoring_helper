@@ -11,14 +11,14 @@ from app.domains.invention.repository import InventionRepository
 from app.domains.invention.shopping import ShoppingService
 from app.domains.manufacturing.repository import ManufacturingRepository
 from app.main import create_app
-from tests.domains.invention.test_invention import plan, settings
+from tests.domains.invention.test_invention import get_plan, settings
 from tests.domains.market.test_market import price
 from tests.helpers import make_settings
 
 
 def market() -> AsyncMock:
     result = AsyncMock(spec=ManufacturingRepository)
-    result.quotes.return_value = {
+    result.get_quotes.return_value = {
         34: price(34, sell_price="100"),
         34201: price(34201, sell_price="1"),
     }
@@ -39,13 +39,13 @@ async def test_ammunition_output_and_whole_successful_copies(
 ) -> None:
     repository = AsyncMock(spec=InventionRepository)
     now = datetime.now(UTC)
-    repository.plan.return_value = PlanState(
+    repository.get_cached_plan.return_value = PlanState(
         key=settings().plan_key,
-        plans=[plan(units_per_run=5000)],
+        plans=[get_plan(units_per_run=5000)],
         synced_at=now,
         expires_at=now + timedelta(days=1),
     )
-    result = await ShoppingService(repository, market()).plan(10, units)
+    result = await ShoppingService(repository, market()).get_shopping_plan(10, units)
     assert result.status == "ready"
     option = result.options[0]
     assert option.runs_per_copy == 10
@@ -56,36 +56,36 @@ async def test_ammunition_output_and_whole_successful_copies(
     assert option.attempts == attempts
     assert option.materials[0].quantity == attempts * 2
     assert result.science_level == result.encryption_level == 2
-    assert option.probability < repository.plan.return_value.plans[0].probability
-    repository.plan.assert_awaited_once_with(settings().plan_key)
+    assert option.probability < repository.get_cached_plan.return_value.plans[0].probability
+    repository.get_cached_plan.assert_awaited_once_with(settings().plan_key)
 
 
 async def test_missing_unsupported_stale_and_decryptor_materials() -> None:
     repository = AsyncMock(spec=InventionRepository)
     service = ShoppingService(repository, market())
-    repository.plan.return_value = None
-    assert (await service.plan(10, 1)).status == "not_prepared"
+    repository.get_cached_plan.return_value = None
+    assert (await service.get_shopping_plan(10, 1)).status == "not_prepared"
     now = datetime.now(UTC)
     state = PlanState(
         key=settings().plan_key, plans=[], synced_at=now, expires_at=now - timedelta(days=1)
     )
-    repository.plan.return_value = state
-    assert (await service.plan(10, 1)).status == "unsupported"
+    repository.get_cached_plan.return_value = state
+    assert (await service.get_shopping_plan(10, 1)).status == "unsupported"
     state.plans = [
-        plan(
+        get_plan(
             decryptor_id=34201,
             decryptor_name="Accelerant",
             materials=[{"type_id": 34, "quantity": 2}, {"type_id": 34201, "quantity": 1}],
         )
     ]
-    result = await service.plan(10, 1)
+    result = await service.get_shopping_plan(10, 1)
     assert result.stale
     assert result.options[0].materials[1].quantity == result.options[0].attempts
 
 
 async def test_shopping_api_and_page() -> None:
     repository = AsyncMock(spec=InventionRepository)
-    repository.plan.return_value = None
+    repository.get_cached_plan.return_value = None
     service = ShoppingService(repository, market())
     provider = Provider(scope=Scope.REQUEST)
     provider.provide(lambda: service, provides=ShoppingService)
@@ -108,11 +108,11 @@ async def test_shopping_api_and_page() -> None:
 async def test_expensive_decryptor_can_reduce_total_invention_budget() -> None:
     repository = AsyncMock(spec=InventionRepository)
     now = datetime.now(UTC)
-    repository.plan.return_value = PlanState(
+    repository.get_cached_plan.return_value = PlanState(
         key=settings().plan_key,
         plans=[
-            plan(),
-            plan(
+            get_plan(),
+            get_plan(
                 decryptor_id=34201,
                 decryptor_name="Accelerant",
                 runs_per_copy=20,
@@ -124,21 +124,21 @@ async def test_expensive_decryptor_can_reduce_total_invention_budget() -> None:
         expires_at=now + timedelta(days=1),
     )
     quotes = market()
-    quotes.quotes.return_value[34201].sell_price = Decimal(100)
+    quotes.get_quotes.return_value[34201].sell_price = Decimal(100)
     service = ShoppingService(repository, quotes)
-    result = await service.plan(10, 1000)
+    result = await service.get_shopping_plan(10, 1000)
     assert result.best is not None
     assert result.best.decryptor_id == 34201
     assert result.best.estimated_cost is not None
     assert result.options[0].estimated_cost is not None
     assert result.best.estimated_cost < result.options[0].estimated_cost
-    quotes.quotes.return_value[34201].sell_price = Decimal(10000)
-    expensive = await service.plan(10, 1000)
+    quotes.get_quotes.return_value[34201].sell_price = Decimal(10000)
+    expensive = await service.get_shopping_plan(10, 1000)
     assert expensive.best is not None
     assert expensive.best.decryptor_id is None
-    quotes.quotes.return_value[34201].sell_price = None
-    partial = await service.plan(10, 1000)
+    quotes.get_quotes.return_value[34201].sell_price = None
+    partial = await service.get_shopping_plan(10, 1000)
     assert not partial.complete_pricing
     assert partial.options[1].missing_prices == [34201]
-    quotes.quotes.return_value = {}
-    assert (await service.plan(10, 1000)).best is None
+    quotes.get_quotes.return_value = {}
+    assert (await service.get_shopping_plan(10, 1000)).best is None

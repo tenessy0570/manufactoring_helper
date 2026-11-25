@@ -46,7 +46,7 @@ def day(days_ago: int = 1, **kwargs: Any) -> HistoryDay:
     )
 
 
-def state(region: int = REGION, type_id: int = 10) -> HistoryState:
+def get_state(region: int = REGION, type_id: int = 10) -> HistoryState:
     return HistoryState(region_id=region, type_id=type_id, synced_at=NOW, expires_at=EXPIRES)
 
 
@@ -71,15 +71,15 @@ async def seed(session: AsyncSession) -> SQLHistoryRepository:
         ]
     )
     repository = SQLHistoryRepository(session)
-    await repository.replace(state(), [day(), day(2), day(20), day(0)])
-    await repository.replace(state(type_id=20), [day(volume=0), day(2, volume=0)])
-    await repository.replace(state(region=10000043), [day(average="100", volume=100)])
+    await repository.replace(get_state(), [day(), day(2), day(20), day(0)])
+    await repository.replace(get_state(type_id=20), [day(volume=0), day(2, volume=0)])
+    await repository.replace(get_state(region=10000043), [day(average="100", volume=100)])
     return repository
 
 
 async def test_liquidity_calendar_window_and_missing_history(session: AsyncSession) -> None:
     repository = await seed(session)
-    values, count = await repository.liquidity(LiquidityQuery(days=2), NOW)
+    values, count = await repository.get_liquidity(LiquidityQuery(days=2), NOW)
     assert count == 3
     assert values[0].data_days == 2
     assert values[0].daily_units == Decimal(20)
@@ -87,10 +87,10 @@ async def test_liquidity_calendar_window_and_missing_history(session: AsyncSessi
     assert values[1].daily_units == 0
     assert values[2].data_days == 0
     assert values[2].daily_isk_volume is None
-    values, _ = await repository.liquidity(LiquidityQuery(days=4, type_ids=[10]), NOW)
+    values, _ = await repository.get_liquidity(LiquidityQuery(days=4, type_ids=[10]), NOW)
     assert values[0].daily_units == Decimal(10)
     assert values[0].daily_isk_volume == Decimal("102.5")
-    values, _ = await repository.liquidity(
+    values, _ = await repository.get_liquidity(
         LiquidityQuery(hub_id="amarr", days=2, type_ids=[10]), NOW
     )
     assert values[0].daily_isk_volume == Decimal(5000)
@@ -118,24 +118,24 @@ async def test_liquidity_calendar_window_and_missing_history(session: AsyncSessi
 )
 async def test_filters(session: AsyncSession, kwargs: dict[str, Any], ids: list[int]) -> None:
     repository = await seed(session)
-    values, total = await repository.liquidity(LiquidityQuery(days=2, **kwargs), NOW)
+    values, total = await repository.get_liquidity(LiquidityQuery(days=2, **kwargs), NOW)
     assert [value.type_id for value in values] == ids
     assert total == (3 if "offset" in kwargs else len(ids))
 
 
 async def test_replace_series_hub_isolation_and_rollback(session: AsyncSession) -> None:
     repository = SQLHistoryRepository(session)
-    assert await repository.state(REGION, 10) is None
-    await repository.replace(state(), [day(number) for number in range(1, 206)])
-    await repository.replace(state(region=10000043), [day()])
+    assert await repository.get_state(REGION, 10) is None
+    await repository.replace(get_state(), [day(number) for number in range(1, 206)])
+    await repository.replace(get_state(region=10000043), [day()])
     await session.commit()
-    assert await repository.state(REGION, 10) == state()
-    assert len(await repository.series(REGION, 10, date(2020, 1, 1), NOW.date())) == 205
-    await repository.replace(state(), [])
-    assert await repository.series(REGION, 10, date(2020, 1, 1), NOW.date()) == []
+    assert await repository.get_state(REGION, 10) == get_state()
+    assert len(await repository.get_history_series(REGION, 10, date(2020, 1, 1), NOW.date())) == 205
+    await repository.replace(get_state(), [])
+    assert await repository.get_history_series(REGION, 10, date(2020, 1, 1), NOW.date()) == []
     await session.rollback()
-    assert len(await repository.series(REGION, 10, date(2020, 1, 1), NOW.date())) == 205
-    assert len(await repository.series(10000043, 10, date(2020, 1, 1), NOW.date())) == 1
+    assert len(await repository.get_history_series(REGION, 10, date(2020, 1, 1), NOW.date())) == 205
+    assert len(await repository.get_history_series(10000043, 10, date(2020, 1, 1), NOW.date())) == 1
 
 
 @pytest.mark.parametrize(
@@ -155,16 +155,18 @@ class FakeRepository(HistoryRepository):
         self.current: HistoryState | None = None
         self.days: list[HistoryDay] = []
 
-    async def state(self, region_id: int, type_id: int) -> HistoryState | None:
+    async def get_state(self, region_id: int, type_id: int) -> HistoryState | None:
         return self.current
 
-    async def due(self, region_id: int, type_ids: Sequence[int], now: datetime) -> set[int]:
+    async def find_due_type_ids(
+        self, region_id: int, type_ids: Sequence[int], now: datetime
+    ) -> set[int]:
         return set(type_ids)
 
     async def replace(self, snapshot: HistoryState, days: Sequence[HistoryDay]) -> None:
         self.current, self.days = snapshot, list(days)
 
-    async def series(
+    async def get_history_series(
         self, region_id: int, type_id: int, start: date, end: date
     ) -> list[HistoryDay]:
         return [value for value in self.days if start <= value.date <= end]
@@ -174,10 +176,10 @@ class FakeRepository(HistoryRepository):
         self.days = [day for day in self.days if day.date >= cutoff]
         return before - len(self.days)
 
-    async def candidates(self, query: LiquidityQuery, now: datetime) -> list[LiquidityItem]:
+    async def find_candidates(self, query: LiquidityQuery, now: datetime) -> list[LiquidityItem]:
         return []
 
-    async def liquidity(self, query: LiquidityQuery, now: Any) -> tuple[list[Any], int]:
+    async def get_liquidity(self, query: LiquidityQuery, now: Any) -> tuple[list[Any], int]:
         return [], 0
 
 
@@ -185,14 +187,14 @@ async def test_sync_skips_fresh_filters_today_and_handles_empty() -> None:
     repository = FakeRepository()
     gateway = AsyncMock(spec=HistoryGateway)
     gateway.fetch.return_value = HistoryDownload(days=[day(), day(0)], expires_at=EXPIRES)
-    uow = AsyncMock(spec=SQLAlchemyUnitOfWork)
-    service = HistorySyncService(repository, gateway, uow, lambda: NOW)
+    unit_of_work = AsyncMock(spec=SQLAlchemyUnitOfWork)
+    service = HistorySyncService(repository, gateway, unit_of_work, lambda: NOW)
     assert await service.sync_if_stale(REGION, 10)
     assert repository.days == [day()]
     assert not await service.sync_if_stale(REGION, 10)
     gateway.fetch.assert_awaited_once_with(REGION, 10)
     gateway.fetch.return_value = HistoryDownload(days=[], expires_at=EXPIRES + timedelta(days=1))
-    service = HistorySyncService(repository, gateway, uow, lambda: EXPIRES)
+    service = HistorySyncService(repository, gateway, unit_of_work, lambda: EXPIRES)
     assert await service.sync_if_stale(REGION, 10)
     assert repository.days == []
     assert not await service.sync_if_stale(REGION, 10)
@@ -203,25 +205,25 @@ async def test_download_failure_preserves_data_and_write_failure_rolls_back() ->
     repository.days = [day()]
     gateway = AsyncMock(spec=HistoryGateway)
     gateway.fetch.side_effect = ConnectionError("offline")
-    uow = AsyncMock(spec=SQLAlchemyUnitOfWork)
-    service = HistorySyncService(repository, gateway, uow)
+    unit_of_work = AsyncMock(spec=SQLAlchemyUnitOfWork)
+    service = HistorySyncService(repository, gateway, unit_of_work)
     with pytest.raises(ConnectionError, match="offline"):
         await service.sync_if_stale(REGION, 10)
     assert repository.days == [day()]
-    uow.commit.assert_not_awaited()
+    unit_of_work.commit.assert_not_awaited()
     gateway.fetch.side_effect = None
     gateway.fetch.return_value = HistoryDownload(days=[day()], expires_at=EXPIRES)
-    uow.commit.side_effect = RuntimeError("write failed")
+    unit_of_work.commit.side_effect = RuntimeError("write failed")
     with pytest.raises(RuntimeError, match="write failed"):
         await service.sync_if_stale(REGION, 10)
-    uow.rollback.assert_awaited_once()
+    unit_of_work.rollback.assert_awaited_once()
 
 
 async def test_services_and_api(session: AsyncSession) -> None:
     repository = await seed(session)
     service = HistoryService(repository, lambda: NOW)
-    assert not (await service.series("jita", 10, 2)).stale
-    assert (await service.series("jita", 30, 2)).stale
+    assert not (await service.get_history_series("jita", 10, 2)).stale
+    assert (await service.get_history_series("jita", 30, 2)).stale
     provider = Provider(scope=Scope.REQUEST)
     provider.provide(lambda: service, provides=HistoryService)
     container = make_async_container(provider)
@@ -295,7 +297,7 @@ async def test_history_due_and_restarted_sync_follow_saved_daily_timestamp(
 ) -> None:
     repository = SQLHistoryRepository(session)
     await repository.replace(
-        state().model_copy(update={"expires_at": NOW + timedelta(hours=1)}), []
+        get_state().model_copy(update={"expires_at": NOW + timedelta(hours=1)}), []
     )
     await session.commit()
     async with AsyncSession(session.bind) as second:
@@ -303,20 +305,20 @@ async def test_history_due_and_restarted_sync_follow_saved_daily_timestamp(
         gateway = AsyncMock(spec=HistoryGateway)
         gateway.fetch.return_value = HistoryDownload(days=[], expires_at=NOW + timedelta(days=2))
         almost = NOW + timedelta(hours=23, minutes=59)
-        assert await restored.due(REGION, [10, 20], almost) == {20}
-        assert await restored.due(REGION + 1, [10], almost) == {10}
-        assert await restored.due(REGION, [], almost) == set()
+        assert await restored.find_due_type_ids(REGION, [10, 20], almost) == {20}
+        assert await restored.find_due_type_ids(REGION + 1, [10], almost) == {10}
+        assert await restored.find_due_type_ids(REGION, [], almost) == set()
         service = HistorySyncService(
             restored, gateway, SQLAlchemyUnitOfWork(second), lambda: almost
         )
         assert not await service.sync_if_stale(REGION, 10)
         gateway.fetch.assert_not_awaited()
         deadline = NOW + timedelta(days=1)
-        assert await restored.due(REGION, [10], deadline) == {10}
+        assert await restored.find_due_type_ids(REGION, [10], deadline) == {10}
         service = HistorySyncService(
             restored, gateway, SQLAlchemyUnitOfWork(second), lambda: deadline
         )
         assert await service.sync_if_stale(REGION, 10)
-        saved = await restored.state(REGION, 10)
+        saved = await restored.get_state(REGION, 10)
         assert saved is not None
         assert saved.synced_at == deadline

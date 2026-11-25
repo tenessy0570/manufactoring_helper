@@ -8,6 +8,7 @@ from app.domains.invention.models import (
     InventionSettings,
     PricedOption,
 )
+from app.domains.market.enums import OrderSide
 from app.domains.market.models import MarketPrice
 
 
@@ -24,7 +25,7 @@ def price_plans(
                 None
                 if quote is None
                 else quote.buy_price
-                if settings.order_type == "buy"
+                if settings.order_type == OrderSide.BUY.value
                 else quote.sell_price
             )
             if price is None or price <= 0:

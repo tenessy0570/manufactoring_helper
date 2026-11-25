@@ -64,7 +64,7 @@ def price(type_id: int = 10, **kwargs: Any) -> MarketPrice:
     )
 
 
-def state(hub_id: HubId = "jita", items: int = 1) -> MarketState:
+def get_state(hub_id: HubId = "jita", items: int = 1) -> MarketState:
     return MarketState(hub_id=hub_id, synced_at=NOW, expires_at=EXPIRES, items=items)
 
 
@@ -73,7 +73,7 @@ class FakeRepository(MarketRepository):
         self.states: dict[HubId, MarketState] = {}
         self.prices: dict[HubId, list[MarketPrice]] = {}
 
-    async def state(self, hub_id: HubId) -> MarketState | None:
+    async def get_state(self, hub_id: HubId) -> MarketState | None:
         return self.states.get(hub_id)
 
     async def replace(self, snapshot: MarketState, prices: Sequence[MarketPrice]) -> None:
@@ -136,42 +136,44 @@ def test_best_price_aggregation_and_exact_decimal_volume() -> None:
 
 async def test_sync_streams_pages_and_skips_until_expiry() -> None:
     repository, gateway = FakeRepository(), FakeGateway()
-    uow = AsyncMock(spec=SQLAlchemyUnitOfWork)
-    service = MarketSyncService(repository, gateway, uow, lambda: NOW)
+    unit_of_work = AsyncMock(spec=SQLAlchemyUnitOfWork)
+    service = MarketSyncService(repository, gateway, unit_of_work, lambda: NOW)
     report = await service.sync_if_stale("jita")
     assert report.pages == 2
     assert gateway.calls == [(10000002, 1), (10000002, 2)]
     assert repository.prices["jita"][0].sell_price == Decimal("9.10")
     assert repository.states["jita"].expires_at == EXPIRES - timedelta(seconds=10)
     assert (await service.sync_if_stale("jita")).skipped
-    uow.commit.assert_awaited_once()
+    unit_of_work.commit.assert_awaited_once()
     assert (await MarketService(repository).find(PriceQuery())).stale
 
 
 @pytest.mark.parametrize("change_pages", [False, True])
 async def test_failed_page_preserves_previous_snapshot(change_pages: bool) -> None:
     repository = FakeRepository()
-    await repository.replace(state(), [price()])
-    uow = AsyncMock(spec=SQLAlchemyUnitOfWork)
-    service = MarketSyncService(repository, FakeGateway(not change_pages, change_pages), uow)
+    await repository.replace(get_state(), [price()])
+    unit_of_work = AsyncMock(spec=SQLAlchemyUnitOfWork)
+    service = MarketSyncService(
+        repository, FakeGateway(not change_pages, change_pages), unit_of_work
+    )
     with pytest.raises((ValueError, ConnectionError), match=r"page failed|pagination changed"):
         await service.sync("jita")
     assert repository.prices["jita"] == [price()]
-    uow.commit.assert_not_awaited()
+    unit_of_work.commit.assert_not_awaited()
 
 
 async def test_write_failure_rolls_back() -> None:
-    uow = AsyncMock(spec=SQLAlchemyUnitOfWork)
-    uow.commit.side_effect = RuntimeError("failed commit")
-    service = MarketSyncService(FakeRepository(), FakeGateway(), uow)
+    unit_of_work = AsyncMock(spec=SQLAlchemyUnitOfWork)
+    unit_of_work.commit.side_effect = RuntimeError("failed commit")
+    service = MarketSyncService(FakeRepository(), FakeGateway(), unit_of_work)
     with pytest.raises(RuntimeError, match="failed commit"):
         await service.sync("jita")
-    uow.rollback.assert_awaited_once()
+    unit_of_work.rollback.assert_awaited_once()
 
 
 async def test_empty_hub_snapshot_is_saved_and_skipped_until_expiry() -> None:
     repository = FakeRepository()
-    await repository.replace(state("amarr"), [price(hub_id="amarr")])
+    await repository.replace(get_state("amarr"), [price(hub_id="amarr")])
     gateway = FakeGateway()
     service = MarketSyncService(
         repository, gateway, AsyncMock(spec=SQLAlchemyUnitOfWork), lambda: NOW
@@ -185,7 +187,7 @@ async def test_empty_hub_snapshot_is_saved_and_skipped_until_expiry() -> None:
 
 async def test_expired_hub_is_refreshed() -> None:
     repository, gateway = FakeRepository(), FakeGateway()
-    await repository.replace(state(), [price()])
+    await repository.replace(get_state(), [price()])
     service = MarketSyncService(
         repository,
         gateway,
@@ -208,21 +210,21 @@ async def session() -> AsyncIterator[AsyncSession]:
 
 async def test_snapshot_replacement_hub_isolation_and_rollback(session: AsyncSession) -> None:
     repository = SQLMarketRepository(session)
-    assert await repository.state("jita") is None
-    await repository.replace(state(), [price()])
-    await repository.replace(state("amarr"), [price(hub_id="amarr")])
+    assert await repository.get_state("jita") is None
+    await repository.replace(get_state(), [price()])
+    await repository.replace(get_state("amarr"), [price(hub_id="amarr")])
     await session.commit()
-    assert await repository.state("jita") == state()
-    await repository.replace(state(items=205), [price(number) for number in range(205)])
+    assert await repository.get_state("jita") == get_state()
+    await repository.replace(get_state(items=205), [price(number) for number in range(205)])
     await session.commit()
     assert await repository.count(PriceQuery(), NOW) == 205
-    await repository.replace(state(items=0), [])
+    await repository.replace(get_state(items=0), [])
     assert await repository.count(PriceQuery(), NOW) == 0
     assert await repository.count(PriceQuery(hub_id="amarr"), NOW) == 1
     await session.rollback()
     assert await repository.count(PriceQuery(), NOW) == 205
     with pytest.raises(ValueError, match="different hub"):
-        await repository.replace(state(), [price(hub_id="amarr")])
+        await repository.replace(get_state(), [price(hub_id="amarr")])
 
 
 @pytest.mark.parametrize(
@@ -249,7 +251,7 @@ async def test_snapshot_replacement_hub_isolation_and_rollback(session: AsyncSes
 async def test_price_filters(session: AsyncSession, kwargs: dict[str, Any], ids: list[int]) -> None:
     repository = SQLMarketRepository(session)
     await repository.replace(
-        state(items=2),
+        get_state(items=2),
         [
             price(),
             price(
@@ -285,7 +287,7 @@ def test_inverted_ranges_rejected(kwargs: dict[str, Any]) -> None:
 
 async def test_api_hub_selection_and_validation() -> None:
     repository = FakeRepository()
-    await repository.replace(state("amarr"), [price(hub_id="amarr")])
+    await repository.replace(get_state("amarr"), [price(hub_id="amarr")])
     provider = Provider(scope=Scope.REQUEST)
     provider.provide(lambda: MarketService(repository), provides=MarketService)
     container = make_async_container(provider)
@@ -340,12 +342,12 @@ async def test_pagination_drift_restarts_without_mixing_snapshots() -> None:
 
     gateway.get_orders = changing  # type: ignore[method-assign]
     repository = FakeRepository()
-    uow = AsyncMock(spec=SQLAlchemyUnitOfWork)
-    report = await MarketSyncService(repository, gateway, uow, lambda: NOW).sync("jita")
+    unit_of_work = AsyncMock(spec=SQLAlchemyUnitOfWork)
+    report = await MarketSyncService(repository, gateway, unit_of_work, lambda: NOW).sync("jita")
     assert calls == 4
     assert report.pages == 2
     assert repository.prices["jita"][0].sell_volume == 5
-    uow.commit.assert_awaited_once()
+    unit_of_work.commit.assert_awaited_once()
 
 
 async def test_buy_levels_aggregate_and_round_trip_without_raw_orders(
@@ -373,7 +375,7 @@ async def test_buy_levels_aggregate_and_round_trip_without_raw_orders(
         (Decimal("94.99"), 200, 1),
     ]
     repository = SQLMarketRepository(session)
-    await repository.replace(state(), [result])
+    await repository.replace(get_state(), [result])
     await session.commit()
     stored = (await repository.find(PriceQuery(), NOW))[0]
     assert stored.sell_levels == result.sell_levels
@@ -391,14 +393,16 @@ async def test_restarted_market_service_waits_twenty_minutes_despite_esi_cache_e
     minutes: int,
 ) -> None:
     repository, gateway = FakeRepository(), FakeGateway()
-    await repository.replace(state(), [price()])
-    uow = AsyncMock(spec=SQLAlchemyUnitOfWork)
+    await repository.replace(get_state(), [price()])
+    unit_of_work = AsyncMock(spec=SQLAlchemyUnitOfWork)
     restarted = MarketSyncService(
-        repository, gateway, uow, lambda: NOW + timedelta(minutes=minutes)
+        repository, gateway, unit_of_work, lambda: NOW + timedelta(minutes=minutes)
     )
     assert (await restarted.sync_if_stale("jita")).skipped
     assert gateway.calls == []
-    restarted = MarketSyncService(repository, gateway, uow, lambda: NOW + timedelta(minutes=20))
+    restarted = MarketSyncService(
+        repository, gateway, unit_of_work, lambda: NOW + timedelta(minutes=20)
+    )
     assert not (await restarted.sync_if_stale("jita")).skipped
     assert repository.states["jita"].synced_at == NOW + timedelta(minutes=20)
 

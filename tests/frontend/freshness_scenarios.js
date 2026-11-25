@@ -8,7 +8,7 @@ async function checkFreshnessHeader(){
   };
   try{
     await a.refresh();await a.$nextTick();
-    if(a.age(new Date(a.now-(3*1440+20*60+13)*60000).toISOString())!=='3d 20h 13m')throw Error('Day/hour/minute formatting');
+    if(a.formatAge(new Date(a.now-(3*1440+20*60+13)*60000).toISOString())!=='3d 20h 13m')throw Error('Day/hour/minute formatting');
     if(a.error||header.querySelectorAll('.freshness-source').length!==4)throw Error('Freshness sources missing');
     if(!a.text(a.sources[1]).includes('partial')||!a.text(a.sources[3]).includes('due')||!a.text(a.sources[2]).includes('no data'))throw Error('Freshness status misleading');
     if(a.percentage(a.sources[0])!=='100%'||a.percentage(a.sources[1])!=='50%'||a.percentage(a.sources[2])!=='--'||a.percentage(a.sources[3])!=='0%')throw Error('Freshness percentages incorrect');

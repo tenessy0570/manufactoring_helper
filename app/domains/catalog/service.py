@@ -36,12 +36,12 @@ class CatalogSyncService:
     ) -> None:
         self._repository = repository
         self._gateway = gateway
-        self._uow = unit_of_work
+        self._unit_of_work = unit_of_work
         self._selector = selector
         self._clock = clock
 
     async def sync_if_stale(self, max_age: timedelta) -> CatalogSyncReport:
-        latest = await self._repository.latest_synced_at()
+        latest = await self._repository.get_latest_sync_time()
         if latest is not None and self._clock() - latest < max_age:
             return CatalogSyncReport(skipped=True)
         return await self.sync()
@@ -88,9 +88,9 @@ class CatalogSyncService:
         try:
             await self._repository.upsert_many(items)
             await self._repository.deactivate_before(synced_at)
-            await self._uow.commit()
+            await self._unit_of_work.commit()
         except BaseException:
-            await self._uow.rollback()
+            await self._unit_of_work.rollback()
             raise
         return CatalogSyncReport(
             items=len(items), missing_metadata=sum(item.meta_group_id is None for item in items)

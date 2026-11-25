@@ -19,7 +19,7 @@ from app.infrastructure.everef import EverefClient
 
 class CatalogProvider(Provider):
     @provide(scope=Scope.APP)
-    async def esi(self, settings: Settings) -> AsyncIterator[EsiClient]:
+    async def provide_esi_client(self, settings: Settings) -> AsyncIterator[EsiClient]:
         async with httpx.AsyncClient(
             base_url=settings.esi_base_url,
             timeout=settings.http_timeout_seconds,
@@ -33,7 +33,7 @@ class CatalogProvider(Provider):
             )
 
     @provide(scope=Scope.APP)
-    async def everef(self, settings: Settings) -> AsyncIterator[EverefClient]:
+    async def provide_everef_client(self, settings: Settings) -> AsyncIterator[EverefClient]:
         async with httpx.AsyncClient(
             base_url=settings.everef_base_url,
             timeout=settings.http_timeout_seconds,
@@ -42,17 +42,17 @@ class CatalogProvider(Provider):
             yield EverefClient(http, settings.everef_max_concurrency, settings.http_max_retries)
 
     @provide(scope=Scope.APP)
-    def gateway(self, esi: EsiClient, everef: EverefClient) -> CatalogGateway:
+    def provide_gateway(self, esi: EsiClient, everef: EverefClient) -> CatalogGateway:
         return EsiEverefCatalogGateway(esi, everef)
 
     selector = provide(MarketTreeSelector, scope=Scope.APP)
 
     @provide(scope=Scope.REQUEST)
-    def repository(self, session: AsyncSession) -> ItemTypeRepository:
+    def provide_repository(self, session: AsyncSession) -> ItemTypeRepository:
         return SQLItemTypeRepository(session)
 
     @provide(scope=Scope.APP)
-    def names(
+    def provide_item_names_service(
         self, gateway: CatalogGateway, cache: CacheService, settings: Settings
     ) -> ItemNameService:
         return ItemNameService(gateway, cache, settings.item_names_cache_seconds)
@@ -60,7 +60,7 @@ class CatalogProvider(Provider):
     service = provide(CatalogService, scope=Scope.REQUEST)
 
     @provide(scope=Scope.REQUEST)
-    def sync_service(
+    def provide_sync_service(
         self,
         repository: ItemTypeRepository,
         gateway: CatalogGateway,

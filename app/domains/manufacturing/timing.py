@@ -1,13 +1,14 @@
 from decimal import ROUND_CEILING, Decimal
 
 from app.domains.invention.models import InventionPlan
-from app.domains.manufacturing.demand import estimate_buy_demand, invention_daily_profit
+from app.domains.manufacturing.demand import calculate_invention_daily_profit, estimate_buy_demand
 from app.domains.manufacturing.models import (
     BuyDemandEstimate,
     ManufacturingQuery,
     OpportunityTiming,
     ProfitCalculation,
 )
+from app.domains.market.enums import OrderSide
 from app.domains.market.models import MarketPrice
 
 
@@ -28,7 +29,7 @@ def calculate_timing(
             / query.invention_slots
         )
     daily_production_units = Decimal(calculated.units) * 86400 / seconds_per_run
-    is_buy = query.product_order_type == "buy"
+    is_buy = query.product_order_type == OrderSide.BUY.value
     limited_daily_profit = demand.daily_profit if demand else None
     if (
         (query.include_invention_time or query.include_copying_time)
@@ -37,7 +38,7 @@ def calculate_timing(
         and demand.full_runs
     ):
         daily_without_invention = demand.daily_profit
-        total_daily = invention_daily_profit(
+        total_daily = calculate_invention_daily_profit(
             demand.profit,
             demand.full_runs,
             calculated.seconds,
@@ -48,7 +49,7 @@ def calculate_timing(
             query.invention_slots,
             cap_to_day=False,
         )
-        production_daily = invention_daily_profit(
+        production_daily = calculate_invention_daily_profit(
             demand.profit,
             demand.full_runs,
             calculated.seconds,

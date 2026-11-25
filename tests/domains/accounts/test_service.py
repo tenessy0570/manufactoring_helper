@@ -22,7 +22,7 @@ class MemoryAccounts(AccountRepository):
     async def find(self) -> list[StoredUser]:
         return list(self.users.values())
 
-    async def by_username(self, username: str) -> StoredUser | None:
+    async def get_by_username(self, username: str) -> StoredUser | None:
         return next((user for user in self.users.values() if user.username == username), None)
 
     async def get(self, user_id: UUID) -> StoredUser | None:
@@ -31,7 +31,7 @@ class MemoryAccounts(AccountRepository):
     async def save(self, user: StoredUser) -> None:
         self.users[user.id] = user.model_copy(deep=True)
 
-    async def session_user(self, token_hash: str, now: datetime) -> StoredUser | None:
+    async def get_session_user(self, token_hash: str, now: datetime) -> StoredUser | None:
         session = self.sessions.get(token_hash)
         user = self.users.get(session[0]) if session else None
         return user if session and session[1] > now and user and user.is_active else None
@@ -48,8 +48,8 @@ class MemoryAccounts(AccountRepository):
 
 async def test_service_uses_opaque_revocable_sessions_and_uow() -> None:
     repository = MemoryAccounts()
-    uow = AsyncMock(spec=UnitOfWork)
-    service = AccountService(repository, uow, Limiter())
+    unit_of_work = AsyncMock(spec=UnitOfWork)
+    service = AccountService(repository, unit_of_work, Limiter())
     user = await service.create(
         UserCreate.model_validate({"username": "example", "password": PASSWORD})
     )
@@ -58,13 +58,13 @@ async def test_service_uses_opaque_revocable_sessions_and_uow() -> None:
     )
     assert token not in repository.sessions
     assert "password_hash" not in user.model_dump()
-    assert await service.identity(token) == user
-    assert uow.commit.await_count == 2
+    assert await service.get_session_user(token) == user
+    assert unit_of_work.commit.await_count == 2
     await service.logout(token)
-    assert await service.identity(token) is None
-    uow.commit.side_effect = RuntimeError("commit failed")
+    assert await service.get_session_user(token) is None
+    unit_of_work.commit.side_effect = RuntimeError("commit failed")
     with pytest.raises(RuntimeError, match="commit failed"):
         await service.create(
             UserCreate.model_validate({"username": "another", "password": PASSWORD})
         )
-    uow.rollback.assert_awaited_once()
+    unit_of_work.rollback.assert_awaited_once()

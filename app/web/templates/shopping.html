@@ -190,7 +190,7 @@
                                   @error="$el.style.visibility='hidden'"
                                 >
                                 <div>
-                                  <strong x-text="name(selected.source_blueprint_id)"></strong>
+                                  <strong x-text="getItemName(selected.source_blueprint_id)"></strong>
                                   <div class="muted">T1 BPC licensed runs</div>
                                 </div>
                               </div>
@@ -207,7 +207,7 @@
                                     loading="lazy"
                                     @error="$el.style.visibility='hidden'"
                                   >
-                                  <span x-text="name(material.type_id)"></span>
+                                  <span x-text="getItemName(material.type_id)"></span>
                                 </div>
                               </td>
                               <td x-text="material.quantity.toLocaleString('en-US')"></td>

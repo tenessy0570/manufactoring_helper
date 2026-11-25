@@ -9,7 +9,7 @@ from app.infrastructure.http.client import Sleep
 ESI_DAY_OFFSET = timedelta(hours=11)  # the ESI date rolls over at 11:00 UTC
 
 
-def current_compatibility_date(now: datetime) -> str:
+def get_current_compatibility_date(now: datetime) -> str:
     return (now.astimezone(UTC) - ESI_DAY_OFFSET).date().isoformat()
 
 
@@ -19,7 +19,7 @@ def make_compatibility_date_provider(
     """Returns a pinned date when configured, otherwise today's ESI date at call time."""
     if configured:
         return lambda: configured
-    return lambda: current_compatibility_date(clock())
+    return lambda: get_current_compatibility_date(clock())
 
 
 class EsiClient(ResilientHttpClient):
@@ -47,10 +47,10 @@ class EsiClient(ResilientHttpClient):
             super().__init__(http, max_concurrency, max_retries, sleep)
         self._compatibility_date = compatibility_date
 
-    def _extra_headers(self) -> Mapping[str, str]:
+    def _build_extra_headers(self) -> Mapping[str, str]:
         return {"X-Compatibility-Date": self._compatibility_date()}
 
-    async def _on_response(self, response: httpx.Response) -> None:
+    async def _handle_response(self, response: httpx.Response) -> None:
         tokens_low = self._is_running_low(
             response, "X-Ratelimit-Remaining", self.LOW_TOKENS_THRESHOLD
         )

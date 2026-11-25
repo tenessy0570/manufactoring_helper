@@ -76,14 +76,14 @@
       </details>
       {% include "production/purchase_list.html" %}
       <div class="shopping-stats production-totals">
-        <div class="expense-card"><span>Total expenses</span><strong x-text="money(selected.totals.cost)+' ISK'"></strong></div>
-        <div class="income-card"><span>Received from sales</span><strong x-text="money(selected.totals.income)+' ISK'"></strong></div>
+        <div class="expense-card"><span>Total expenses</span><strong x-text="formatMoney(selected.totals.cost)+' ISK'"></strong></div>
+        <div class="income-card"><span>Received from sales</span><strong x-text="formatMoney(selected.totals.income)+' ISK'"></strong></div>
         <div
           :class="Number(selected.totals.balance)<0?'expense-card':'income-card'"
         >
           <span>Cash balance</span><strong
             :class="{'production-loss':Number(selected.totals.balance)<0}"
-            x-text="money(selected.totals.balance)+' ISK'"
+            x-text="formatMoney(selected.totals.balance)+' ISK'"
           ></strong>
         </div>
         <div><span>Return on recorded costs</span><strong
@@ -112,12 +112,12 @@
                   <span
                     class="production-kind"
                     :class="item.kind+'-tone'"
-                    x-text="label(item.kind)"
+                    x-text="getEntryLabel(item.kind)"
                   ></span>
                 </td>
                 <td
                   :class="item.kind+'-tone'"
-                  x-text="(item.kind==='income'?'+':'-')+money(item.amount)"
+                  x-text="(item.kind==='income'?'+':'-')+formatMoney(item.amount)"
                 ></td>
                 <td class="production-comment" x-text="item.comment"></td>
                 <td>

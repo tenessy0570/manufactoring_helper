@@ -38,7 +38,7 @@ class SessionAuthMiddleware(BaseHTTPMiddleware):
         user = None
         if token and len(token) <= 128:
             async with self.container() as scope:
-                user = await (await scope.get(AccountService)).identity(token)
+                user = await (await scope.get(AccountService)).get_session_user(token)
         if user is None:
             if path.startswith("/api/") or path.startswith("/health/"):
                 return JSONResponse({"detail": "Login required"}, status_code=401)

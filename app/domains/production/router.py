@@ -67,7 +67,7 @@ async def delete(
 async def add_entry(
     production_id: UUID, data: EntryInput, request: Request, service: FromDishka[ProductionService]
 ) -> Production:
-    return await service.entry(request.state.user.id, production_id, data)
+    return await service.save_entry(request.state.user.id, production_id, data)
 
 
 @router.put("/{production_id}/entries/{entry_id}")
@@ -78,7 +78,7 @@ async def edit_entry(
     request: Request,
     service: FromDishka[ProductionService],
 ) -> Production:
-    return await service.entry(request.state.user.id, production_id, data, entry_id)
+    return await service.save_entry(request.state.user.id, production_id, data, entry_id)
 
 
 @router.delete("/{production_id}/entries/{entry_id}")
@@ -88,21 +88,21 @@ async def delete_entry(
     return await service.delete_entry(request.state.user.id, production_id, entry_id)
 
 
-@router.post("/{production_id}/estimate")
-async def estimate(
+@router.post("/{production_id}/estimate", name="estimate")
+async def estimate_cost(
     production_id: UUID,
     data: EstimateInput,
     request: Request,
     service: FromDishka[ProductionEstimateService],
 ) -> Estimate:
-    return await service.estimate(request.state.user.id, production_id, data)
+    return await service.estimate_cost(request.state.user.id, production_id, data)
 
 
-@router.post("/{production_id}/purchase-list")
-async def purchase_list(
+@router.post("/{production_id}/purchase-list", name="purchase_list")
+async def get_purchase_list(
     production_id: UUID,
     data: PurchaseListInput,
     request: Request,
     service: FromDishka[ProductionEstimateService],
 ) -> ProductionPurchaseList:
-    return await service.purchase_list(request.state.user.id, production_id, data)
+    return await service.get_purchase_list(request.state.user.id, production_id, data)

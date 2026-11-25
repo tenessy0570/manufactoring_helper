@@ -12,7 +12,7 @@ from app.core.config import RefreshPolicy, get_settings
 from app.core.di import create_container
 from app.core.logging import configure_logging
 from app.domains.catalog.service import CatalogSyncService
-from app.domains.history.retention import retention_cutoff
+from app.domains.history.retention import get_retention_cutoff
 from app.domains.history.service import HistorySyncService
 from app.domains.market.models import HUBS
 from app.domains.market.service import MarketSyncService
@@ -82,7 +82,7 @@ async def sync_markets(ctx: dict[str, Any]) -> list[dict[str, Any]]:
 async def prune_history(ctx: dict[str, Any]) -> dict[str, Any]:
     container: AsyncContainer = ctx["container"]
     policy = await container.get(RefreshPolicy)
-    cutoff = retention_cutoff(datetime.now(UTC), policy.history_retention_months)
+    cutoff = get_retention_cutoff(datetime.now(UTC), policy.history_retention_months)
     stamp = cutoff.isoformat()
     redis = ctx["redis"]
     key = "history:retention:last_cutoff"

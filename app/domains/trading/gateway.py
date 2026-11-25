@@ -6,14 +6,14 @@ from app.infrastructure.everef import EverefClient
 
 class TradingGateway(ABC):
     @abstractmethod
-    async def type_details(self, type_id: int) -> TradeTypeDetails: ...
+    async def get_type_details(self, type_id: int) -> TradeTypeDetails: ...
 
 
 class EverefTradingGateway(TradingGateway):
     def __init__(self, everef: EverefClient) -> None:
         self._everef = everef
 
-    async def type_details(self, type_id: int) -> TradeTypeDetails:
+    async def get_type_details(self, type_id: int) -> TradeTypeDetails:
         data = await self._everef.get_json(f"/types/{type_id}")
         name = data.get("name")
         if isinstance(name, dict):

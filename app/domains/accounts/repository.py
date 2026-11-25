@@ -21,13 +21,13 @@ class AccountRepository(ABC):
     @abstractmethod
     async def find(self) -> list[StoredUser]: ...
     @abstractmethod
-    async def by_username(self, username: str) -> StoredUser | None: ...
+    async def get_by_username(self, username: str) -> StoredUser | None: ...
     @abstractmethod
     async def get(self, user_id: UUID) -> StoredUser | None: ...
     @abstractmethod
     async def save(self, user: StoredUser) -> None: ...
     @abstractmethod
-    async def session_user(self, token_hash: str, now: datetime) -> StoredUser | None: ...
+    async def get_session_user(self, token_hash: str, now: datetime) -> StoredUser | None: ...
     @abstractmethod
     async def create_session(self, token_hash: str, user_id: UUID, expires: datetime) -> None: ...
     @abstractmethod
@@ -52,7 +52,7 @@ class SQLAccountRepository(AccountRepository):
         rows = await self._session.scalars(select(UserTable).order_by(UserTable.username))
         return [StoredUser.model_validate(row, from_attributes=True) for row in rows]
 
-    async def by_username(self, username: str) -> StoredUser | None:
+    async def get_by_username(self, username: str) -> StoredUser | None:
         row = await self._session.scalar(select(UserTable).where(UserTable.username == username))
         return None if row is None else StoredUser.model_validate(row, from_attributes=True)
 
@@ -67,7 +67,7 @@ class SQLAccountRepository(AccountRepository):
         except IntegrityError as error:
             raise DuplicateUsernameError from error
 
-    async def session_user(self, token_hash: str, now: datetime) -> StoredUser | None:
+    async def get_session_user(self, token_hash: str, now: datetime) -> StoredUser | None:
         row = await self._session.scalar(
             select(UserTable)
             .join(SessionTable)

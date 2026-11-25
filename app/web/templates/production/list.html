@@ -48,13 +48,16 @@
             <td x-text="item.actual_units??'Not set'"></td>
             <td x-text="item.actual_runs??'Not set'"></td>
             <td x-text="item.status==='completed'?'Completed':'In progress'"></td>
-            <td class="invention-tone" x-text="money(item.totals.invention)"></td>
-            <td class="materials-tone" x-text="money(item.totals.materials)"></td>
-            <td class="manufacturing-tone" x-text="money(item.totals.manufacturing)"></td>
-            <td class="income-tone" x-text="money(item.totals.income)"></td>
+            <td class="invention-tone" x-text="formatMoney(item.totals.invention)"></td>
+            <td class="materials-tone" x-text="formatMoney(item.totals.materials)"></td>
+            <td
+              class="manufacturing-tone"
+              x-text="formatMoney(item.totals.manufacturing)"
+            ></td>
+            <td class="income-tone" x-text="formatMoney(item.totals.income)"></td>
             <td
               :class="Number(item.totals.balance)<0?'expense-tone':'income-tone'"
-              x-text="money(item.totals.balance)"
+              x-text="formatMoney(item.totals.balance)"
             ></td>
             <td
               x-text="item.totals.margin===null?'Not available':Number(item.totals.margin).toFixed(1)+'%'"

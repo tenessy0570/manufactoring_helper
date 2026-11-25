@@ -50,7 +50,7 @@ def settings(**kwargs: Any) -> InventionSettings:
     return InventionSettings.model_validate({"type_id": 10, **kwargs})
 
 
-def plan(**kwargs: Any) -> InventionPlan:
+def get_plan(**kwargs: Any) -> InventionPlan:
     return InventionPlan.model_validate(
         {
             "decryptor_id": None,
@@ -71,7 +71,7 @@ def plan(**kwargs: Any) -> InventionPlan:
 
 def request(**kwargs: Any) -> InventionRequest:
     selected = settings()
-    result = price_plans([plan()], {34: price(34, buy_price="90", sell_price="100")}, selected)
+    result = price_plans([get_plan()], {34: price(34, buy_price="90", sell_price="100")}, selected)
     return InventionRequest.model_validate(
         {
             "key": selected.key,
@@ -101,16 +101,18 @@ def test_keys_ignore_legacy_skills_and_fees_but_separate_hub_and_side() -> None:
 
 
 def test_expected_cost_uses_attempts_probability_runs_and_output_quantity() -> None:
-    result = price_plans([plan()], {34: price(34, sell_price="100", buy_price="90")}, settings())
+    result = price_plans(
+        [get_plan()], {34: price(34, sell_price="100", buy_price="90")}, settings()
+    )
     assert result.best is not None
     assert result.best.cost_per_attempt == 200
     assert result.best.expected_cost_per_unit == 20
     bought = price_plans(
-        [plan()], {34: price(34, buy_price="90")}, settings(order_type="buy", broker_fee="10")
+        [get_plan()], {34: price(34, buy_price="90")}, settings(order_type="buy", broker_fee="10")
     )
     assert bought.best is not None
     assert bought.best.expected_cost_per_unit == Decimal("18")
-    missing = price_plans([plan()], {}, settings())
+    missing = price_plans([get_plan()], {}, settings())
     assert missing.best is None
     assert missing.options[0].missing_prices == [34]
     assert not missing.complete_pricing
@@ -119,8 +121,8 @@ def test_expected_cost_uses_attempts_probability_runs_and_output_quantity() -> N
 
 def test_compares_decryptors_and_does_not_apply_me_te_to_manufacturing() -> None:
     options = [
-        plan(),
-        plan(
+        get_plan(),
+        get_plan(
             decryptor_id=34201,
             decryptor_name="Accelerant",
             runs_per_copy=20,
@@ -156,7 +158,7 @@ def test_captured_public_data_matches_expected_unit_cost_and_decryptors() -> Non
     assert len(plans) == 9
     for option in plans[1:]:
         assert any(material.type_id == option.decryptor_id for material in option.materials)
-    ammo = plan(units_per_run=5000)
+    ammo = get_plan(units_per_run=5000)
     result = price_plans([ammo], {34: price(34, sell_price="100")}, settings())
     assert result.best is not None
     assert result.best.expected_cost_per_unit == Decimal("0.008")
@@ -176,24 +178,26 @@ async def test_persistent_cache_survives_sessions_and_duplicate_prepare(
     session: AsyncSession,
 ) -> None:
     repository = SQLInventionRepository(session)
-    state = PlanState(key=settings().plan_key, plans=[plan()], synced_at=NOW, expires_at=EXPIRES)
-    assert await repository.plan(state.key) is None
+    state = PlanState(
+        key=settings().plan_key, plans=[get_plan()], synced_at=NOW, expires_at=EXPIRES
+    )
+    assert await repository.get_cached_plan(state.key) is None
     await repository.save_plan(state)
     await repository.ensure_request(request(status="pending", result=None))
     await repository.save_request(request())
     await repository.ensure_request(request(status="pending", result=None))
     await session.commit()
-    assert (await repository.requests([settings().key]))[settings().key] == request()
+    assert (await repository.get_requests([settings().key]))[settings().key] == request()
     async with AsyncSession(session.bind) as second:
         restored = SQLInventionRepository(second)
-        assert await restored.plan(state.key) == state
-        assert (await restored.requests([settings().key]))[
+        assert await restored.get_cached_plan(state.key) == state
+        assert (await restored.get_requests([settings().key]))[
             settings().key
         ].result == request().result
-        assert await restored.active_settings() == [settings()]
+        assert await restored.get_active_settings() == [settings()]
     await repository.save_request(request(status="error", expires_at=NOW))
     await session.rollback()
-    assert (await repository.requests([settings().key]))[settings().key].status == "ready"
+    assert (await repository.get_requests([settings().key]))[settings().key].status == "ready"
 
 
 async def test_request_api_queues_without_running_expensive_gateway(session: AsyncSession) -> None:
@@ -203,7 +207,7 @@ async def test_request_api_queues_without_running_expensive_gateway(session: Asy
     service = InventionService(
         repository, queue, SQLAlchemyUnitOfWork(session), CacheService(MemoryCache(10)), lambda: NOW
     )
-    assert (await service.view(settings())).request is None
+    assert (await service.get_invention_view(settings())).request is None
     view = await service.prepare(settings())
     assert view.queued
     assert view.request is not None
@@ -213,10 +217,10 @@ async def test_request_api_queues_without_running_expensive_gateway(session: Asy
     queue.reset_mock()
     assert not (await service.prepare(settings())).queued
     queue.enqueue.assert_not_awaited()
-    assert not (await service.view(settings())).stale
+    assert not (await service.get_invention_view(settings())).stale
     await repository.save_request(request(expires_at=NOW))
     await session.commit()
-    assert (await service.view(settings())).stale
+    assert (await service.get_invention_view(settings())).stale
 
 
 async def test_source_is_cached_across_hubs_and_repricing_never_refetches(
@@ -224,9 +228,9 @@ async def test_source_is_cached_across_hubs_and_repricing_never_refetches(
 ) -> None:
     repository = SQLInventionRepository(session)
     gateway = AsyncMock(spec=InventionGateway)
-    gateway.fetch.return_value = [plan()]
+    gateway.fetch.return_value = [get_plan()]
     manufacturing = AsyncMock(spec=ManufacturingRepository)
-    manufacturing.quotes.return_value = {34: price(34, sell_price="100")}
+    manufacturing.get_quotes.return_value = {34: price(34, sell_price="100")}
     service = InventionSyncService(
         repository, gateway, manufacturing, SQLAlchemyUnitOfWork(session), clock=lambda: NOW
     )
@@ -236,10 +240,10 @@ async def test_source_is_cached_across_hubs_and_repricing_never_refetches(
     assert first.result.best.expected_cost_per_unit == 20
     await service.sync(settings(broker_fee="15"))
     gateway.fetch.assert_awaited_once()
-    manufacturing.quotes.assert_awaited_once()
+    manufacturing.get_quotes.assert_awaited_once()
     await service.sync(settings(hub_id="amarr"))
     gateway.fetch.assert_awaited_once()
-    manufacturing.quotes.return_value = {34: price(34, sell_price="200", expires_at=EXPIRES)}
+    manufacturing.get_quotes.return_value = {34: price(34, sell_price="200", expires_at=EXPIRES)}
     later = InventionSyncService(
         repository,
         gateway,
@@ -262,7 +266,7 @@ async def test_source_is_cached_across_hubs_and_repricing_never_refetches(
         clock=lambda: failure_clock,
     )
     await error_service.record_error(settings(), "ConnectionError")
-    failed = (await repository.requests([settings().key]))[settings().key]
+    failed = (await repository.get_requests([settings().key]))[settings().key]
     assert failed.status == "error"
     assert failed.result == result.result
     assert failed.updated_at == result.updated_at
@@ -273,20 +277,23 @@ async def test_empty_and_missing_price_states(session: AsyncSession) -> None:
     repository = SQLInventionRepository(session)
     gateway = AsyncMock(spec=InventionGateway)
     manufacturing = AsyncMock(spec=ManufacturingRepository)
-    manufacturing.quotes.return_value = {}
+    manufacturing.get_quotes.return_value = {}
     gateway.fetch.return_value = []
     service = InventionSyncService(
         repository, gateway, manufacturing, SQLAlchemyUnitOfWork(session), clock=lambda: NOW
     )
     assert (await service.sync(settings())).status == "unsupported"
-    gateway.fetch.return_value = [plan()]
+    gateway.fetch.return_value = [get_plan()]
     assert (await service.sync(settings(type_id=20))).status == "missing_prices"
 
 
 async def test_failed_source_refresh_keeps_durable_plan(session: AsyncSession) -> None:
     repository = SQLInventionRepository(session)
     old = PlanState(
-        key=settings().plan_key, plans=[plan()], synced_at=NOW - timedelta(days=8), expires_at=NOW
+        key=settings().plan_key,
+        plans=[get_plan()],
+        synced_at=NOW - timedelta(days=8),
+        expires_at=NOW,
     )
     await repository.save_plan(old)
     await repository.save_request(request(expires_at=NOW))
@@ -302,36 +309,38 @@ async def test_failed_source_refresh_keeps_durable_plan(session: AsyncSession) -
     )
     with pytest.raises(ConnectionError, match="offline"):
         await service.sync(settings())
-    assert await repository.plan(settings().plan_key) == old
-    assert (await repository.requests([settings().key]))[settings().key].result == request().result
+    assert await repository.get_cached_plan(settings().plan_key) == old
+    assert (await repository.get_requests([settings().key]))[
+        settings().key
+    ].result == request().result
     await service.record_error(settings(hub_id="hek"), "ConnectionError")
-    assert (await repository.requests([settings(hub_id="hek").key]))[
+    assert (await repository.get_requests([settings(hub_id="hek").key]))[
         settings(hub_id="hek").key
     ].status == "error"
 
 
 async def test_source_and_valuation_write_failures_roll_back() -> None:
     repository = AsyncMock(spec=InventionRepository)
-    repository.requests.return_value = {}
-    repository.plan.return_value = None
+    repository.get_requests.return_value = {}
+    repository.get_cached_plan.return_value = None
     repository.save_plan.side_effect = RuntimeError("source write failed")
     gateway = AsyncMock(spec=InventionGateway)
-    gateway.fetch.return_value = [plan()]
+    gateway.fetch.return_value = [get_plan()]
     prices = AsyncMock(spec=ManufacturingRepository)
-    prices.quotes.return_value = {34: price(34)}
-    uow = AsyncMock(spec=SQLAlchemyUnitOfWork)
-    service = InventionSyncService(repository, gateway, prices, uow, clock=lambda: NOW)
+    prices.get_quotes.return_value = {34: price(34)}
+    unit_of_work = AsyncMock(spec=SQLAlchemyUnitOfWork)
+    service = InventionSyncService(repository, gateway, prices, unit_of_work, clock=lambda: NOW)
     with pytest.raises(RuntimeError, match="source write failed"):
         await service.sync(settings())
-    uow.rollback.assert_awaited_once()
-    uow.reset_mock()
-    repository.plan.return_value = PlanState(
-        key=settings().plan_key, plans=[plan()], synced_at=NOW, expires_at=EXPIRES
+    unit_of_work.rollback.assert_awaited_once()
+    unit_of_work.reset_mock()
+    repository.get_cached_plan.return_value = PlanState(
+        key=settings().plan_key, plans=[get_plan()], synced_at=NOW, expires_at=EXPIRES
     )
     repository.save_request.side_effect = RuntimeError("result write failed")
     with pytest.raises(RuntimeError, match="result write failed"):
         await service.sync(settings())
-    uow.rollback.assert_awaited_once()
+    unit_of_work.rollback.assert_awaited_once()
 
 
 async def test_gateway_normalizes_scaled_attempts_and_fails_atomically() -> None:
@@ -411,30 +420,30 @@ async def test_manufacturing_deducts_cached_unit_cost_before_ranking(session: As
     service = ManufacturingService(
         manufacturing, SQLHistoryRepository(session), lambda: NOW, invention=repository
     )
-    page = await service.opportunities(
+    page = await service.get_opportunities(
         ManufacturingQuery(type_ids=[10], include_invention_cost=True)
     )
     assert page.items[0].invention_cost_per_unit == 20
     assert page.items[0].profit_per_unit == -7
     assert page.items[0].invention_included
     assert page.items[0].invention_status == "ready"
-    page = await service.opportunities(
+    page = await service.get_opportunities(
         ManufacturingQuery(type_ids=[10, 20], include_invention_cost=True, min_profit=Decimal(0))
     )
     assert page.total == 0
     assert page.missing_invention == 1
-    page = await service.opportunities(
+    page = await service.get_opportunities(
         ManufacturingQuery(type_ids=[10], include_invention_cost=False)
     )
     assert page.items[0].profit_per_unit == 13
     await repository.save_request(request(expires_at=NOW))
-    stale = await service.opportunities(
+    stale = await service.get_opportunities(
         ManufacturingQuery(type_ids=[10], include_invention_cost=True)
     )
     assert stale.items[0].invention_status == "stale"
     assert stale.items[0].stale
     assert (
-        await service.opportunities(
+        await service.get_opportunities(
             ManufacturingQuery(type_ids=[10], include_invention_cost=True, fresh_only=True)
         )
     ).total == 0
@@ -481,9 +490,9 @@ async def test_daily_valuation_does_not_repeat_when_market_quotes_expire(
 ) -> None:
     repository = SQLInventionRepository(session)
     gateway = AsyncMock(spec=InventionGateway)
-    gateway.fetch.return_value = [plan()]
+    gateway.fetch.return_value = [get_plan()]
     manufacturing = AsyncMock(spec=ManufacturingRepository)
-    manufacturing.quotes.return_value = {34: price(34, expires_at=NOW - timedelta(minutes=1))}
+    manufacturing.get_quotes.return_value = {34: price(34, expires_at=NOW - timedelta(minutes=1))}
     service = InventionSyncService(
         repository, gateway, manufacturing, SQLAlchemyUnitOfWork(session), clock=lambda: NOW
     )
@@ -497,7 +506,7 @@ async def test_daily_valuation_does_not_repeat_when_market_quotes_expire(
         clock=lambda: NOW + timedelta(hours=11),
     )
     assert await later.sync(settings()) == first
-    manufacturing.quotes.assert_awaited_once()
+    manufacturing.get_quotes.assert_awaited_once()
     gateway.fetch.assert_awaited_once()
 
 
@@ -506,9 +515,9 @@ async def test_valuation_expires_24_hours_after_completion(
 ) -> None:
     repository = SQLInventionRepository(session)
     gateway = AsyncMock(spec=InventionGateway)
-    gateway.fetch.return_value = [plan()]
+    gateway.fetch.return_value = [get_plan()]
     manufacturing = AsyncMock(spec=ManufacturingRepository)
-    manufacturing.quotes.return_value = {34: price(34)}
+    manufacturing.get_quotes.return_value = {34: price(34)}
     service = InventionSyncService(
         repository,
         gateway,
@@ -534,7 +543,7 @@ async def test_migration_merges_fee_variants_and_reuses_tax_free_cache_without_s
 
     repository = SQLInventionRepository(session)
     source_plan = PlanState(
-        key=settings().plan_key, plans=[plan()], synced_at=NOW, expires_at=EXPIRES
+        key=settings().plan_key, plans=[get_plan()], synced_at=NOW, expires_at=EXPIRES
     )
     await repository.save_plan(source_plan)
     for fee, total in (("10", "208"), ("20", "226")):
@@ -564,7 +573,7 @@ async def test_migration_merges_fee_variants_and_reuses_tax_free_cache_without_s
     await session.commit()
     rows = list(await session.scalars(select(InventionRequestTable)))
     assert len(rows) == 2
-    canonical = (await repository.requests([settings(order_type="buy").key]))[
+    canonical = (await repository.get_requests([settings(order_type="buy").key]))[
         settings(order_type="buy").key
     ]
     assert canonical.result is not None
@@ -572,7 +581,7 @@ async def test_migration_merges_fee_variants_and_reuses_tax_free_cache_without_s
     assert canonical.result.best.cost_per_attempt == 180
     assert canonical.result.best.expected_cost_per_unit == 18
     assert canonical.expires_at == EXPIRES
-    assert await repository.plan(source_plan.key) == source_plan
+    assert await repository.get_cached_plan(source_plan.key) == source_plan
     gateway = AsyncMock(spec=InventionGateway)
     quotes = AsyncMock(spec=ManufacturingRepository)
     sync = InventionSyncService(
@@ -580,4 +589,4 @@ async def test_migration_merges_fee_variants_and_reuses_tax_free_cache_without_s
     )
     assert await sync.sync(settings(order_type="buy", broker_fee="99")) == canonical
     gateway.fetch.assert_not_awaited()
-    quotes.quotes.assert_not_awaited()
+    quotes.get_quotes.assert_not_awaited()

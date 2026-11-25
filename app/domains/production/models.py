@@ -5,6 +5,7 @@ from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field, PositiveInt, computed_field, model_validator
 
+from app.domains.market.enums import OrderType
 from app.domains.market.models import HubId
 
 Money = Annotated[Decimal, Field(ge=0, le=10**18, decimal_places=2, allow_inf_nan=False)]
@@ -71,7 +72,7 @@ class BatchInput(BaseModel):
     decryptor_id: PositiveInt | Literal["best"] | None = "best"
 
     @model_validator(mode="after")
-    def quantity(self) -> "BatchInput":
+    def validate_quantity(self) -> "BatchInput":
         if self.kind == "invention":
             if self.units is None or self.manufacturing_runs is not None:
                 raise ValueError("Invention requires finished units, not manufacturing runs")
@@ -81,7 +82,7 @@ class BatchInput(BaseModel):
 
 
 class EstimateInput(BatchInput):
-    material_order_type: Literal["buy", "sell"] = "sell"
+    material_order_type: OrderType = "sell"
     buy_broker_fee: Decimal = Field(default=Decimal(0), ge=0, le=100, allow_inf_nan=False)
     facility_tax: Decimal = Field(default=Decimal(0), ge=0, le=100, allow_inf_nan=False)
     system_cost_index: Decimal = Field(default=Decimal(0), ge=0, le=100, allow_inf_nan=False)

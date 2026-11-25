@@ -22,17 +22,17 @@ class ProfileService:
         unit_of_work: UnitOfWork,
         clock: Callable[[], datetime] = lambda: datetime.now(UTC),
     ) -> None:
-        self._repository, self._uow, self._clock = repository, unit_of_work, clock
+        self._repository, self._unit_of_work, self._clock = repository, unit_of_work, clock
 
     async def find(self) -> ProfilePage:
-        default = await self._repository.default_id()
+        default = await self._repository.get_default_profile_id()
         profiles = await self._repository.find()
         for profile in profiles:
             profile.is_default = profile.id == default
         return ProfilePage(items=profiles, default_profile_id=default)
 
     async def get(self, profile_id: UUID | None = None) -> Profile:
-        default = await self._repository.default_id()
+        default = await self._repository.get_default_profile_id()
         profile = await self._repository.get(profile_id or default)
         if profile is None:
             raise ProfileNotFoundError
@@ -40,21 +40,21 @@ class ProfileService:
         return profile
 
     async def create(self, data: ProfileCreate) -> Profile:
-        await self._repository.default_id(lock=True)
+        await self._repository.get_default_profile_id(lock=True)
         now = self._clock()
         profile = Profile(
             id=uuid4(), name=data.name, settings=data.settings, created_at=now, updated_at=now
         )
         try:
             await self._repository.save(profile)
-            await self._uow.commit()
+            await self._unit_of_work.commit()
         except BaseException:
-            await self._uow.rollback()
+            await self._unit_of_work.rollback()
             raise
         return profile
 
     async def update(self, profile_id: UUID, data: ProfileUpdate) -> Profile:
-        await self._repository.default_id(lock=True)
+        await self._repository.get_default_profile_id(lock=True)
         profile = await self.get(profile_id)
         if data.name is not None:
             profile.name = data.name
@@ -63,9 +63,9 @@ class ProfileService:
         profile.updated_at = self._clock()
         try:
             await self._repository.save(profile)
-            await self._uow.commit()
+            await self._unit_of_work.commit()
         except BaseException:
-            await self._uow.rollback()
+            await self._unit_of_work.rollback()
             raise
         return profile
 
@@ -76,19 +76,19 @@ class ProfileService:
         )
 
     async def set_default(self, profile_id: UUID) -> Profile:
-        await self._repository.default_id(lock=True)
+        await self._repository.get_default_profile_id(lock=True)
         profile = await self.get(profile_id)
         try:
             await self._repository.set_default(profile_id)
-            await self._uow.commit()
+            await self._unit_of_work.commit()
         except BaseException:
-            await self._uow.rollback()
+            await self._unit_of_work.rollback()
             raise
         profile.is_default = True
         return profile
 
     async def delete(self, profile_id: UUID) -> None:
-        default = await self._repository.default_id(lock=True)
+        default = await self._repository.get_default_profile_id(lock=True)
         await self.get(profile_id)
         remaining = [
             profile for profile in await self._repository.find() if profile.id != profile_id
@@ -99,7 +99,7 @@ class ProfileService:
             if default == profile_id:
                 await self._repository.set_default(remaining[0].id)
             await self._repository.delete(profile_id)
-            await self._uow.commit()
+            await self._unit_of_work.commit()
         except BaseException:
-            await self._uow.rollback()
+            await self._unit_of_work.rollback()
             raise

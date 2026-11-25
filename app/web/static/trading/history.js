@@ -1,4 +1,4 @@
-window.tradingHistory = () => ({
+window.createTradingHistory = () => ({
   ...window.marketHistoryChartMethods,
   historyItem: null,
   historyData: null,

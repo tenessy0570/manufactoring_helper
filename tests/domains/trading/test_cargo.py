@@ -5,7 +5,7 @@ import pytest
 from pydantic import ValidationError
 
 from app.domains.market.models import BuyPriceLevel
-from app.domains.trading.cargo import CargoService, optimize, segments
+from app.domains.trading.cargo import CargoService, build_price_segments, optimize
 from app.domains.trading.models import CargoQuery, TradeRoute
 from app.domains.trading.routes import TradingRoutes
 from tests.domains.trading.test_trading import FakeTradingRepository, trade
@@ -48,13 +48,13 @@ def test_segments_depth_tax_range_and_marginal_profit() -> None:
         BuyPriceLevel(price=Decimal(104), volume=10),
     ]
     query = CargoQuery(source_hub="jita", cargo_m3=Decimal(100), buy_price_range=Decimal(100))
-    assert segments(data, query) == [
+    assert build_price_segments(data, query) == [
         (1, Decimal(100), Decimal(150)),
         (1, Decimal(100), Decimal(104)),
     ]
-    assert not segments(data, query.model_copy(update={"sales_tax": Decimal(100)}))
+    assert not build_price_segments(data, query.model_copy(update={"sales_tax": Decimal(100)}))
     data.source.sell_price = None
-    assert segments(data, query) == []
+    assert build_price_segments(data, query) == []
     with pytest.raises(ValidationError):
         CargoQuery(source_hub="jita", destination_hub="jita", cargo_m3=Decimal(1))
 
@@ -62,19 +62,19 @@ def test_segments_depth_tax_range_and_marginal_profit() -> None:
 async def test_cargo_one_destination_at_a_time_and_missing_routes() -> None:
     repo = FakeTradingRepository()
     routes = AsyncMock(spec=TradingRoutes)
-    routes.cached.return_value = TradeRoute(jumps=34, highsec=True)
+    routes.get_cached_route.return_value = TradeRoute(jumps=34, highsec=True)
     service = CargoService(repo, routes)
     query = CargoQuery(source_hub="jita", cargo_m3=Decimal(20))
-    page = await service.plan(query)
+    page = await service.build_cargo_plans(query)
     assert len(page.plans) == 4
     assert page.plans[0].destination_hub == "amarr"
     assert page.plans[0].profit == 455
     assert page.plans[0].cargo_m3 <= query.cargo_m3
     assert page.partial_depth
     repo.values.append(trade(volume_m3=None))
-    assert (await service.plan(query)).missing_volume == 1
-    routes.cached.return_value = TradeRoute()
-    assert (await service.plan(query)).skipped_routes == 4
+    assert (await service.build_cargo_plans(query)).missing_volume == 1
+    routes.get_cached_route.return_value = TradeRoute()
+    assert (await service.build_cargo_plans(query)).skipped_routes == 4
 
 
 async def test_optimizer_timeout_fallback_exact_limits(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -98,8 +98,8 @@ async def test_cargo_sell_scenario_and_margin() -> None:
     repo = FakeTradingRepository()
     repo.values[0].destination.buy_price = None
     routes = AsyncMock(spec=TradingRoutes)
-    routes.cached.return_value = TradeRoute(jumps=34, highsec=True)
-    page = await CargoService(repo, routes).plan(
+    routes.get_cached_route.return_value = TradeRoute(jumps=34, highsec=True)
+    page = await CargoService(repo, routes).build_cargo_plans(
         CargoQuery(
             source_hub="jita", destination_hub="amarr", cargo_m3=Decimal(20), sale_side="sell"
         )
@@ -112,8 +112,8 @@ async def test_cargo_excludes_ship_skins_before_optimization() -> None:
     repo = FakeTradingRepository()
     repo.values = [trade(name="Rifter Copper SKIN"), trade(name="Test skin (Permanent)")]
     routes = AsyncMock(spec=TradingRoutes)
-    routes.cached.return_value = TradeRoute(jumps=34, highsec=True)
-    result = await CargoService(repo, routes).plan(
+    routes.get_cached_route.return_value = TradeRoute(jumps=34, highsec=True)
+    result = await CargoService(repo, routes).build_cargo_plans(
         CargoQuery(source_hub="jita", destination_hub="amarr", cargo_m3=Decimal(100))
     )
     assert result.plans[0].items == []
@@ -126,7 +126,7 @@ async def test_cargo_turnover_toggle_and_destination_threshold() -> None:
 
     repo = FakeTradingRepository()
     routes = AsyncMock(spec=TradingRoutes)
-    routes.cached.return_value = TradeRoute(jumps=34, highsec=True)
+    routes.get_cached_route.return_value = TradeRoute(jumps=34, highsec=True)
     service = CargoService(repo, routes)
     query = CargoQuery(
         source_hub="jita",
@@ -134,12 +134,12 @@ async def test_cargo_turnover_toggle_and_destination_threshold() -> None:
         cargo_m3=Decimal(20),
         min_daily_isk_volume=Decimal(100),
     )
-    assert (await service.plan(query)).plans[0].items
+    assert (await service.build_cargo_plans(query)).plans[0].items
     query.filter_daily_turnover = True
-    assert not (await service.plan(query)).plans[0].items
+    assert not (await service.build_cargo_plans(query)).plans[0].items
     repo.history[(10000043, 42)] = TradeTurnover(
         type_id=42, region_id=10000043, daily_isk_volume=Decimal(100), updated_at=NOW
     )
-    assert (await service.plan(query)).plans[0].items
+    assert (await service.build_cargo_plans(query)).plans[0].items
     query.min_daily_isk_volume = Decimal(101)
-    assert not (await service.plan(query)).plans[0].items
+    assert not (await service.build_cargo_plans(query)).plans[0].items

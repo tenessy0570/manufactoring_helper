@@ -21,7 +21,7 @@ async def test_fresh_recipe_does_not_reserve_daily_job_before_it_expires() -> No
     catalog.find.return_value = [item(10)]
     repository = AsyncMock(spec=ManufacturingRepository)
     state = recipe_state(expires_at=now + timedelta(hours=1))
-    repository.recipes.return_value = {10: state}
+    repository.get_recipes.return_value = {10: state}
     provider = Provider(scope=Scope.REQUEST)
     provider.provide(lambda: catalog, provides=ItemTypeRepository)
     provider.provide(lambda: repository, provides=ManufacturingRepository)
@@ -52,7 +52,7 @@ async def test_queue_batches_and_deduplication() -> None:
         item(number, meta_group_id=[1, 2, 3, 4, 5, 6, None][number % 7]) for number in range(21)
     ]
     recipes = AsyncMock(spec=ManufacturingRepository)
-    recipes.recipes.return_value = {}
+    recipes.get_recipes.return_value = {}
     provider = Provider(scope=Scope.REQUEST)
     provider.provide(lambda: recipes, provides=ManufacturingRepository)
     provider.provide(lambda: repository, provides=ItemTypeRepository)

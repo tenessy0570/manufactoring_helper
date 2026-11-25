@@ -55,14 +55,14 @@ window.manufacturingFeatures.push(() => ({
     if (profile.browser) this.migrateBrokerSettings(profile.form);
     else this.migrateBrokerSettings(profile.settings);
     if (profile.browser) {
-      this.form = Object.fromEntries(Object.entries(this.defaults()).map(([key, value]) => [key, profile.form[key] ?? value]));
+      this.form = Object.fromEntries(Object.entries(this.getDefaultSettings()).map(([key, value]) => [key, profile.form[key] ?? value]));
       this.profileSettings = JSON.parse(JSON.stringify(profile.settings || {}));
       return;
     }
     const s = profile.settings;
     this.profileSettings = JSON.parse(JSON.stringify(s));
     this.form = {
-      ...this.defaults()
+      ...this.getDefaultSettings()
     };
     for (const key of Object.keys(this.form))
       if (s[key] !== null && s[key] !== undefined) this.form[key] = s[key];
@@ -76,7 +76,7 @@ window.manufacturingFeatures.push(() => ({
     if (profile) this.setProfile(profile);
     else {
       this.profileSettings = {};
-      this.form = this.defaults();
+      this.form = this.getDefaultSettings();
     }
     await this.load(false, 0);
   },
@@ -94,7 +94,7 @@ window.manufacturingFeatures.push(() => ({
     this.deletingProfile = true;
     this.error = '';
     try {
-      await this.api('/api/v1/profiles/' + encodeURIComponent(profile.id), {
+      await this.requestApi('/api/v1/profiles/' + encodeURIComponent(profile.id), {
         method: 'DELETE'
       });
       this.profiles = this.profiles.filter(p => p.id !== profile.id);
@@ -102,7 +102,7 @@ window.manufacturingFeatures.push(() => ({
       this.profileNotice = 'Profile deleted. Current settings kept.';
       this.saveSettings();
       try {
-        const result = await this.api('/api/v1/profiles');
+        const result = await this.requestApi('/api/v1/profiles');
         this.profiles = [...this.profiles.filter(p => p.browser), ...result.items];
       } catch (_) {
         this.profileWarning = 'Profile deleted. Reload to refresh the remaining server profiles.';

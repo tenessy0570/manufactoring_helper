@@ -1,8 +1,9 @@
 from app.domains.manufacturing.models import ManufacturingQuery, Opportunity
+from app.domains.market.enums import OrderSide
 
 
 def matches_filters(item: Opportunity, query: ManufacturingQuery) -> bool:
-    is_buy = query.product_order_type == "buy"
+    is_buy = query.product_order_type == OrderSide.BUY.value
     if any(
         minimum is not None and (value is None or value < minimum)
         for value, minimum in (

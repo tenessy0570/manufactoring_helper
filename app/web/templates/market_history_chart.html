@@ -61,7 +61,7 @@
                 <template x-for="day in historyData.days" :key="day.date">
                   <tr>
                     <td x-text="day.date"></td>
-                    <td x-text="fullMoney(day.average)"></td>
+                    <td x-text="formatFullMoney(day.average)"></td>
                     <td x-text="Number(day.volume).toLocaleString('en-US')"></td>
                   </tr>
                 </template>

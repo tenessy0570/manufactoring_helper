@@ -17,7 +17,7 @@ DURATION = re.compile(
 )
 
 
-def duration_seconds(value: str) -> Decimal:
+def parse_duration_seconds(value: str) -> Decimal:
     match = DURATION.fullmatch(value)
     if match is None:
         raise ValueError("Invalid production duration")
@@ -112,7 +112,7 @@ class EverefIndustryGateway(IndustryGateway):
             type_id=type_id,
             blueprint_id=production.blueprint_id,
             units=production.units,
-            seconds=duration_seconds(production.time),
+            seconds=parse_duration_seconds(production.time),
             job_cost=production.total_job_cost,
             estimated_item_value=production.estimated_item_value,
             materials=list(production.materials.values()),

@@ -2,7 +2,8 @@ from datetime import datetime
 from decimal import Decimal
 
 from app.core.config import DEFAULT_REFRESH, RefreshPolicy
-from app.core.freshness import refresh_deadline
+from app.core.freshness import get_refresh_deadline
+from app.domains.market.enums import OrderSide
 from app.domains.market.models import BuyPriceLevel
 from app.domains.trading.models import TradeInput, TradeOpportunity, TradingQuery
 
@@ -16,18 +17,24 @@ def calculate_trade(
     source, destination = data.source, data.destination
     if source.hub_id == destination.hub_id:
         return None
-    purchase = source.sell_price if query.purchase_side == "sell" else source.buy_price
-    sale = destination.buy_price if query.sale_side == "buy" else destination.sell_price
+    purchase = (
+        source.sell_price if query.purchase_side == OrderSide.SELL.value else source.buy_price
+    )
+    sale = (
+        destination.buy_price if query.sale_side == OrderSide.BUY.value else destination.sell_price
+    )
     if purchase is None or sale is None:
         return None
     volume = data.volume_m3
     if volume is None and query.max_cargo_m3 is not None:
         return None
     purchase_fee = (
-        purchase * query.buy_broker_fee / 100 if query.purchase_side == "buy" else Decimal(0)
+        purchase * query.buy_broker_fee / 100
+        if query.purchase_side == OrderSide.BUY.value
+        else Decimal(0)
     )
     sale_rate = query.sales_tax + (
-        query.sell_broker_fee if query.sale_side == "sell" else Decimal(0)
+        query.sell_broker_fee if query.sale_side == OrderSide.SELL.value else Decimal(0)
     )
     cost = purchase + purchase_fee
     profit = sale * (1 - sale_rate / 100) - cost
@@ -39,7 +46,8 @@ def calculate_trade(
     ):
         return None
     stale = any(
-        refresh_deadline(q.synced_at, refresh_policy.market) <= now for q in (source, destination)
+        get_refresh_deadline(quote.synced_at, refresh_policy.market) <= now
+        for quote in (source, destination)
     )
     if query.fresh_only and stale:
         return None
@@ -52,7 +60,7 @@ def calculate_trade(
         stale = True
         if query.fresh_only:
             return None
-    if query.purchase_side == "sell" and source.sell_levels is None:
+    if query.purchase_side == OrderSide.SELL.value and source.sell_levels is None:
         warnings.append("Only best-price sell stock is available until the next market refresh.")
     purchase_levels = sorted(
         (
@@ -66,14 +74,14 @@ def calculate_trade(
     )
     quantity = (
         sum(level.volume for level in purchase_levels)
-        if query.purchase_side == "sell"
+        if query.purchase_side == OrderSide.SELL.value
         else query.max_units
     )
-    if query.purchase_side == "buy":
+    if query.purchase_side == OrderSide.BUY.value:
         warnings.append(
             "Purchase buy orders must fill first; quantity is a scenario, not available stock."
         )
-    if query.sale_side == "sell":
+    if query.sale_side == OrderSide.SELL.value:
         warnings.append("Listing at sell prices does not guarantee a sale or a selling time.")
     caps = [value for value in [quantity, query.max_units] if value is not None]
     if query.max_investment is not None:
@@ -84,7 +92,7 @@ def calculate_trade(
     demand = None
     revenue = None
     levels: list[BuyPriceLevel] = []
-    if query.sale_side == "buy":
+    if query.sale_side == OrderSide.BUY.value:
         levels = destination.buy_levels or []
         if destination.buy_levels is None:
             levels = [BuyPriceLevel(price=sale, volume=destination.buy_volume)]
@@ -112,9 +120,11 @@ def calculate_trade(
     elif quantity is not None:
         revenue = sale * quantity
     depth_investment = None
-    if query.purchase_side == "sell" and quantity is not None:
+    if query.purchase_side == OrderSide.SELL.value and quantity is not None:
         destinations = (
-            levels if query.sale_side == "buy" else [BuyPriceLevel(price=sale, volume=quantity)]
+            levels
+            if query.sale_side == OrderSide.BUY.value
+            else [BuyPriceLevel(price=sale, volume=quantity)]
         )
         quantity, depth_investment, revenue = match_depth(
             purchase_levels, destinations, quantity, sale_rate, query.max_investment
@@ -161,13 +171,14 @@ def calculate_trade(
         batch_profit=batch_profit,
         average_sale_price=revenue / quantity if revenue is not None and quantity else None,
         source_stock=sum(level.volume for level in purchase_levels)
-        if query.purchase_side == "sell"
+        if query.purchase_side == OrderSide.SELL.value
         else None,
         destination_demand=demand,
         source_updated_at=source.synced_at,
         destination_updated_at=destination.synced_at,
         stale=stale,
-        instant_trade=query.purchase_side == "sell" and query.sale_side == "buy",
+        instant_trade=query.purchase_side == OrderSide.SELL.value
+        and query.sale_side == OrderSide.BUY.value,
         warnings=warnings,
     )
 

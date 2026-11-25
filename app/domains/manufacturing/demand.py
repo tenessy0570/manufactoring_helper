@@ -73,7 +73,7 @@ def estimate_buy_demand(
     )
 
 
-def invention_daily_profit(
+def calculate_invention_daily_profit(
     profit: Decimal,
     runs: int,
     production_seconds: Decimal,

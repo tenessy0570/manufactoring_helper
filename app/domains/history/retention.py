@@ -2,7 +2,7 @@ from calendar import monthrange
 from datetime import UTC, date, datetime
 
 
-def retention_cutoff(now: datetime, months: int) -> date:
+def get_retention_cutoff(now: datetime, months: int) -> date:
     today = now.replace(tzinfo=UTC).date() if now.tzinfo is None else now.astimezone(UTC).date()
     year, month = divmod(today.year * 12 + today.month - 1 - months, 12)
     month += 1

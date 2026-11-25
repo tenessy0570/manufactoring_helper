@@ -17,30 +17,32 @@ from app.domains.trading.tables import TradeMetadataTable
 
 class TradingRepository(ABC):
     @abstractmethod
-    async def turnover(
+    async def get_turnover(
         self, query: TradingQuery, type_ids: list[int], now: datetime
     ) -> dict[tuple[int, int], TradeTurnover]: ...
 
     @abstractmethod
-    async def inputs(self, query: TradingQuery) -> list[TradeInput]: ...
+    async def get_trade_inputs(self, query: TradingQuery) -> list[TradeInput]: ...
 
     @abstractmethod
-    async def market_type_ids(self) -> list[int]: ...
+    async def get_market_type_ids(self) -> list[int]: ...
 
     @abstractmethod
-    async def due_metadata(self, now: datetime) -> list[int]: ...
+    async def find_due_metadata_ids(self, now: datetime) -> list[int]: ...
 
     @abstractmethod
-    async def metadata(self, type_id: int) -> TradeMetadata | None: ...
+    async def get_metadata(self, type_id: int) -> TradeMetadata | None: ...
 
     @abstractmethod
     async def save_metadata(self, metadata: TradeMetadata) -> None: ...
 
     @abstractmethod
-    async def snapshots(self, query: TradingQuery) -> tuple[datetime | None, datetime | None]: ...
+    async def get_snapshot_times(
+        self, query: TradingQuery
+    ) -> tuple[datetime | None, datetime | None]: ...
 
 
-def utc(stamp: datetime | None) -> datetime | None:
+def ensure_utc(stamp: datetime | None) -> datetime | None:
     return stamp.replace(tzinfo=UTC) if stamp is not None and stamp.tzinfo is None else stamp
 
 
@@ -48,7 +50,7 @@ class SQLTradingRepository(TradingRepository):
     def __init__(self, session: AsyncSession) -> None:
         self._session = session
 
-    async def inputs(self, query: TradingQuery) -> list[TradeInput]:
+    async def get_trade_inputs(self, query: TradingQuery) -> list[TradeInput]:
         hubs = (
             [query.source_hub, query.destination_hub]
             if query.source_hub and query.destination_hub
@@ -72,7 +74,7 @@ class SQLTradingRepository(TradingRepository):
             prices.setdefault(row.type_id, []).append(
                 MarketPrice.model_validate(row, from_attributes=True)
             )
-            details[row.type_id] = name, volume, utc(expiry)
+            details[row.type_id] = name, volume, ensure_utc(expiry)
         results = []
         for type_id, quotes in prices.items():
             item_name, item_volume, metadata_expiry = details[type_id]
@@ -98,7 +100,7 @@ class SQLTradingRepository(TradingRepository):
                     )
         return results
 
-    async def turnover(
+    async def get_turnover(
         self, query: TradingQuery, type_ids: list[int], now: datetime
     ) -> dict[tuple[int, int], TradeTurnover]:
         if not type_ids:
@@ -142,7 +144,10 @@ class SQLTradingRepository(TradingRepository):
         )
         result = {
             (region, type_id): TradeTurnover(
-                type_id=type_id, region_id=region, daily_isk_volume=volume, updated_at=utc(stamp)
+                type_id=type_id,
+                region_id=region,
+                daily_isk_volume=volume,
+                updated_at=ensure_utc(stamp),
             )
             for region, type_id, stamp, volume in (await self._session.execute(statement)).all()
         }
@@ -164,14 +169,14 @@ class SQLTradingRepository(TradingRepository):
                     result[key].baseline_days = len(values)
         return result
 
-    async def market_type_ids(self) -> list[int]:
+    async def get_market_type_ids(self) -> list[int]:
         return list(
             await self._session.scalars(
                 select(MarketPriceTable.type_id).distinct().order_by(MarketPriceTable.type_id)
             )
         )
 
-    async def due_metadata(self, now: datetime) -> list[int]:
+    async def find_due_metadata_ids(self, now: datetime) -> list[int]:
         statement = (
             select(MarketPriceTable.type_id)
             .distinct()
@@ -181,7 +186,7 @@ class SQLTradingRepository(TradingRepository):
         )
         return list(await self._session.scalars(statement))
 
-    async def metadata(self, type_id: int) -> TradeMetadata | None:
+    async def get_metadata(self, type_id: int) -> TradeMetadata | None:
         row = await self._session.get(TradeMetadataTable, type_id)
         if row is None:
             return None
@@ -189,15 +194,17 @@ class SQLTradingRepository(TradingRepository):
             type_id=row.type_id,
             name=row.name,
             volume_m3=row.volume_m3,
-            updated_at=utc(row.updated_at),
-            expires_at=utc(row.expires_at),
+            updated_at=ensure_utc(row.updated_at),
+            expires_at=ensure_utc(row.expires_at),
         )
 
     async def save_metadata(self, metadata: TradeMetadata) -> None:
         await self._session.merge(TradeMetadataTable(**metadata.model_dump()))
         await self._session.flush()
 
-    async def snapshots(self, query: TradingQuery) -> tuple[datetime | None, datetime | None]:
+    async def get_snapshot_times(
+        self, query: TradingQuery
+    ) -> tuple[datetime | None, datetime | None]:
         rows = dict(
             (
                 await self._session.execute(
@@ -218,9 +225,9 @@ class SQLTradingRepository(TradingRepository):
             and hub.hub_id != query.source_hub
         ]
 
-        def oldest(hubs: Sequence[str]) -> datetime | None:
+        def get_oldest_snapshot_time(hubs: Sequence[str]) -> datetime | None:
             if any(hub not in rows for hub in hubs):
                 return None
-            return utc(min(rows[hub] for hub in hubs)) if hubs else None
+            return ensure_utc(min(rows[hub] for hub in hubs)) if hubs else None
 
-        return oldest(sources), oldest(destinations)
+        return get_oldest_snapshot_time(sources), get_oldest_snapshot_time(destinations)

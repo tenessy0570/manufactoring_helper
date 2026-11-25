@@ -34,7 +34,7 @@ from app.domains.trading.service import TradingMetadataService, TradingService
 from app.infrastructure.everef import EverefClient
 from app.main import create_app
 from tests.domains.catalog.test_catalog import NOW
-from tests.domains.market.test_market import price, state
+from tests.domains.market.test_market import get_state, price
 from tests.helpers import make_settings
 
 
@@ -219,21 +219,21 @@ class FakeTradingRepository(TradingRepository):
         self.fail = False
         self.history: dict[tuple[int, int], TradeTurnover] = {}
 
-    async def turnover(
+    async def get_turnover(
         self, query: TradingQuery, type_ids: list[int], now: Any
     ) -> dict[tuple[int, int], TradeTurnover]:
         return self.history
 
-    async def inputs(self, query: TradingQuery) -> list[TradeInput]:
+    async def get_trade_inputs(self, query: TradingQuery) -> list[TradeInput]:
         return self.values
 
-    async def market_type_ids(self) -> list[int]:
+    async def get_market_type_ids(self) -> list[int]:
         return [42]
 
-    async def due_metadata(self, now: Any) -> list[int]:
+    async def find_due_metadata_ids(self, now: Any) -> list[int]:
         return [42]
 
-    async def metadata(self, type_id: int) -> TradeMetadata | None:
+    async def get_metadata(self, type_id: int) -> TradeMetadata | None:
         return self.saved.get(type_id)
 
     async def save_metadata(self, metadata: TradeMetadata) -> None:
@@ -241,7 +241,7 @@ class FakeTradingRepository(TradingRepository):
             raise RuntimeError("write failed")
         self.saved[metadata.type_id] = metadata
 
-    async def snapshots(self, query: TradingQuery) -> tuple[Any, Any]:
+    async def get_snapshot_times(self, query: TradingQuery) -> tuple[Any, Any]:
         return NOW, NOW
 
 
@@ -253,22 +253,24 @@ async def test_service_sort_search_pagination_and_name_recovery() -> None:
     repo.values.append(second)
     service = TradingService(repo, clock=lambda: NOW)
     for rank in ["batch_profit", "profit", "margin", "profit_per_m3"]:
-        page = await service.opportunities(TradingQuery(rank_by=rank, limit=1))
+        page = await service.get_opportunities(TradingQuery(rank_by=rank, limit=1))
         assert page.total == 2
         assert page.items[0].type_id == 42
         assert page.missing_metadata == 1
-    page = await service.opportunities(TradingQuery(search="ANOTHER", offset=0))
+    page = await service.get_opportunities(TradingQuery(search="ANOTHER", offset=0))
     assert page.total == 1
     assert page.items[0].type_id == 43
-    assert (await service.opportunities(TradingQuery(offset=10))).items == []
+    assert (await service.get_opportunities(TradingQuery(offset=10))).items == []
     second.name = None
-    assert (await service.opportunities(TradingQuery(search="another"))).items == []
+    assert (await service.get_opportunities(TradingQuery(search="another"))).items == []
     names = AsyncMock(spec=ItemNameService)
     names.resolve.return_value = type("Names", (), {"names": {43: "Resolved"}})()
-    resolved = await TradingService(repo, names, lambda: NOW).opportunities(TradingQuery())
+    resolved = await TradingService(repo, names, lambda: NOW).get_opportunities(TradingQuery())
     assert resolved.items[1].name == "Resolved"
     names.resolve.side_effect = ItemNamesUnavailableError()
-    assert (await TradingService(repo, names, lambda: NOW).opportunities(TradingQuery())).total == 2
+    assert (
+        await TradingService(repo, names, lambda: NOW).get_opportunities(TradingQuery())
+    ).total == 2
 
 
 @pytest.mark.parametrize("packaged", [None, Decimal("0.5")])
@@ -277,20 +279,20 @@ async def test_metadata_cache_prefers_packaged_volume_and_rolls_back(
 ) -> None:
     repo = FakeTradingRepository()
     gateway = AsyncMock(spec=TradingGateway)
-    uow = AsyncMock(spec=UnitOfWork)
-    gateway.type_details.return_value = TradeTypeDetails(
+    unit_of_work = AsyncMock(spec=UnitOfWork)
+    gateway.get_type_details.return_value = TradeTypeDetails(
         name="Ship", volume=Decimal(100), packaged_volume=packaged
     )
-    service = TradingMetadataService(repo, gateway, uow, lambda: NOW)
+    service = TradingMetadataService(repo, gateway, unit_of_work, lambda: NOW)
     assert await service.sync(42)
     assert repo.saved[42].volume_m3 == (packaged if packaged is not None else 100)
     assert not await service.sync(42)
-    gateway.type_details.assert_awaited_once_with(42)
+    gateway.get_type_details.assert_awaited_once_with(42)
     repo.saved[42].expires_at = NOW
     repo.fail = True
     with pytest.raises(RuntimeError, match="write failed"):
         await service.sync(42)
-    uow.rollback.assert_awaited_once()
+    unit_of_work.rollback.assert_awaited_once()
 
 
 async def test_repository_all_market_items_metadata_and_snapshots() -> None:
@@ -300,13 +302,15 @@ async def test_repository_all_market_items_metadata_and_snapshots() -> None:
     async with AsyncSession(engine) as session:
         repo = SQLTradingRepository(session)
         market = SQLMarketRepository(session)
-        assert await repo.snapshots(TradingQuery()) == (None, None)
-        assert await repo.metadata(42) is None
-        await market.replace(state("jita"), [trade().source, price(70)])
-        await market.replace(state("amarr"), [trade().destination])
-        assert await repo.market_type_ids() == [42, 70]
-        assert await repo.due_metadata(NOW) == [42, 70]
-        values = await repo.inputs(TradingQuery(source_hub="jita", destination_hub="amarr"))
+        assert await repo.get_snapshot_times(TradingQuery()) == (None, None)
+        assert await repo.get_metadata(42) is None
+        await market.replace(get_state("jita"), [trade().source, price(70)])
+        await market.replace(get_state("amarr"), [trade().destination])
+        assert await repo.get_market_type_ids() == [42, 70]
+        assert await repo.find_due_metadata_ids(NOW) == [42, 70]
+        values = await repo.get_trade_inputs(
+            TradingQuery(source_hub="jita", destination_hub="amarr")
+        )
         assert [value.source.type_id for value in values] == [42]
         assert values[0].name is None
         await repo.save_metadata(
@@ -318,15 +322,17 @@ async def test_repository_all_market_items_metadata_and_snapshots() -> None:
                 expires_at=NOW + timedelta(days=7),
             )
         )
-        assert (await repo.inputs(TradingQuery(source_hub="jita", destination_hub="amarr")))[
-            0
-        ].name == "Outside manufacturing catalogue"
-        assert await repo.due_metadata(NOW) == [70]
-        assert await repo.due_metadata(NOW + timedelta(days=8)) == [42, 70]
-        saved = await repo.metadata(42)
+        assert (
+            await repo.get_trade_inputs(TradingQuery(source_hub="jita", destination_hub="amarr"))
+        )[0].name == "Outside manufacturing catalogue"
+        assert await repo.find_due_metadata_ids(NOW) == [70]
+        assert await repo.find_due_metadata_ids(NOW + timedelta(days=8)) == [42, 70]
+        saved = await repo.get_metadata(42)
         assert saved is not None
         assert saved.updated_at == NOW
-        assert await repo.snapshots(TradingQuery(source_hub="jita", destination_hub="amarr")) == (
+        assert await repo.get_snapshot_times(
+            TradingQuery(source_hub="jita", destination_hub="amarr")
+        ) == (
             NOW,
             NOW,
         )
@@ -363,13 +369,13 @@ async def test_public_gateway_reads_volume_metadata() -> None:
             respx.get("https://ref.test/types/42").respond(
                 200, json={"name": {"en": "Ship"}, "volume": 100, "packaged_volume": 5}
             )
-            result = await gateway.type_details(42)
+            result = await gateway.get_type_details(42)
             assert result.packaged_volume == 5
             assert result.name == "Ship"
             respx.get("https://ref.test/types/43").respond(
                 200, json={"name": "Module", "volume": 2}
             )
-            assert (await gateway.type_details(43)).name == "Module"
+            assert (await gateway.get_type_details(43)).name == "Module"
 
 
 def test_trade_metadata_migration_roundtrip() -> None:
@@ -399,7 +405,7 @@ async def test_all_hubs_optional_sides_and_twenty_distinct_directions() -> None:
         for index, hub in enumerate(HUBS):
             stamp = NOW - timedelta(minutes=index)
             await market.replace(
-                state(hub.hub_id).model_copy(update={"synced_at": stamp}),
+                get_state(hub.hub_id).model_copy(update={"synced_at": stamp}),
                 [
                     price(
                         42,
@@ -412,24 +418,31 @@ async def test_all_hubs_optional_sides_and_twenty_distinct_directions() -> None:
                 ],
             )
         repo = SQLTradingRepository(session)
-        all_pairs = await repo.inputs(query)
+        all_pairs = await repo.get_trade_inputs(query)
         assert len(all_pairs) == 20
         assert len({(value.source.hub_id, value.destination.hub_id) for value in all_pairs}) == 20
         assert all(value.source.hub_id != value.destination.hub_id for value in all_pairs)
         assert len({id(value.source) for value in all_pairs}) == 5
-        purchases = await repo.inputs(TradingQuery(source_hub="jita"))
+        purchases = await repo.get_trade_inputs(TradingQuery(source_hub="jita"))
         assert len(purchases) == 4
         assert all(value.source.hub_id == "jita" for value in purchases)
-        sales = await repo.inputs(TradingQuery(destination_hub="jita"))
+        sales = await repo.get_trade_inputs(TradingQuery(destination_hub="jita"))
         assert len(sales) == 4
         assert all(value.destination.hub_id == "jita" for value in sales)
-        assert len(await repo.inputs(TradingQuery(source_hub="jita", destination_hub="amarr"))) == 1
-        assert await repo.snapshots(query) == (
+        assert (
+            len(
+                await repo.get_trade_inputs(
+                    TradingQuery(source_hub="jita", destination_hub="amarr")
+                )
+            )
+            == 1
+        )
+        assert await repo.get_snapshot_times(query) == (
             NOW - timedelta(minutes=4),
             NOW - timedelta(minutes=4),
         )
         service = TradingService(repo, clock=lambda: NOW)
-        page = await service.opportunities(query)
+        page = await service.get_opportunities(query)
         assert page.total == 20
         assert page.missing_metadata == 1
         assert (
@@ -444,8 +457,10 @@ async def test_destination_turnover_filter_unknown_zero_and_expired_history() ->
     repo = FakeTradingRepository()
     service = TradingService(repo, clock=lambda: NOW)
     assert not TradingQuery().filter_daily_turnover
-    assert (await service.opportunities(TradingQuery(min_daily_isk_volume=Decimal(1000000)))).items
-    unknown = await service.opportunities(
+    assert (
+        await service.get_opportunities(TradingQuery(min_daily_isk_volume=Decimal(1000000)))
+    ).items
+    unknown = await service.get_opportunities(
         TradingQuery(filter_daily_turnover=True, min_daily_isk_volume=Decimal(0))
     )
     assert unknown.items == []
@@ -457,12 +472,12 @@ async def test_destination_turnover_filter_unknown_zero_and_expired_history() ->
         type_id=42, region_id=10000002, daily_isk_volume=Decimal(999999), updated_at=NOW
     )
     assert (
-        await service.opportunities(
+        await service.get_opportunities(
             TradingQuery(filter_daily_turnover=True, min_daily_isk_volume=Decimal(101))
         )
     ).items == []
-    assert (await service.opportunities(TradingQuery(min_daily_isk_volume=Decimal(101)))).items
-    matched = await service.opportunities(
+    assert (await service.get_opportunities(TradingQuery(min_daily_isk_volume=Decimal(101)))).items
+    matched = await service.get_opportunities(
         TradingQuery(filter_daily_turnover=True, min_daily_isk_volume=Decimal(100))
     )
     assert matched.items[0].daily_isk_volume == 100
@@ -470,7 +485,7 @@ async def test_destination_turnover_filter_unknown_zero_and_expired_history() ->
     assert (
         len(
             (
-                await service.opportunities(
+                await service.get_opportunities(
                     TradingQuery(filter_daily_turnover=True, min_daily_isk_volume=Decimal(0))
                 )
             ).items
@@ -478,8 +493,8 @@ async def test_destination_turnover_filter_unknown_zero_and_expired_history() ->
         == 1
     )
     repo.history[(10000043, 42)].updated_at = NOW - timedelta(days=1)
-    assert (await service.opportunities(TradingQuery())).items[0].stale
-    assert (await service.opportunities(TradingQuery(fresh_only=True))).items == []
+    assert (await service.get_opportunities(TradingQuery())).items[0].stale
+    assert (await service.get_opportunities(TradingQuery(fresh_only=True))).items == []
 
 
 async def test_daily_turnover_sql_completed_period_and_outside_catalogue() -> None:
@@ -510,12 +525,12 @@ async def test_daily_turnover_sql_completed_period_and_outside_catalogue() -> No
                 ),
                 days,
             )
-        assert await repo.turnover(TradingQuery(), [], NOW) == {}
-        data = await repo.turnover(TradingQuery(history_days=30), [42, 43], NOW)
+        assert await repo.get_turnover(TradingQuery(), [], NOW) == {}
+        data = await repo.get_turnover(TradingQuery(history_days=30), [42, 43], NOW)
         assert data[(10000043, 42)].daily_isk_volume == 100
         assert data[(10000002, 42)].daily_isk_volume == 1000
         assert (10000043, 43) not in data
-        two_days = await repo.turnover(
+        two_days = await repo.get_turnover(
             TradingQuery(destination_hub="amarr", history_days=2), [42], NOW
         )
         assert set(two_days) == {(10000043, 42)}
@@ -526,7 +541,7 @@ async def test_daily_turnover_sql_completed_period_and_outside_catalogue() -> No
             ),
             [],
         )
-        empty = await repo.turnover(TradingQuery(), [43], NOW)
+        empty = await repo.get_turnover(TradingQuery(), [43], NOW)
         assert empty[(10000043, 43)].daily_isk_volume == 0
     await engine.dispose()
 
@@ -536,8 +551,8 @@ async def test_price_spikes_default_threshold_sale_side_and_insufficient_history
     service = TradingService(repo, clock=lambda: NOW)
     assert not TradingQuery().price_spikes_only
     assert TradingQuery().price_spike_threshold == 30
-    assert (await service.opportunities(TradingQuery())).items
-    assert not (await service.opportunities(TradingQuery(price_spikes_only=True))).items
+    assert (await service.get_opportunities(TradingQuery())).items
+    assert not (await service.get_opportunities(TradingQuery(price_spikes_only=True))).items
     record = TradeTurnover(
         type_id=42,
         region_id=10000043,
@@ -547,16 +562,16 @@ async def test_price_spikes_default_threshold_sale_side_and_insufficient_history
         baseline_days=3,
     )
     repo.history[(10000043, 42)] = record
-    page = await service.opportunities(TradingQuery(price_spikes_only=True))
+    page = await service.get_opportunities(TradingQuery(price_spikes_only=True))
     assert page.items[0].price_spike_pct == 50
     assert page.items[0].historical_median_price == 100
     assert page.items[0].batch_profit == 455
     assert not (
-        await service.opportunities(
+        await service.get_opportunities(
             TradingQuery(price_spikes_only=True, price_spike_threshold=Decimal(51))
         )
     ).items
-    sell = await service.opportunities(
+    sell = await service.get_opportunities(
         TradingQuery(price_spikes_only=True, sale_side="sell", price_spike_threshold=Decimal(60))
     )
     assert sell.items[0].price_spike_pct == 60
@@ -569,11 +584,11 @@ async def test_price_spikes_default_threshold_sale_side_and_insufficient_history
     ]:
         record.median_price, record.baseline_days = baseline, days
         assert not (
-            await service.opportunities(
+            await service.get_opportunities(
                 TradingQuery(price_spikes_only=True, price_spike_threshold=Decimal(0))
             )
         ).items
-    assert (await service.opportunities(TradingQuery())).items
+    assert (await service.get_opportunities(TradingQuery())).items
 
 
 async def test_spike_sql_seven_completed_traded_days_median_and_destination() -> None:
@@ -613,14 +628,14 @@ async def test_spike_sql_seven_completed_traded_days_median_and_destination() ->
                 ),
                 days,
             )
-        data = await repo.turnover(
+        data = await repo.get_turnover(
             TradingQuery(price_spikes_only=True, destination_hub="amarr", history_days=1), [42], NOW
         )
         assert set(data) == {(10000043, 42)}
         assert data[(10000043, 42)].median_price == 105
         assert data[(10000043, 42)].baseline_days == 4
         assert data[(10000043, 42)].daily_isk_volume == 1000
-        normal = await repo.turnover(TradingQuery(), [42], NOW)
+        normal = await repo.get_turnover(TradingQuery(), [42], NOW)
         assert normal[(10000043, 42)].median_price is None
     await engine.dispose()
 

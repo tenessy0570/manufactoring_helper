@@ -1,4 +1,4 @@
-window.productionBlueprint = () => ({
+window.createProductionBlueprint = () => ({
   searchText: '',
   typeId: null,
   matches: [],

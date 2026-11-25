@@ -17,7 +17,7 @@ from app.domains.accounts.limiter import LoginLimiter, RedisLoginLimiter
 from app.domains.accounts.models import Credentials, PasswordChange, User, UserCreate, UserUpdate
 from app.domains.accounts.passwords import hash_password, verify_password
 from app.domains.accounts.repository import SQLAccountRepository
-from app.domains.accounts.service import COOKIE_NAME, AccountService, token_hash
+from app.domains.accounts.service import COOKIE_NAME, AccountService, hash_session_token
 from app.main import create_app
 from tests.helpers import make_settings
 
@@ -76,12 +76,12 @@ async def test_login_rotation_revocation_password_and_disabled_user(
         assert error.value.kind == ErrorKind.UNAUTHENTICATED
     identity, token = await service.login(credentials("ADMIN"), "test")
     assert identity.id == actor.id
-    assert await service.identity(token) == identity
+    assert await service.get_session_user(token) == identity
     _, rotated = await service.login(credentials(), "test", previous=token)
-    assert await service.identity(token) is None
-    assert await service.identity(rotated) is not None
+    assert await service.get_session_user(token) is None
+    assert await service.get_session_user(rotated) is not None
     await service.logout(rotated)
-    assert await service.identity(rotated) is None
+    assert await service.get_session_user(rotated) is None
     with pytest.raises(AccountError):
         await service.change_password(
             actor,
@@ -104,11 +104,11 @@ async def test_login_rotation_revocation_password_and_disabled_user(
             {"current_password": "another-password", "new_password": PASSWORD}
         ),
     )
-    assert await service.identity(token) is None
+    assert await service.get_session_user(token) is None
     ordinary = await make_user(service, "ordinary", False)
     _, ordinary_token = await service.login(credentials("ordinary"), "test")
     await service.update(ordinary.id, UserUpdate(is_active=False), actor)
-    assert await service.identity(ordinary_token) is None
+    assert await service.get_session_user(ordinary_token) is None
     with pytest.raises(AccountError):
         await service.login(credentials("ordinary"), "test")
     await service.update(ordinary.id, UserUpdate(is_active=True), actor)
@@ -126,10 +126,10 @@ async def test_login_rotation_revocation_password_and_disabled_user(
 async def test_expired_session_and_rate_limit(service: AccountService) -> None:
     actor = await make_user(service)
     await service.repository.create_session(
-        token_hash("expired"), actor.id, datetime.now(UTC) - timedelta(seconds=1)
+        hash_session_token("expired"), actor.id, datetime.now(UTC) - timedelta(seconds=1)
     )
-    await service.uow.commit()
-    assert await service.identity("expired") is None
+    await service.unit_of_work.commit()
+    assert await service.get_session_user("expired") is None
     assert isinstance(service.limiter, Limiter)
     service.limiter.allowed = False
     with pytest.raises(AccountError) as error:

@@ -76,7 +76,7 @@ window.manufacturingFeatures.push(() => ({
           average: String(100000 + i * 1000 + Math.sin(i) * 5000),
           volume: 100 + i * 3
         }))
-      } : await this.api('/api/v1/market/history/' + id + '?' + new URLSearchParams({
+      } : await this.requestApi('/api/v1/market/history/' + id + '?' + new URLSearchParams({
         hub_id: this.resultForm.hub_id,
         days: this.resultForm.days
       }));
@@ -110,7 +110,7 @@ window.manufacturingFeatures.push(() => ({
     try {
       const params = new URLSearchParams();
       ids.forEach(id => params.append('type_ids', id));
-      const result = await this.api('/api/v1/catalog/names?' + params);
+      const result = await this.requestApi('/api/v1/catalog/names?' + params);
       this.materialNames = {
         ...this.materialNames,
         ...result.names
@@ -138,7 +138,7 @@ window.manufacturingFeatures.push(() => ({
     this.preparingMarket = true;
     this.preparationMessage = '';
     try {
-      await this.api((this.calculator ? '/api/v1/invention/' + this.appliedBlueprintId + '/prepare' : '/api/v1/invention/prepare') + '?' + this.inventionParams(), {
+      await this.requestApi((this.calculator ? '/api/v1/invention/' + this.appliedBlueprintId + '/prepare' : '/api/v1/invention/prepare') + '?' + this.inventionParams(), {
         method: 'POST'
       });
       this.preparationMessage = 'Invention preparation queued for this material market and pricing choice. Select Show results after the background calculation finishes.';
@@ -176,7 +176,7 @@ window.manufacturingFeatures.push(() => ({
     this.inventionChecking = true;
     this.inventionMessage = 'Checking saved calculation...';
     try {
-      const data = await this.api(`/api/v1/invention/${id}?${this.inventionParams()}`);
+      const data = await this.requestApi(`/api/v1/invention/${id}?${this.inventionParams()}`);
       if (seq !== this.detailSequence || this.selected?.type_id !== id) return;
       this.invention = data;
       this.lastInventionCheck = new Date().toISOString();
@@ -194,7 +194,7 @@ window.manufacturingFeatures.push(() => ({
     this.inventionLoading = true;
     this.inventionMessage = 'Requesting a background calculation...';
     try {
-      const data = await this.api(`/api/v1/invention/${id}/prepare?${this.inventionParams()}`, {
+      const data = await this.requestApi(`/api/v1/invention/${id}/prepare?${this.inventionParams()}`, {
         method: 'POST'
       });
       if (seq !== this.detailSequence || this.selected?.type_id !== id) return;

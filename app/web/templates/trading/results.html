@@ -1,6 +1,6 @@
 <template x-if="page">
   <section class="market-panel trade-results" :aria-busy="loading">
-    <div class="trade-summary"><strong><span x-text="hubName(resultForm.source_hub)"></span> → <span x-text="hubName(resultForm.destination_hub)"></span></strong><span><span x-text="page.total.toLocaleString('en-US')"></span> opportunities / <span x-text="page.scanned.toLocaleString('en-US')"></span> item/route pairs checked</span><span>Oldest source: <span x-text="age(page.source_updated_at)"></span> · Oldest destination: <span x-text="age(page.destination_updated_at)"></span></span></div>
+    <div class="trade-summary"><strong><span x-text="getHubName(resultForm.source_hub)"></span> → <span x-text="getHubName(resultForm.destination_hub)"></span></strong><span><span x-text="page.total.toLocaleString('en-US')"></span> opportunities / <span x-text="page.scanned.toLocaleString('en-US')"></span> item/route pairs checked</span><span>Oldest source: <span x-text="formatAge(page.source_updated_at)"></span> · Oldest destination: <span x-text="formatAge(page.destination_updated_at)"></span></span></div>
     <p class="trade-notice" x-show="page.missing_routes"><span x-text="page.missing_routes"></span> directions excluded: route data is preparing or no verified route is available. Safe routes contain only systems with displayed security 0.5 or higher.</p>
     <p
       class="trade-notice"
@@ -28,7 +28,7 @@
             <label>
               <input
                 type="checkbox"
-                :checked="columnVisible(column.id)"
+                :checked="isColumnVisible(column.id)"
                 @change="hiddenColumns=$event.target.checked?hiddenColumns.filter(id=>id!==column.id):[...hiddenColumns,column.id]"
               >
               <span x-text="column.label"></span>
@@ -47,35 +47,35 @@
         <thead>
           <tr>
             <th>Item</th>
-            <th x-show="columnVisible('jumps')">Jumps</th>
+            <th x-show="isColumnVisible('jumps')">Jumps</th>
             <th
-              x-show="columnVisible('jumpProfit')"
+              x-show="isColumnVisible('jumpProfit')"
               title="Net profit for the whole batch divided by gate jumps."
             >
               Profit / jump (ISK)
             </th>
-            <th x-show="columnVisible('route')">Route</th>
-            <th x-show="columnVisible('purchase')">Buy / unit</th>
-            <th x-show="columnVisible('sale')">Sell / unit</th>
-            <th x-show="columnVisible('profit')">Profit / unit</th>
+            <th x-show="isColumnVisible('route')">Route</th>
+            <th x-show="isColumnVisible('purchase')">Buy / unit</th>
+            <th x-show="isColumnVisible('sale')">Sell / unit</th>
+            <th x-show="isColumnVisible('profit')">Profit / unit</th>
             <th
-              x-show="columnVisible('density')"
+              x-show="isColumnVisible('density')"
               title="Net batch profit divided by cargo volume; unit profit per volume when no batch is specified."
             >
               Profit / m³
             </th>
-            <th x-show="columnVisible('margin')">Margin</th>
-            <th x-show="columnVisible('quantity')">Units</th>
-            <th x-show="columnVisible('investment')">Required investment (ISK)</th>
-            <th x-show="columnVisible('cargo')">Cargo (m³)</th>
-            <th x-show="columnVisible('batch')">Batch profit</th>
+            <th x-show="isColumnVisible('margin')">Margin</th>
+            <th x-show="isColumnVisible('quantity')">Units</th>
+            <th x-show="isColumnVisible('investment')">Required investment (ISK)</th>
+            <th x-show="isColumnVisible('cargo')">Cargo (m³)</th>
+            <th x-show="isColumnVisible('batch')">Batch profit</th>
             <th
-              x-show="columnVisible('turnover')"
+              x-show="isColumnVisible('turnover')"
               title="Average daily traded ISK across the destination hub region."
             >
               Region turnover / day
             </th>
-            <th x-show="columnVisible('data')">Data</th>
+            <th x-show="isColumnVisible('data')">Data</th>
           </tr>
         </thead>
         <tbody>
@@ -89,7 +89,7 @@
                   type="button"
                   class="item-name trade-item-button"
                   @click="openHistory(item)"
-                  :aria-label="'Price history for '+item.name+' in '+hubName(item.destination_hub)"
+                  :aria-label="'Price history for '+item.name+' in '+getHubName(item.destination_hub)"
                 >
                   <img
                     :src="'https://images.evetech.net/types/'+item.type_id+'/icon?size=32'"
@@ -109,37 +109,37 @@
                         <div>
                           <dt>Price spike / 7-day median</dt>
                           <dd
-                            x-text="'+'+pct(item.price_spike_pct)+' / '+money(item.historical_median_price)+' ISK'"
+                            x-text="'+'+formatPercent(item.price_spike_pct)+' / '+formatMoney(item.historical_median_price)+' ISK'"
                           >
                           </dd>
                         </div>
                       </template>
                       <dt>Cost / unit</dt>
-                      <dd x-text="money(item.cost_per_unit)+' ISK'">
+                      <dd x-text="formatMoney(item.cost_per_unit)+' ISK'">
                       </dd>
                       <dt>Purchase fee / unit</dt>
-                      <dd x-text="money(item.purchase_fee)+' ISK'">
+                      <dd x-text="formatMoney(item.purchase_fee)+' ISK'">
                       </dd>
                       <dt>Sale fee / unit (best price)</dt>
-                      <dd x-text="money(item.sale_fee)+' ISK'">
+                      <dd x-text="formatMoney(item.sale_fee)+' ISK'">
                       </dd>
                       <dt>Volume / unit</dt>
-                      <dd x-text="money(item.volume_m3)+' m³'">
+                      <dd x-text="formatMoney(item.volume_m3)+' m³'">
                       </dd>
                       <dt>Stock in purchase price range</dt>
-                      <dd x-text="money(item.source_stock)">
+                      <dd x-text="formatMoney(item.source_stock)">
                       </dd>
                       <dt>Profitable buy demand</dt>
-                      <dd x-text="money(item.destination_demand)">
+                      <dd x-text="formatMoney(item.destination_demand)">
                       </dd>
                       <dt>Average batch sale price</dt>
-                      <dd x-text="money(item.average_sale_price)+' ISK'">
+                      <dd x-text="formatMoney(item.average_sale_price)+' ISK'">
                       </dd>
                       <dt>History updated</dt>
-                      <dd x-text="age(item.history_updated_at)">
+                      <dd x-text="formatAge(item.history_updated_at)">
                       </dd>
                       <dt>Net batch revenue</dt>
-                      <dd x-text="money(item.batch_revenue)+' ISK'">
+                      <dd x-text="formatMoney(item.batch_revenue)+' ISK'">
                       </dd>
                     </dl>
                     <p x-show="!item.instant_trade">Scenario: orders must fill.</p>
@@ -149,59 +149,62 @@
                   </div>
                 </details>
               </td>
-              <td x-show="columnVisible('jumps')"><span x-text="item.jumps ?? '--'"></span><small x-show="item.route_highsec===false" class="error-text">Low/null-sec</small></td>
+              <td x-show="isColumnVisible('jumps')"><span x-text="item.jumps ?? '--'"></span><small x-show="item.route_highsec===false" class="error-text">Low/null-sec</small></td>
               <td
-                x-show="columnVisible('jumpProfit')"
+                x-show="isColumnVisible('jumpProfit')"
                 class="positive"
                 x-text="compactMoney(item.profit_per_jump)"
-                :title="money(item.profit_per_jump)+' ISK / jump'"
+                :title="formatMoney(item.profit_per_jump)+' ISK / jump'"
               ></td>
-              <td x-show="columnVisible('route')" class="trade-route-cell"><span x-text="hubName(item.source_hub)"></span> → <span x-text="hubName(item.destination_hub)"></span></td>
+              <td x-show="isColumnVisible('route')" class="trade-route-cell"><span x-text="getHubName(item.source_hub)"></span> → <span x-text="getHubName(item.destination_hub)"></span></td>
               <td
-                x-show="columnVisible('purchase')"
+                x-show="isColumnVisible('purchase')"
                 x-text="compactMoney(item.purchase_price)"
-                :title="money(item.purchase_price)+' ISK'"
+                :title="formatMoney(item.purchase_price)+' ISK'"
               ></td>
               <td
-                x-show="columnVisible('sale')"
+                x-show="isColumnVisible('sale')"
                 x-text="compactMoney(item.sale_price)"
-                :title="money(item.sale_price)+' ISK'"
+                :title="formatMoney(item.sale_price)+' ISK'"
               ></td>
               <td
-                x-show="columnVisible('profit')"
+                x-show="isColumnVisible('profit')"
                 class="positive"
                 x-text="compactMoney(item.profit_per_unit)"
-                :title="money(item.profit_per_unit)+' ISK'"
+                :title="formatMoney(item.profit_per_unit)+' ISK'"
               ></td>
               <td
-                x-show="columnVisible('density')"
+                x-show="isColumnVisible('density')"
                 class="positive trade-density"
                 x-text="compactMoney(item.profit_per_m3)"
-                :title="money(item.profit_per_m3)+' ISK'"
+                :title="formatMoney(item.profit_per_m3)+' ISK'"
               ></td>
-              <td x-show="columnVisible('margin')">
-                <span class="margin-badge" x-text="pct(item.margin_pct)"></span>
+              <td x-show="isColumnVisible('margin')">
+                <span class="margin-badge" x-text="formatPercent(item.margin_pct)"></span>
               </td>
-              <td x-show="columnVisible('quantity')" x-text="money(item.quantity)"></td>
               <td
-                x-show="columnVisible('investment')"
-                x-text="compactMoney(item.investment)"
-                :title="money(item.investment)+' ISK'"
+                x-show="isColumnVisible('quantity')"
+                x-text="formatMoney(item.quantity)"
               ></td>
-              <td x-show="columnVisible('cargo')" x-text="money(item.cargo_m3)"></td>
               <td
-                x-show="columnVisible('batch')"
+                x-show="isColumnVisible('investment')"
+                x-text="compactMoney(item.investment)"
+                :title="formatMoney(item.investment)+' ISK'"
+              ></td>
+              <td x-show="isColumnVisible('cargo')" x-text="formatMoney(item.cargo_m3)"></td>
+              <td
+                x-show="isColumnVisible('batch')"
                 class="positive"
-                :title="money(item.batch_profit)+' ISK'"
+                :title="formatMoney(item.batch_profit)+' ISK'"
               >
                 <strong x-text="compactMoney(item.batch_profit)"></strong><small x-show="!item.instant_trade">Scenario</small>
               </td>
               <td
-                x-show="columnVisible('turnover')"
-                :title="money(item.daily_isk_volume)+' ISK / day'"
+                x-show="isColumnVisible('turnover')"
+                :title="formatMoney(item.daily_isk_volume)+' ISK / day'"
                 x-text="compactMoney(item.daily_isk_volume)"
               ></td>
-              <td x-show="columnVisible('data')">
+              <td x-show="isColumnVisible('data')">
                 <span
                   class="data-badge"
                   :class="stale(item)?'stale':'fresh'"

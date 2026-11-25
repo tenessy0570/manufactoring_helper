@@ -1,4 +1,4 @@
-window.tradingProfiles = () => ({
+window.createTradingProfiles = () => ({
   profiles: [],
   profileId: '',
   profileName: '',
@@ -25,7 +25,7 @@ window.tradingProfiles = () => ({
   selectProfile() {
     const p = this.profiles.find(p => p.id === this.profileId);
     if (p) {
-      const form = this.defaults();
+      const form = this.getDefaultSettings();
       for (const k of Object.keys(form))
         if (typeof p.form[k] === typeof form[k]) form[k] = p.form[k];
       this.form = form;

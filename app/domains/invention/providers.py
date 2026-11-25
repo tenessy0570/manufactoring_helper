@@ -18,7 +18,7 @@ from app.domains.manufacturing.repository import ManufacturingRepository
 
 class InventionProvider(Provider):
     @provide(scope=Scope.APP)
-    async def arq(self, settings: Settings) -> AsyncIterator[ArqRedis]:
+    async def provide_job_queue_client(self, settings: Settings) -> AsyncIterator[ArqRedis]:
         redis = ArqRedis(
             host=settings.redis_host,
             port=settings.redis_port,
@@ -28,19 +28,19 @@ class InventionProvider(Provider):
         await redis.aclose()
 
     @provide(scope=Scope.APP)
-    def queue(self, redis: ArqRedis) -> InventionQueue:
+    def provide_queue(self, redis: ArqRedis) -> InventionQueue:
         return RedisInventionQueue(redis)
 
     @provide(scope=Scope.APP)
-    def gateway(self, client: IndustryClient) -> InventionGateway:
+    def provide_gateway(self, client: IndustryClient) -> InventionGateway:
         return EverefInventionGateway(client)
 
     @provide(scope=Scope.REQUEST)
-    def repository(self, session: AsyncSession) -> InventionRepository:
+    def provide_repository(self, session: AsyncSession) -> InventionRepository:
         return SQLInventionRepository(session)
 
     @provide(scope=Scope.REQUEST)
-    def service(
+    def provide_service(
         self,
         repository: InventionRepository,
         queue: InventionQueue,
@@ -50,7 +50,7 @@ class InventionProvider(Provider):
         return InventionService(repository, queue, unit_of_work, cache)
 
     @provide(scope=Scope.REQUEST)
-    def sync_service(
+    def provide_sync_service(
         self,
         repository: InventionRepository,
         gateway: InventionGateway,
@@ -69,7 +69,7 @@ class InventionProvider(Provider):
         )
 
     @provide(scope=Scope.REQUEST)
-    def shopping_service(
+    def provide_shopping_service(
         self,
         repository: InventionRepository,
         market: ManufacturingRepository,

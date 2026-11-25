@@ -48,7 +48,7 @@ async function checkCalculatorWorkflow(){
     if(calculate.top<0||calculate.bottom>innerHeight)throw Error('Calculate button not visible after scrolling');window.scrollTo(0,0);
     await a.prepareMarketInvention();
     if(!requests.some(url=>url.includes('/invention/31796/prepare?'))||requests.some(url=>url.includes('/invention/prepare?')))throw Error('Invention preparation must target only selected item');
-    a.saveSettings();a.form=a.defaults();a.blueprint={type_id:'',name:''};a.restoreSettings();
+    a.saveSettings();a.form=a.getDefaultSettings();a.blueprint={type_id:'',name:''};a.restoreSettings();
     if(a.form.sales_tax!=='7'||Number(a.blueprint.type_id)!==31796)throw Error('Calculator persistence');
     if(localStorage.getItem('eve-manufacturing.settings.v1.live')!==oldStorage)throw Error('Calculator changed Opportunities preferences');
     return 'PASS: calculator search, single-item requests, shared settings, private browser namespace and scoped invention';

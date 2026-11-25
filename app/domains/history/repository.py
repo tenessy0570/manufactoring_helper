@@ -17,26 +17,28 @@ from app.domains.market.models import get_hub
 
 class HistoryRepository(ABC):
     @abstractmethod
-    async def state(self, region_id: int, type_id: int) -> HistoryState | None: ...
+    async def get_state(self, region_id: int, type_id: int) -> HistoryState | None: ...
 
     @abstractmethod
     async def replace(self, state: HistoryState, days: Sequence[HistoryDay]) -> None: ...
 
     @abstractmethod
-    async def due(self, region_id: int, type_ids: Sequence[int], now: datetime) -> set[int]: ...
+    async def find_due_type_ids(
+        self, region_id: int, type_ids: Sequence[int], now: datetime
+    ) -> set[int]: ...
 
     @abstractmethod
-    async def series(
+    async def get_history_series(
         self, region_id: int, type_id: int, start: date, end: date
     ) -> list[HistoryDay]: ...
 
     @abstractmethod
-    async def liquidity(
+    async def get_liquidity(
         self, query: LiquidityQuery, now: datetime
     ) -> tuple[list[LiquidityItem], int]: ...
 
     @abstractmethod
-    async def candidates(self, query: LiquidityQuery, now: datetime) -> list[LiquidityItem]:
+    async def find_candidates(self, query: LiquidityQuery, now: datetime) -> list[LiquidityItem]:
         """All matching items for evaluation, without a page limit or a separate count."""
         ...
 
@@ -49,9 +51,9 @@ class SQLHistoryRepository(HistoryRepository):
         self, session: AsyncSession, refresh_policy: RefreshPolicy = DEFAULT_REFRESH
     ) -> None:
         self._session = session
-        self._refresh = refresh_policy
+        self._refresh_policy = refresh_policy
 
-    async def state(self, region_id: int, type_id: int) -> HistoryState | None:
+    async def get_state(self, region_id: int, type_id: int) -> HistoryState | None:
         row = await self._session.get(HistoryStateTable, (region_id, type_id))
         if row is None:
             return None
@@ -62,7 +64,9 @@ class SQLHistoryRepository(HistoryRepository):
                 setattr(state, name, value.replace(tzinfo=UTC))
         return state
 
-    async def due(self, region_id: int, type_ids: Sequence[int], now: datetime) -> set[int]:
+    async def find_due_type_ids(
+        self, region_id: int, type_ids: Sequence[int], now: datetime
+    ) -> set[int]:
         fresh: set[int] = set()
         for start in range(0, len(type_ids), 500):
             rows = await self._session.scalars(
@@ -70,7 +74,7 @@ class SQLHistoryRepository(HistoryRepository):
                     HistoryStateTable.region_id == region_id,
                     HistoryStateTable.type_id.in_(type_ids[start : start + 500]),
                     (HistoryStateTable.expires_at > now)
-                    | (HistoryStateTable.synced_at > now - self._refresh.history),
+                    | (HistoryStateTable.synced_at > now - self._refresh_policy.history),
                 )
             )
             fresh.update(rows)
@@ -94,7 +98,7 @@ class SQLHistoryRepository(HistoryRepository):
         await self._session.merge(HistoryStateTable(**state.model_dump()))
         await self._session.flush()
 
-    async def series(
+    async def get_history_series(
         self, region_id: int, type_id: int, start: date, end: date
     ) -> list[HistoryDay]:
         rows = await self._session.scalars(
@@ -109,7 +113,7 @@ class SQLHistoryRepository(HistoryRepository):
         )
         return [HistoryDay.model_validate(row, from_attributes=True) for row in rows]
 
-    def _catalog_conditions(self, query: LiquidityQuery) -> list[ColumnElement[bool]]:
+    def _build_catalog_conditions(self, query: LiquidityQuery) -> list[ColumnElement[bool]]:
         items = ItemTypeTable
         conditions: list[ColumnElement[bool]] = [items.is_active.is_(True)]
         if query.type_ids is not None:
@@ -128,11 +132,11 @@ class SQLHistoryRepository(HistoryRepository):
             conditions.append(items.is_rig == query.is_rig)
         return conditions
 
-    def _liquidity_statement(self, query: LiquidityQuery, now: datetime) -> Select[Any]:
+    def _build_liquidity_statement(self, query: LiquidityQuery, now: datetime) -> Select[Any]:
         history, states, items = HistoryDayTable, HistoryStateTable, ItemTypeTable
         region = get_hub(query.hub_id).region_id
         start, end = now.date() - timedelta(days=query.days), now.date() - timedelta(days=1)
-        item_conditions = self._catalog_conditions(query)
+        item_conditions = self._build_catalog_conditions(query)
         conditions = [
             history.region_id == region,
             history.date >= start,
@@ -187,13 +191,13 @@ class SQLHistoryRepository(HistoryRepository):
                 totals.c.type_id.is_not(None) if query.has_history else totals.c.type_id.is_(None)
             )
         if query.fresh_only:
-            statement = statement.where(states.synced_at > now - self._refresh.history)
+            statement = statement.where(states.synced_at > now - self._refresh_policy.history)
         return statement
 
-    async def liquidity(
+    async def get_liquidity(
         self, query: LiquidityQuery, now: datetime
     ) -> tuple[list[LiquidityItem], int]:
-        statement = self._liquidity_statement(query, now)
+        statement = self._build_liquidity_statement(query, now)
         total = (
             await self._session.scalar(select(func.count()).select_from(statement.subquery())) or 0
         )
@@ -204,10 +208,10 @@ class SQLHistoryRepository(HistoryRepository):
         ).mappings()
         return [LiquidityItem.model_validate(dict(row)) for row in rows], total
 
-    async def candidates(self, query: LiquidityQuery, now: datetime) -> list[LiquidityItem]:
+    async def find_candidates(self, query: LiquidityQuery, now: datetime) -> list[LiquidityItem]:
         rows = (
             await self._session.execute(
-                self._liquidity_statement(query, now).order_by(ItemTypeTable.type_id)
+                self._build_liquidity_statement(query, now).order_by(ItemTypeTable.type_id)
             )
         ).mappings()
         return [LiquidityItem.model_validate(dict(row)) for row in rows]

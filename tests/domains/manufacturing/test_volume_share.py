@@ -10,8 +10,8 @@ from app.domains.manufacturing.models import ManufacturingQuery
 from app.domains.manufacturing.service import ManufacturingService
 from app.domains.manufacturing.timing import calculate_timing
 from tests.domains.catalog.test_catalog import NOW
-from tests.domains.history.test_history import day, state
-from tests.domains.invention.test_invention import plan
+from tests.domains.history.test_history import day, get_state
+from tests.domains.invention.test_invention import get_plan
 from tests.domains.manufacturing.test_manufacturing import calculation_input, seed
 from tests.domains.manufacturing.test_manufacturing import session as session
 
@@ -22,17 +22,19 @@ async def test_daily_capacity_compares_selected_lines_with_completed_day_regiona
 ) -> None:
     repository = await seed(session)
     service = ManufacturingService(repository, SQLHistoryRepository(session), lambda: NOW)
-    result = await service.opportunities(ManufacturingQuery(type_ids=[10], production_lines=lines))
+    result = await service.get_opportunities(
+        ManufacturingQuery(type_ids=[10], production_lines=lines)
+    )
     item = result.items[0]
     assert item.daily_production_units == 48 * lines
     assert item.daily_units is not None
     assert item.daily_volume_share_pct is not None
     assert abs(item.daily_volume_share_pct - Decimal(7200 * lines)) < Decimal(".001")
     assert item.daily_volume_share_pct > 100
-    missing = await service.opportunities(ManufacturingQuery(type_ids=[20]))
+    missing = await service.get_opportunities(ManufacturingQuery(type_ids=[20]))
     assert missing.items[0].daily_volume_share_pct is None
-    await SQLHistoryRepository(session).replace(state(), [day(volume=0)])
-    empty = await service.opportunities(ManufacturingQuery(type_ids=[10]))
+    await SQLHistoryRepository(session).replace(get_state(), [day(volume=0)])
+    empty = await service.get_opportunities(ManufacturingQuery(type_ids=[10]))
     assert empty.items[0].daily_volume_share_pct is None
 
 
@@ -47,11 +49,11 @@ def test_capacity_uses_enabled_preparation_and_is_independent_of_money(flag: str
             update={"profit_per_unit": profit, "profit_per_day": profit * 480}
         )
         timing = calculate_timing(
-            data.product_quote, calculated, None, query, plan(), Decimal(3600)
+            data.product_quote, calculated, None, query, get_plan(), Decimal(3600)
         )
         assert timing.daily_production_units == 160
     faster = query.model_copy(update={"invention_slots": 10})
-    timing = calculate_timing(data.product_quote, result, None, faster, plan(), Decimal(3600))
+    timing = calculate_timing(data.product_quote, result, None, faster, get_plan(), Decimal(3600))
     assert timing.daily_production_units == 400
 
 

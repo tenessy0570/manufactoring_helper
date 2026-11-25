@@ -9,7 +9,7 @@ class ProfileCalculationService:
     def __init__(self, profiles: ProfileService, manufacturing: ManufacturingService) -> None:
         self._profiles, self._manufacturing = profiles, manufacturing
 
-    async def opportunities(
+    async def get_opportunities(
         self, profile_id: UUID | None, limit: int | None, offset: int
     ) -> OpportunityPage:
         profile = await self._profiles.get(profile_id)
@@ -17,4 +17,6 @@ class ProfileCalculationService:
         values["offset"] = offset
         if limit is not None:
             values["limit"] = limit
-        return await self._manufacturing.opportunities(ManufacturingQuery.model_validate(values))
+        return await self._manufacturing.get_opportunities(
+            ManufacturingQuery.model_validate(values)
+        )

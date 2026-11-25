@@ -6,6 +6,7 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from app.domains.market.enums import OrderType
 from app.domains.market.models import HubId
 
 DECRYPTORS: tuple[tuple[int | None, str], ...] = (
@@ -28,7 +29,7 @@ class InventionQuery(BaseModel):
     model_config = ConfigDict(frozen=True)
 
     hub_id: HubId = "jita"
-    order_type: Literal["buy", "sell"] = "sell"
+    order_type: OrderType = "sell"
 
 
 class InventionSettings(InventionQuery):

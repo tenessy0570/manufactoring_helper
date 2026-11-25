@@ -12,7 +12,7 @@ logger = logging.getLogger(__name__)
 
 def install_error_handlers(app: FastAPI) -> None:
     @app.exception_handler(ApplicationError)
-    async def application_error(request: Request, error: ApplicationError) -> JSONResponse:
+    async def handle_application_error(request: Request, error: ApplicationError) -> JSONResponse:
         status = {
             ErrorKind.INVALID_OPERATION: 400,
             ErrorKind.INVALID_INPUT: 422,
@@ -25,7 +25,9 @@ def install_error_handlers(app: FastAPI) -> None:
         return JSONResponse({"detail": error.message}, status_code=status)
 
     @app.exception_handler(RequestValidationError)
-    async def validation_error(request: Request, error: RequestValidationError) -> JSONResponse:
+    async def handle_validation_error(
+        request: Request, error: RequestValidationError
+    ) -> JSONResponse:
         details = []
         for issue in error.errors():
             kind = issue["type"]
@@ -38,7 +40,7 @@ def install_error_handlers(app: FastAPI) -> None:
         return JSONResponse({"detail": details}, status_code=422)
 
     @app.exception_handler(HttpStatusError)
-    async def upstream_error(request: Request, error: HttpStatusError) -> JSONResponse:
+    async def handle_upstream_error(request: Request, error: HttpStatusError) -> JSONResponse:
         logger.warning(
             "Upstream request failed", exc_info=(type(error), error, error.__traceback__)
         )
@@ -47,7 +49,7 @@ def install_error_handlers(app: FastAPI) -> None:
         )
 
     @app.exception_handler(Exception)
-    async def unexpected_error(request: Request, error: Exception) -> JSONResponse:
+    async def handle_unexpected_error(request: Request, error: Exception) -> JSONResponse:
         logger.error(
             "Unhandled request failure", exc_info=(type(error), error, error.__traceback__)
         )

@@ -15,19 +15,19 @@ from app.domains.exclusions.service import ExclusionService
 
 async def test_exclusion_service_commits_deduplicates_and_rolls_back() -> None:
     repo = AsyncMock(spec=ExclusionRepository)
-    uow = AsyncMock(spec=UnitOfWork)
-    service = ExclusionService(repo, uow)
+    unit_of_work = AsyncMock(spec=UnitOfWork)
+    service = ExclusionService(repo, unit_of_work)
     user = uuid4()
     data = ExclusionList(items=[ExcludedItem(type_id=42, name="Item")] * 2)
     result = await service.save(user, data)
     assert len(result.items) == 1
-    uow.commit.assert_awaited_once()
+    unit_of_work.commit.assert_awaited_once()
     await service.get(user)
     repo.get.assert_awaited_once_with(user)
     repo.save.side_effect = ValueError("failed")
     with pytest.raises(ValueError, match="failed"):
         await service.save(user, data)
-    uow.rollback.assert_awaited_once()
+    unit_of_work.rollback.assert_awaited_once()
 
 
 async def test_exclusion_repository_isolates_users_and_restores() -> None:
@@ -82,7 +82,7 @@ async def test_exclusion_api_uses_authenticated_user() -> None:
     user_id = uuid4()
 
     @app.middleware("http")
-    async def identity(request: Request, call_next: RequestResponseEndpoint) -> Response:
+    async def get_session_user(request: Request, call_next: RequestResponseEndpoint) -> Response:
         request.state.user = SimpleNamespace(id=user_id)
         return await call_next(request)
 

@@ -23,25 +23,25 @@ async def test_progress_persists_coverage_and_validates_hub() -> None:
         await connection.run_sync(Base.metadata.create_all)
     async with AsyncSession(engine) as session:
         repository = SQLProgressRepository(session)
-        empty = await repository.snapshot("jita")
+        empty = await repository.get_data_progress("jita")
         assert empty.catalog_items == 0
         assert empty.market_updated_at is None
         assert all(
             source.status == "missing"
-            for source in (await repository.freshness("jita", NOW)).sources
+            for source in (await repository.get_freshness_report("jita", NOW)).sources
         )
         await seed(session)
         invention = SQLInventionRepository(session)
         await invention.save_request(request())
-        saved = await repository.snapshot("jita")
+        saved = await repository.get_data_progress("jita")
         assert saved.catalog_items == 5
         assert saved.recipes_loaded == 3
         assert saved.recipes_unavailable == 1
         assert saved.history_loaded == 1
         assert saved.invention_ready == 1
         assert saved.market_updated_at is not None
-        assert (await repository.snapshot("hek")).history_loaded == 0
-        freshness = await repository.freshness("jita", NOW)
+        assert (await repository.get_data_progress("hek")).history_loaded == 0
+        freshness = await repository.get_freshness_report("jita", NOW)
         assert [source.source for source in freshness.sources] == [
             "market",
             "history",
@@ -52,18 +52,20 @@ async def test_progress_persists_coverage_and_validates_hub() -> None:
         await SQLManufacturingRepository(session, SQLMarketQuoteReader(session)).save(
             recipe_state(expires_at=NOW)
         )
-        partial = await repository.freshness("jita", NOW)
+        partial = await repository.get_freshness_report("jita", NOW)
         recipes = next(source for source in partial.sources if source.source == "recipes")
         assert recipes.status == "partial"
         assert recipes.fresh == recipes.cached - 1
         assert all(
             source.status == "stale"
-            for source in (await repository.freshness("jita", NOW + timedelta(days=2))).sources
+            for source in (
+                await repository.get_freshness_report("jita", NOW + timedelta(days=2))
+            ).sources
         )
         assert (
             next(
                 source
-                for source in (await repository.freshness("hek", NOW)).sources
+                for source in (await repository.get_freshness_report("hek", NOW)).sources
                 if source.source == "market"
             ).status
             == "missing"

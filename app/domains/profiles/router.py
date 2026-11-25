@@ -22,8 +22,8 @@ from app.domains.profiles.service import (
 router = APIRouter(prefix="/api/v1/profiles", tags=["profiles"], route_class=DishkaRoute)
 
 
-@router.get("")
-async def profiles(service: FromDishka[ProfileService]) -> ProfilePage:
+@router.get("", name="profiles")
+async def get_profiles(service: FromDishka[ProfileService]) -> ProfilePage:
     return await service.find()
 
 
@@ -32,18 +32,18 @@ async def create(data: ProfileCreate, service: FromDishka[ProfileService]) -> Pr
     return await service.create(data)
 
 
-@router.get("/default")
-async def default(service: FromDishka[ProfileService]) -> Profile:
+@router.get("/default", name="default")
+async def get_default_profile(service: FromDishka[ProfileService]) -> Profile:
     return await service.get()
 
 
-@router.get("/default/opportunities")
-async def default_opportunities(
+@router.get("/default/opportunities", name="default_opportunities")
+async def get_default_opportunities(
     service: FromDishka[ProfileCalculationService],
     limit: Annotated[int | None, Query(ge=1, le=1000)] = None,
     offset: Annotated[int, Query(ge=0)] = 0,
 ) -> OpportunityPage:
-    return await service.opportunities(None, limit, offset)
+    return await service.get_opportunities(None, limit, offset)
 
 
 @router.get("/{profile_id}")
@@ -91,14 +91,14 @@ async def delete(profile_id: UUID, service: FromDishka[ProfileService]) -> Respo
     return Response(status_code=204)
 
 
-@router.get("/{profile_id}/opportunities")
-async def opportunities(
+@router.get("/{profile_id}/opportunities", name="opportunities")
+async def get_opportunities(
     profile_id: UUID,
     service: FromDishka[ProfileCalculationService],
     limit: Annotated[int | None, Query(ge=1, le=1000)] = None,
     offset: Annotated[int, Query(ge=0)] = 0,
 ) -> OpportunityPage:
     try:
-        return await service.opportunities(profile_id, limit, offset)
+        return await service.get_opportunities(profile_id, limit, offset)
     except ProfileNotFoundError as error:
         raise HTTPException(404, "Profile not found") from error

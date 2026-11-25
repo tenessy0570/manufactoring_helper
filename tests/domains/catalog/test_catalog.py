@@ -79,7 +79,7 @@ def test_selector_rejects_incomplete_tree() -> None:
 
 async def test_upsert_batches_updates_and_deactivation(session: AsyncSession) -> None:
     repository = SQLItemTypeRepository(session)
-    assert await repository.latest_synced_at() is None
+    assert await repository.get_latest_sync_time() is None
     await repository.upsert_many([item(number) for number in range(205)])
     await repository.upsert_many([item(10, name="Changed", synced_at=NOW + timedelta(days=1))])
     await repository.upsert_many([])
@@ -90,7 +90,7 @@ async def test_upsert_batches_updates_and_deactivation(session: AsyncSession) ->
     await repository.deactivate_before(NOW + timedelta(days=1))
     assert await repository.count() == 1
     assert await repository.count(ItemTypeClause(is_active=False)) == 204
-    assert await repository.latest_synced_at() == NOW + timedelta(days=1)
+    assert await repository.get_latest_sync_time() == NOW + timedelta(days=1)
 
 
 @pytest.mark.parametrize(
@@ -201,12 +201,12 @@ async def test_incomplete_sync_preserves_data(session: AsyncSession, failure: st
 
 async def test_sync_rolls_back_failed_write(session: AsyncSession) -> None:
     repository = SQLItemTypeRepository(session)
-    uow = AsyncMock(spec=SQLAlchemyUnitOfWork)
-    uow.commit.side_effect = RuntimeError("commit failed")
-    service = CatalogSyncService(repository, FakeGateway(), uow, MarketTreeSelector())
+    unit_of_work = AsyncMock(spec=SQLAlchemyUnitOfWork)
+    unit_of_work.commit.side_effect = RuntimeError("commit failed")
+    service = CatalogSyncService(repository, FakeGateway(), unit_of_work, MarketTreeSelector())
     with pytest.raises(RuntimeError, match="commit failed"):
         await service.sync()
-    uow.rollback.assert_awaited_once()
+    unit_of_work.rollback.assert_awaited_once()
 
 
 async def test_api_combines_filters_pagination_and_validates(session: AsyncSession) -> None:

@@ -11,21 +11,23 @@ from app.infrastructure.esi import EsiClient
 
 class HistoryProvider(Provider):
     @provide(scope=Scope.APP)
-    def gateway(self, esi: EsiClient, settings: Settings) -> HistoryGateway:
+    def provide_gateway(self, esi: EsiClient, settings: Settings) -> HistoryGateway:
         return EsiHistoryGateway(esi, settings.history_cache_seconds)
 
     @provide(scope=Scope.REQUEST)
-    def repository(self, session: AsyncSession, refresh_policy: RefreshPolicy) -> HistoryRepository:
+    def provide_repository(
+        self, session: AsyncSession, refresh_policy: RefreshPolicy
+    ) -> HistoryRepository:
         return SQLHistoryRepository(session, refresh_policy)
 
     @provide(scope=Scope.REQUEST)
-    def service(
+    def provide_service(
         self, repository: HistoryRepository, refresh_policy: RefreshPolicy
     ) -> HistoryService:
         return HistoryService(repository, refresh_policy=refresh_policy)
 
     @provide(scope=Scope.REQUEST)
-    def sync_service(
+    def provide_sync_service(
         self,
         repository: HistoryRepository,
         gateway: HistoryGateway,

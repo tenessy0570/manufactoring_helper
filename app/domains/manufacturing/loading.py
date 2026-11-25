@@ -31,8 +31,10 @@ class OpportunityDataLoader:
                 if query.meta_group_ids is None or value in query.meta_group_ids
             ]
         filters.fresh_only = False
-        candidates = await self._history.candidates(filters, now)
-        recipes = await self._repository.recipes([candidate.type_id for candidate in candidates])
+        candidates = await self._history.find_candidates(filters, now)
+        recipes = await self._repository.get_recipes(
+            [candidate.type_id for candidate in candidates]
+        )
         material_ids = sorted(
             {
                 material.type_id
@@ -44,14 +46,14 @@ class OpportunityDataLoader:
         material_hub = query.material_hub_id or query.hub_id
         product_ids = [candidate.type_id for candidate in candidates]
         if material_hub == query.hub_id:
-            all_quotes = await self._repository.quotes(
+            all_quotes = await self._repository.get_quotes(
                 material_hub, sorted(set(material_ids + product_ids))
             )
             quotes = {key: all_quotes[key] for key in material_ids if key in all_quotes}
             products = {key: all_quotes[key] for key in product_ids if key in all_quotes}
         else:
-            quotes = await self._repository.quotes(material_hub, material_ids)
-            products = await self._repository.quotes(query.hub_id, product_ids)
+            quotes = await self._repository.get_quotes(material_hub, material_ids)
+            products = await self._repository.get_quotes(query.hub_id, product_ids)
         invention_settings = {
             candidate.type_id: InventionSettings(
                 type_id=candidate.type_id,
@@ -62,7 +64,7 @@ class OpportunityDataLoader:
             if candidate.meta_group_id == 2
         }
         invention_results = (
-            await self._invention.requests([value.key for value in invention_settings.values()])
+            await self._invention.get_requests([value.key for value in invention_settings.values()])
             if (
                 query.include_invention_cost
                 or (query.include_invention_time or query.include_copying_time)

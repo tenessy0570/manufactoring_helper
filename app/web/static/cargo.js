@@ -11,11 +11,11 @@ document.addEventListener('alpine:init', () => {
     historySequence: 0,
     historyReturnFocus: null,
     historyOverflow: '',
-    hubName(h) {
+    getHubName(h) {
       return this.name(h);
     },
-    fullMoney(value) {
-      return this.money(value);
+    formatFullMoney(value) {
+      return this.formatMoney(value);
     },
     async openHistory(item, plan) {
       item = {
@@ -133,7 +133,7 @@ document.addEventListener('alpine:init', () => {
         maximumFractionDigits: 2
       }).format(Number(v));
     },
-    money(v) {
+    formatMoney(v) {
       return new Intl.NumberFormat('en-US', {
         maximumFractionDigits: 2
       }).format(Number(v));

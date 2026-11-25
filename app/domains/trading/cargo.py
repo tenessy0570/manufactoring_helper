@@ -8,6 +8,7 @@ from multiprocessing.connection import Connection
 from types import SimpleNamespace
 from typing import Any
 
+from app.domains.market.enums import OrderSide
 from app.domains.market.models import HUBS, BuyPriceLevel, get_hub
 from app.domains.trading.calculation import calculate_trade
 from app.domains.trading.models import (
@@ -24,50 +25,54 @@ from app.domains.trading.routes import TradingRoutes
 SOLVERS = asyncio.Semaphore(1)
 
 
-def segments(data: TradeInput, query: CargoQuery) -> list[tuple[int, Decimal, Decimal]]:
+def build_price_segments(data: TradeInput, query: CargoQuery) -> list[tuple[int, Decimal, Decimal]]:
     source, target = data.source, data.destination
-    sale_price = target.buy_price if query.sale_side == "buy" else target.sell_price
+    sale_price = target.buy_price if query.sale_side == OrderSide.BUY.value else target.sell_price
     if source.sell_price is None or sale_price is None:
         return []
     buys = sorted(
         (
-            v
-            for v in (
+            price_level
+            for price_level in (
                 source.sell_levels
                 or [BuyPriceLevel(price=source.sell_price, volume=source.sell_volume)]
             )
-            if v.volume > 0 and v.price <= source.sell_price * (1 + query.sell_price_range / 100)
+            if price_level.volume > 0
+            and price_level.price <= source.sell_price * (1 + query.sell_price_range / 100)
         ),
-        key=lambda v: v.price,
+        key=lambda price_level: price_level.price,
     )
     sells = sorted(
         (
-            v
-            for v in (
+            price_level
+            for price_level in (
                 target.buy_levels or [BuyPriceLevel(price=sale_price, volume=target.buy_volume)]
             )
-            if v.volume > 0 and v.price >= sale_price * (1 - query.buy_price_range / 100)
+            if price_level.volume > 0
+            and price_level.price >= sale_price * (1 - query.buy_price_range / 100)
         ),
-        key=lambda v: v.price,
+        key=lambda price_level: price_level.price,
         reverse=True,
     )
-    if query.sale_side == "sell":
-        sells = [BuyPriceLevel(price=sale_price, volume=sum(v.volume for v in buys))]
+    if query.sale_side == OrderSide.SELL.value:
+        sells = [
+            BuyPriceLevel(price=sale_price, volume=sum(price_level.volume for price_level in buys))
+        ]
     result = []
-    i, j = 0, 0
+    buy_level_index, sell_level_index = 0, 0
     left, right = 0, 0
-    while i < len(buys) and j < len(sells):
-        left = left or buys[i].volume
-        right = right or sells[j].volume
-        net = sells[j].price * (1 - query.sales_tax / 100)
-        if net <= buys[i].price:
+    while buy_level_index < len(buys) and sell_level_index < len(sells):
+        left = left or buys[buy_level_index].volume
+        right = right or sells[sell_level_index].volume
+        net = sells[sell_level_index].price * (1 - query.sales_tax / 100)
+        if net <= buys[buy_level_index].price:
             break
         count = min(left, right)
-        result.append((count, buys[i].price, net))
+        result.append((count, buys[buy_level_index].price, net))
         left -= count
         right -= count
-        i += left == 0
-        j += right == 0
+        buy_level_index += left == 0
+        sell_level_index += right == 0
     return result
 
 
@@ -79,7 +84,7 @@ def optimize(
     choices = [
         (data, count, cost, net)
         for data in inputs
-        for count, cost, net in segments(data, query)
+        for count, cost, net in build_price_segments(data, query)
         if data.volume_m3 and data.volume_m3 > 0 and data.volume_m3 <= query.cargo_m3
     ]
     choices.sort(
@@ -167,7 +172,9 @@ def solve_child(connection: Connection, inputs: list[TradeInput], query: CargoQu
         connection.close()
 
 
-def bounded_optimize(inputs: list[TradeInput], query: CargoQuery) -> tuple[list[CargoLine], bool]:
+def optimize_with_timeout(
+    inputs: list[TradeInput], query: CargoQuery
+) -> tuple[list[CargoLine], bool]:
     context = multiprocessing.get_context("spawn")
     parent, child = context.Pipe(duplex=False)
     process = context.Process(target=solve_child, args=(child, inputs, query))
@@ -195,7 +202,7 @@ class CargoService:
     def __init__(self, repository: TradingRepository, routes: TradingRoutes) -> None:
         self._repository, self._routes = repository, routes
 
-    async def plan(self, query: CargoQuery) -> CargoResult:
+    async def build_cargo_plans(self, query: CargoQuery) -> CargoResult:
         trading = TradingQuery(
             source_hub=query.source_hub,
             destination_hub=query.destination_hub,
@@ -206,10 +213,12 @@ class CargoService:
             sale_side=query.sale_side,
             fresh_only=query.fresh_only,
         )
-        inputs = await self._repository.inputs(trading)
+        inputs = await self._repository.get_trade_inputs(trading)
         turnover = (
-            await self._repository.turnover(
-                trading, sorted({v.source.type_id for v in inputs}), datetime.now(UTC)
+            await self._repository.get_turnover(
+                trading,
+                sorted({trade_input.source.type_id for trade_input in inputs}),
+                datetime.now(UTC),
             )
             if query.filter_daily_turnover and query.min_daily_isk_volume is not None
             else {}
@@ -243,13 +252,15 @@ class CargoService:
                 query.destination_hub is not None and hub.hub_id != query.destination_hub
             ):
                 continue
-            route = await self._routes.cached(query.source_hub, hub.hub_id, query.route_mode)
+            route = await self._routes.get_cached_route(
+                query.source_hub, hub.hub_id, query.route_mode
+            )
             if route.jumps is None or route.highsec is None:
                 skipped += 1
                 continue
             async with SOLVERS:
                 lines, optimal = await asyncio.to_thread(
-                    bounded_optimize, grouped[hub.hub_id], query
+                    optimize_with_timeout, grouped[hub.hub_id], query
                 )
             plans.append(
                 CargoPlan(
@@ -257,10 +268,10 @@ class CargoService:
                     jumps=route.jumps,
                     highsec=route.highsec,
                     items=lines,
-                    cargo_m3=sum((v.cargo_m3 for v in lines), Decimal(0)),
-                    investment=sum((v.investment for v in lines), Decimal(0)),
-                    revenue=sum((v.revenue for v in lines), Decimal(0)),
-                    profit=sum((v.profit for v in lines), Decimal(0)),
+                    cargo_m3=sum((trade_input.cargo_m3 for trade_input in lines), Decimal(0)),
+                    investment=sum((trade_input.investment for trade_input in lines), Decimal(0)),
+                    revenue=sum((trade_input.revenue for trade_input in lines), Decimal(0)),
+                    profit=sum((trade_input.profit for trade_input in lines), Decimal(0)),
                     optimal=optimal,
                     stale=stale[hub.hub_id],
                 )

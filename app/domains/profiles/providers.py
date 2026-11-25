@@ -9,11 +9,13 @@ from app.domains.profiles.service import ProfileService
 
 class ProfileProvider(Provider):
     @provide(scope=Scope.REQUEST)
-    def repository(self, session: AsyncSession) -> ProfileRepository:
+    def provide_repository(self, session: AsyncSession) -> ProfileRepository:
         return SQLProfileRepository(session)
 
     @provide(scope=Scope.REQUEST)
-    def service(self, repository: ProfileRepository, unit_of_work: UnitOfWork) -> ProfileService:
+    def provide_service(
+        self, repository: ProfileRepository, unit_of_work: UnitOfWork
+    ) -> ProfileService:
         return ProfileService(repository, unit_of_work)
 
     calculation = provide(ProfileCalculationService, scope=Scope.REQUEST)

@@ -10,11 +10,11 @@ from app.core.repository import UnitOfWork
 from app.domains.history.gateway import HistoryGateway
 from app.domains.history.models import HistoryDownload
 from app.domains.history.repository import HistoryRepository, SQLHistoryRepository
-from app.domains.history.retention import retention_cutoff
+from app.domains.history.retention import get_retention_cutoff
 from app.domains.history.service import HistorySyncService
 from app.workers.settings import prune_history
 from tests.domains.catalog.test_catalog import NOW
-from tests.domains.history.test_history import FakeRepository, day, state
+from tests.domains.history.test_history import FakeRepository, day, get_state
 from tests.domains.history.test_history import session as session
 
 
@@ -27,12 +27,12 @@ from tests.domains.history.test_history import session as session
     ],
 )
 def test_calendar_month_retention_handles_month_ends(now: datetime, expected: str) -> None:
-    assert retention_cutoff(now, 12).isoformat() == expected
+    assert get_retention_cutoff(now, 12).isoformat() == expected
 
 
 async def test_download_saves_only_completed_days_inside_retention() -> None:
     now = datetime(2026, 11, 25, tzinfo=UTC)
-    cutoff = retention_cutoff(now, 12)
+    cutoff = get_retention_cutoff(now, 12)
     repository = FakeRepository()
     gateway = AsyncMock(spec=HistoryGateway)
     gateway.fetch.return_value = HistoryDownload(
@@ -51,24 +51,26 @@ async def test_download_saves_only_completed_days_inside_retention() -> None:
 
 async def test_global_pruning_keeps_boundary_and_updates_all_regions(session: AsyncSession) -> None:
     repository = SQLHistoryRepository(session)
-    cutoff = retention_cutoff(NOW, 12)
+    cutoff = get_retention_cutoff(NOW, 12)
     for region in (10000002, 10000043):
         await repository.replace(
-            state(region), [day(date=cutoff - timedelta(days=1)), day(date=cutoff)]
+            get_state(region), [day(date=cutoff - timedelta(days=1)), day(date=cutoff)]
         )
-    uow = AsyncMock(spec=UnitOfWork)
-    service = HistorySyncService(repository, AsyncMock(spec=HistoryGateway), uow)
+    unit_of_work = AsyncMock(spec=UnitOfWork)
+    service = HistorySyncService(repository, AsyncMock(spec=HistoryGateway), unit_of_work)
     assert await service.prune_before(cutoff) == 2
     for region in (10000002, 10000043):
-        saved = await repository.series(region, 10, cutoff - timedelta(days=1), NOW.date())
+        saved = await repository.get_history_series(
+            region, 10, cutoff - timedelta(days=1), NOW.date()
+        )
         assert [row.date for row in saved] == [cutoff]
-    uow.commit.assert_awaited_once()
+    unit_of_work.commit.assert_awaited_once()
     repository_mock = AsyncMock(spec=HistoryRepository)
     repository_mock.prune_before.side_effect = RuntimeError("write failed")
-    failing = HistorySyncService(repository_mock, AsyncMock(spec=HistoryGateway), uow)
+    failing = HistorySyncService(repository_mock, AsyncMock(spec=HistoryGateway), unit_of_work)
     with pytest.raises(RuntimeError):
         await failing.prune_before(cutoff)
-    uow.rollback.assert_awaited_once()
+    unit_of_work.rollback.assert_awaited_once()
 
 
 async def test_cleanup_runs_once_per_cutoff_and_retries_failed_attempts() -> None:

@@ -16,21 +16,21 @@ class InfrastructureProvider(Provider):
     settings = from_context(provides=Settings, scope=Scope.APP)
 
     @provide(scope=Scope.APP)
-    def refresh_policy(self, settings: Settings) -> RefreshPolicy:
+    def provide_refresh_policy(self, settings: Settings) -> RefreshPolicy:
         return settings.refresh_policy
 
     @provide(scope=Scope.APP)
-    async def engine(self, settings: Settings) -> AsyncIterator[AsyncEngine]:
+    async def provide_engine(self, settings: Settings) -> AsyncIterator[AsyncEngine]:
         engine = create_engine(settings)
         yield engine
         await engine.dispose()
 
     @provide(scope=Scope.APP)
-    def session_factory(self, engine: AsyncEngine) -> async_sessionmaker[AsyncSession]:
+    def provide_session_factory(self, engine: AsyncEngine) -> async_sessionmaker[AsyncSession]:
         return create_session_factory(engine)
 
     @provide(scope=Scope.APP)
-    async def redis(self, settings: Settings) -> AsyncIterator[Redis]:
+    async def provide_redis(self, settings: Settings) -> AsyncIterator[Redis]:
         client: Redis = Redis(
             host=settings.redis_host,
             port=settings.redis_port,
@@ -41,7 +41,7 @@ class InfrastructureProvider(Provider):
         await client.aclose()
 
     @provide(scope=Scope.APP)
-    def cache(self, settings: Settings, redis: Redis) -> Cache:
+    def provide_cache(self, settings: Settings, redis: Redis) -> Cache:
         return TieredCache(
             memory=MemoryCache(max_items=settings.memory_cache_max_items),
             persistent=RedisCache(redis),
@@ -49,11 +49,11 @@ class InfrastructureProvider(Provider):
         )
 
     @provide(scope=Scope.APP)
-    def cache_service(self, cache: Cache) -> CacheService:
+    def provide_cache_service(self, cache: Cache) -> CacheService:
         return CacheService(cache)
 
     @provide(scope=Scope.REQUEST)
-    async def session(
+    async def provide_session(
         self, factory: async_sessionmaker[AsyncSession]
     ) -> AsyncIterator[AsyncSession]:
         # Closing a session discards uncommitted work, so only explicit commits persist.
@@ -61,5 +61,5 @@ class InfrastructureProvider(Provider):
             yield session
 
     @provide(scope=Scope.REQUEST)
-    def unit_of_work(self, session: AsyncSession) -> UnitOfWork:
+    def provide_unit_of_work(self, session: AsyncSession) -> UnitOfWork:
         return SQLAlchemyUnitOfWork(session)

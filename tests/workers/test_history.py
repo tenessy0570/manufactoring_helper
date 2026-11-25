@@ -20,9 +20,9 @@ async def test_enqueue_batches_are_unique_and_use_separate_queue() -> None:
         item(number, meta_group_id=[1, 2, 3, 4, 5, 6, None][number % 7]) for number in range(21)
     ]
     history = AsyncMock(spec=HistoryRepository)
-    history.due.return_value = set(range(21)) | {99}
+    history.find_due_type_ids.return_value = set(range(21)) | {99}
     market = AsyncMock(spec=TradingRepository)
-    market.market_type_ids.return_value = [99]
+    market.get_market_type_ids.return_value = [99]
     provider = Provider(scope=Scope.REQUEST)
     provider.provide(lambda: history, provides=HistoryRepository)
     provider.provide(lambda: market, provides=TradingRepository)
@@ -48,18 +48,18 @@ async def test_enqueue_batches_are_unique_and_use_separate_queue() -> None:
     redis.enqueue_job.return_value = None
     assert await worker.enqueue_history(ctx) == 0
     assert [call.kwargs["_job_id"] for call in redis.enqueue_job.await_args_list] == first_ids
-    history.due.return_value = {20}
+    history.find_due_type_ids.return_value = {20}
     redis.reset_mock()
     redis.enqueue_job.return_value = object()
     assert await worker.enqueue_history(ctx) == 5
     assert all(call.args[2] == [20] for call in redis.enqueue_job.await_args_list)
     assert {call.kwargs["_job_id"] for call in redis.enqueue_job.await_args_list} <= set(first_ids)
-    history.due.return_value = set()
+    history.find_due_type_ids.return_value = set()
     redis.reset_mock()
     assert await worker.enqueue_history(ctx) == 0
     redis.enqueue_job.assert_not_awaited()
     repository.find.return_value = []
-    market.market_type_ids.return_value = []
+    market.get_market_type_ids.return_value = []
     redis.reset_mock()
     assert await worker.enqueue_history(ctx) == 0
     redis.enqueue_job.assert_not_awaited()

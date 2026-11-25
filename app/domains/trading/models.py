@@ -4,6 +4,7 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, Field, model_validator
 
+from app.domains.market.enums import OrderType
 from app.domains.market.models import HubId, MarketPrice
 
 RouteMode = Literal["safe", "shortest"]
@@ -23,8 +24,8 @@ class TradingQuery(BaseModel):
     min_profit_per_jump: Decimal | None = Field(default=None, ge=0, allow_inf_nan=False)
     source_hub: HubId | None = None
     destination_hub: HubId | None = None
-    purchase_side: Literal["sell", "buy"] = "sell"
-    sale_side: Literal["buy", "sell"] = "buy"
+    purchase_side: OrderType = "sell"
+    sale_side: OrderType = "buy"
     search: str = Field(default="", max_length=200)
     buy_broker_fee: Decimal = Field(default=Decimal(0), ge=0, le=100, allow_inf_nan=False)
     sell_broker_fee: Decimal = Field(default=Decimal(0), ge=0, le=100, allow_inf_nan=False)
@@ -49,7 +50,7 @@ class TradingQuery(BaseModel):
 
     @model_validator(mode="before")
     @classmethod
-    def empty_hubs(cls, value: Any) -> Any:
+    def normalize_empty_hubs(cls, value: Any) -> Any:
         if isinstance(value, dict):
             value = dict(value)
             for key in ("source_hub", "destination_hub"):
@@ -153,7 +154,7 @@ class CargoQuery(BaseModel):
     filter_daily_turnover: bool = False
     min_daily_isk_volume: Decimal | None = Field(default=None, ge=0, allow_inf_nan=False)
     history_days: int = Field(default=30, ge=1, le=365)
-    sale_side: Literal["buy", "sell"] = "buy"
+    sale_side: OrderType = "buy"
     source_hub: HubId
     destination_hub: HubId | None = None
     cargo_m3: Decimal = Field(gt=0, le=1000000000, allow_inf_nan=False)
@@ -165,7 +166,7 @@ class CargoQuery(BaseModel):
     fresh_only: bool = False
 
     @model_validator(mode="after")
-    def different_hubs(self) -> "CargoQuery":
+    def validate_distinct_hubs(self) -> "CargoQuery":
         if self.source_hub == self.destination_hub:
             raise ValueError("Choose two different hubs")
         return self

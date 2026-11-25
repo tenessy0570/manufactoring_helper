@@ -11,19 +11,19 @@ from app.domains.accounts.service import AccountService
 
 class AccountProvider(Provider):
     @provide(scope=Scope.REQUEST)
-    def repository(self, session: AsyncSession) -> AccountRepository:
+    def provide_repository(self, session: AsyncSession) -> AccountRepository:
         return SQLAccountRepository(session)
 
     @provide(scope=Scope.APP)
-    def limiter(self, redis: Redis) -> LoginLimiter:
+    def provide_login_limiter(self, redis: Redis) -> LoginLimiter:
         return RedisLoginLimiter(redis)
 
     @provide(scope=Scope.REQUEST)
-    def service(
+    def provide_service(
         self,
         repository: AccountRepository,
-        uow: UnitOfWork,
+        unit_of_work: UnitOfWork,
         limiter: LoginLimiter,
         settings: Settings,
     ) -> AccountService:
-        return AccountService(repository, uow, limiter, settings.session_ttl_seconds)
+        return AccountService(repository, unit_of_work, limiter, settings.session_ttl_seconds)

@@ -30,11 +30,11 @@ class InventionService:
         cache: CacheService,
         clock: Callable[[], datetime] = lambda: datetime.now(UTC),
     ) -> None:
-        self._repository, self._queue, self._uow = repository, queue, unit_of_work
+        self._repository, self._queue, self._unit_of_work = repository, queue, unit_of_work
         self._cache, self._clock = cache, clock
 
-    async def view(self, settings: InventionSettings) -> InventionView:
-        request = (await self._repository.requests([settings.key])).get(settings.key)
+    async def get_invention_view(self, settings: InventionSettings) -> InventionView:
+        request = (await self._repository.get_requests([settings.key])).get(settings.key)
         if request is None:
             return InventionView(request=None, stale=True)
         payload = request.model_dump(mode="json")
@@ -56,7 +56,7 @@ class InventionService:
         )
 
     async def prepare(self, settings: InventionSettings) -> InventionView:
-        view = await self.view(settings)
+        view = await self.get_invention_view(settings)
         if (
             view.request is not None
             and not view.stale
@@ -67,9 +67,9 @@ class InventionService:
         await self._repository.ensure_request(
             InventionRequest(key=settings.key, settings=settings, updated_at=now, expires_at=now)
         )
-        await self._uow.commit()
+        await self._unit_of_work.commit()
         queued = await self._queue.enqueue(settings)
-        view = await self.view(settings)
+        view = await self.get_invention_view(settings)
         view.queued = queued
         return view
 
@@ -86,19 +86,23 @@ class InventionSyncService:
         refresh_policy: RefreshPolicy = DEFAULT_REFRESH,
     ) -> None:
         self._repository, self._gateway, self._manufacturing = repository, gateway, manufacturing
-        self._uow, self._ttl, self._clock = unit_of_work, plan_ttl_seconds, clock
-        self._refresh = refresh_policy
+        self._unit_of_work, self._cache_ttl_seconds, self._clock = (
+            unit_of_work,
+            plan_ttl_seconds,
+            clock,
+        )
+        self._refresh_policy = refresh_policy
 
     async def sync(self, settings: InventionSettings) -> InventionRequest:
         now = self._clock()
-        existing = (await self._repository.requests([settings.key])).get(settings.key)
+        existing = (await self._repository.get_requests([settings.key])).get(settings.key)
         if (
             existing is not None
             and existing.expires_at > now
             and existing.status in ("ready", "unsupported")
         ):
             return existing
-        plan = await self._repository.plan(settings.plan_key)
+        plan = await self._repository.get_cached_plan(settings.plan_key)
         if plan is None or plan.expires_at <= now:
             plans = await self._gateway.fetch(settings)
             now = self._clock()
@@ -106,21 +110,21 @@ class InventionSyncService:
                 key=settings.plan_key,
                 plans=plans,
                 synced_at=now,
-                expires_at=now + timedelta(seconds=self._ttl),
+                expires_at=now + timedelta(seconds=self._cache_ttl_seconds),
             )
             try:
                 await self._repository.save_plan(plan)
-                await self._uow.commit()
+                await self._unit_of_work.commit()
             except BaseException:
-                await self._uow.rollback()
+                await self._unit_of_work.rollback()
                 raise
         material_ids = sorted(
             {material.type_id for option in plan.plans for material in option.materials}
         )
-        quotes = await self._manufacturing.quotes(settings.hub_id, material_ids)
+        quotes = await self._manufacturing.get_quotes(settings.hub_id, material_ids)
         result = price_plans(plan.plans, quotes, settings)
         now = self._clock()
-        expires_at = now + timedelta(seconds=self._refresh.invention_price_seconds)
+        expires_at = now + timedelta(seconds=self._refresh_policy.invention_price_seconds)
         status = (
             "ready"
             if result.best is not None
@@ -129,7 +133,7 @@ class InventionSyncService:
             else "unsupported"
         )
         if status == "missing_prices":
-            expires_at = now + timedelta(seconds=self._refresh.retry_seconds)
+            expires_at = now + timedelta(seconds=self._refresh_policy.retry_seconds)
         request = InventionRequest(
             key=settings.key,
             settings=settings,
@@ -140,19 +144,19 @@ class InventionSyncService:
         )
         try:
             await self._repository.save_request(request)
-            await self._uow.commit()
+            await self._unit_of_work.commit()
         except BaseException:
-            await self._uow.rollback()
+            await self._unit_of_work.rollback()
             raise
         return request
 
     async def record_error(self, settings: InventionSettings, error_type: str) -> None:
-        previous = (await self._repository.requests([settings.key])).get(settings.key)
+        previous = (await self._repository.get_requests([settings.key])).get(settings.key)
         now = self._clock()
         request = previous or InventionRequest(
             key=settings.key, settings=settings, updated_at=now, expires_at=now
         )
         request.status, request.error_type = "error", error_type
-        request.expires_at = now + timedelta(seconds=self._refresh.retry_seconds)
+        request.expires_at = now + timedelta(seconds=self._refresh_policy.retry_seconds)
         await self._repository.save_request(request)
-        await self._uow.commit()
+        await self._unit_of_work.commit()

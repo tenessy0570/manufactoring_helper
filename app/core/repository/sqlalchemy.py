@@ -25,24 +25,26 @@ class SQLAlchemyRepository[TableT: Base, EntityT: BaseModel, ClauseT: FilterClau
 
     async def get(self, entity_id: object) -> EntityT | None:
         row = await self._session.get(self.table, entity_id)
-        return None if row is None else self._to_entity(row)
+        return None if row is None else self._map_to_entity(row)
 
     async def find(self, clause: ClauseT | None = None, page: Page | None = None) -> list[EntityT]:
-        statement = select(self.table).where(*self._conditions(clause))
+        statement = select(self.table).where(*self._build_conditions(clause))
         if page is not None:
             statement = statement.limit(page.limit).offset(page.offset)
         rows = await self._session.scalars(statement)
-        return [self._to_entity(row) for row in rows]
+        return [self._map_to_entity(row) for row in rows]
 
     async def count(self, clause: ClauseT | None = None) -> int:
-        statement = select(func.count()).select_from(self.table).where(*self._conditions(clause))
+        statement = (
+            select(func.count()).select_from(self.table).where(*self._build_conditions(clause))
+        )
         return await self._session.scalar(statement) or 0
 
     async def add(self, entity: EntityT) -> EntityT:
         row = self.table(**entity.model_dump())
         self._session.add(row)
         await self._session.flush()
-        return self._to_entity(row)
+        return self._map_to_entity(row)
 
     async def add_many(self, entities: Sequence[EntityT]) -> None:
         self._session.add_all(self.table(**entity.model_dump()) for entity in entities)
@@ -56,7 +58,7 @@ class SQLAlchemyRepository[TableT: Base, EntityT: BaseModel, ClauseT: FilterClau
         await self._session.flush()
         return True
 
-    def _conditions(self, clause: ClauseT | None) -> list[ColumnElement[bool]]:
+    def _build_conditions(self, clause: ClauseT | None) -> list[ColumnElement[bool]]:
         if clause is None:
             return []
         return [
@@ -65,5 +67,5 @@ class SQLAlchemyRepository[TableT: Base, EntityT: BaseModel, ClauseT: FilterClau
             if (value := getattr(clause, name)) is not None
         ]
 
-    def _to_entity(self, row: TableT) -> EntityT:
+    def _map_to_entity(self, row: TableT) -> EntityT:
         return self.entity.model_validate(row, from_attributes=True)

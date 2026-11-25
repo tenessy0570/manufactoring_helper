@@ -57,11 +57,11 @@ async def test_planner_skips_fresh_and_refreshes_requested_profiles() -> None:
     repository = AsyncMock(spec=InventionRepository)
     catalog = AsyncMock(spec=ItemTypeRepository)
     queue = AsyncMock(spec=InventionQueue)
-    uow = AsyncMock(spec=UnitOfWork)
+    unit_of_work = AsyncMock(spec=UnitOfWork)
     catalog.find.return_value = [item(10), item(20)]
     custom = settings(type_id=30, hub_id="amarr")
-    repository.active_settings.return_value = [custom]
-    repository.requests.return_value = {
+    repository.get_active_settings.return_value = [custom]
+    repository.get_requests.return_value = {
         settings().key: request(expires_at=datetime.now(UTC) + timedelta(days=1))
     }
     queue.enqueue.return_value = True
@@ -70,13 +70,13 @@ async def test_planner_skips_fresh_and_refreshes_requested_profiles() -> None:
     provider.provide(lambda: repository, provides=InventionRepository)
     provider.provide(lambda: catalog, provides=ItemTypeRepository)
     provider.provide(lambda: queue, provides=InventionQueue)
-    provider.provide(lambda: uow, provides=UnitOfWork)
+    provider.provide(lambda: unit_of_work, provides=UnitOfWork)
     container = make_async_container(provider)
     try:
         assert await worker.enqueue_inventions({"container": container})
         assert await worker.schedule_inventions({"container": container}) == 2
         assert {call.args[0].type_id for call in queue.enqueue.await_args_list} == {20, 30}
-        uow.commit.assert_awaited_once()
+        unit_of_work.commit.assert_awaited_once()
         queue.reset_mock()
         assert await worker.schedule_inventions({"container": container}, {"hub_id": "hek"}) == 2
         assert {call.args[0].hub_id for call in queue.enqueue.await_args_list} == {"hek"}
@@ -109,16 +109,16 @@ async def test_planner_respects_persisted_failure_retry_deadline() -> None:
     repository = AsyncMock(spec=InventionRepository)
     catalog = AsyncMock(spec=ItemTypeRepository)
     queue = AsyncMock(spec=InventionQueue)
-    uow = AsyncMock(spec=UnitOfWork)
+    unit_of_work = AsyncMock(spec=UnitOfWork)
     catalog.find.return_value = [item(10)]
-    repository.active_settings.return_value = []
+    repository.get_active_settings.return_value = []
     failed = request(status="error", expires_at=datetime.now(UTC) + timedelta(minutes=5))
-    repository.requests.return_value = {settings().key: failed}
+    repository.get_requests.return_value = {settings().key: failed}
     provider = Provider(scope=Scope.REQUEST)
     provider.provide(lambda: repository, provides=InventionRepository)
     provider.provide(lambda: catalog, provides=ItemTypeRepository)
     provider.provide(lambda: queue, provides=InventionQueue)
-    provider.provide(lambda: uow, provides=UnitOfWork)
+    provider.provide(lambda: unit_of_work, provides=UnitOfWork)
     container = make_async_container(provider)
     try:
         assert await worker.schedule_inventions({"container": container}) == 0

@@ -181,7 +181,7 @@
                           <circle cx="12" cy="12" r="9" />
                           <path d="M6 6l12 12" />
                         </svg><span><strong x-text="option.name"></strong><small
-                          x-text="option.estimated_cost===null?'Missing prices':money(option.estimated_cost)+' ISK'"
+                          x-text="option.estimated_cost===null?'Missing prices':formatMoney(option.estimated_cost)+' ISK'"
                         ></small></span><small class="decryptor-best" x-show="option.is_best">Best value</small>
                       </label>
                     </template>

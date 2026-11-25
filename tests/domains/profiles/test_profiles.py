@@ -52,7 +52,7 @@ class FakeRepository(ProfileRepository):
         value = self.items.get(profile_id)
         return None if value is None else value.model_copy(deep=True)
 
-    async def default_id(self, lock: bool = False) -> UUID:
+    async def get_default_profile_id(self, lock: bool = False) -> UUID:
         self.lock_count += lock
         return self.default
 
@@ -68,8 +68,8 @@ class FakeRepository(ProfileRepository):
 
 async def test_create_copy_update_default_and_delete() -> None:
     repository = FakeRepository()
-    uow = AsyncMock(spec=UnitOfWork)
-    service = ProfileService(repository, uow, lambda: NOW)
+    unit_of_work = AsyncMock(spec=UnitOfWork)
+    service = ProfileService(repository, unit_of_work, lambda: NOW)
     original = await service.create(
         ProfileCreate(
             name="  Amarr buy  ",
@@ -114,9 +114,9 @@ async def test_create_copy_update_default_and_delete() -> None:
 @pytest.mark.parametrize("operation", ["create", "update", "set_default", "delete"])
 async def test_commit_failure_rolls_back(operation: str) -> None:
     repository = FakeRepository()
-    uow = AsyncMock(spec=UnitOfWork)
-    uow.commit.side_effect = RuntimeError("write failed")
-    service = ProfileService(repository, uow)
+    unit_of_work = AsyncMock(spec=UnitOfWork)
+    unit_of_work.commit.side_effect = RuntimeError("write failed")
+    service = ProfileService(repository, unit_of_work)
     repository.items[UUID(int=2)] = initial().model_copy(update={"id": UUID(int=2)})
 
     async def execute() -> None:
@@ -131,7 +131,7 @@ async def test_commit_failure_rolls_back(operation: str) -> None:
 
     with pytest.raises(RuntimeError, match="write failed"):
         await execute()
-    uow.rollback.assert_awaited_once()
+    unit_of_work.rollback.assert_awaited_once()
 
 
 def test_validates_settings_and_keeps_latest_defaults() -> None:
@@ -186,7 +186,7 @@ async def test_sql_persists_settings_and_default_across_sessions(session: AsyncS
     await service.set_default(profile.id)
     async with AsyncSession(session.bind) as other:
         restored = SQLProfileRepository(other)
-        assert await restored.default_id(lock=True) == profile.id
+        assert await restored.get_default_profile_id(lock=True) == profile.id
         loaded = await restored.get(profile.id)
         assert loaded is not None
         assert loaded.settings == profile.settings
@@ -194,7 +194,7 @@ async def test_sql_persists_settings_and_default_across_sessions(session: AsyncS
     await session.rollback()
     assert (await service.get(profile.id)).name == "Saved"
     await service.delete(profile.id)
-    assert await repository.default_id() == INITIAL_ID
+    assert await repository.get_default_profile_id() == INITIAL_ID
     assert await repository.get(profile.id) is None
     await repository.delete(uuid4())
 
@@ -207,16 +207,16 @@ async def test_calculation_uses_saved_settings_with_ephemeral_pagination() -> No
     service = ProfileService(repository, AsyncMock(spec=UnitOfWork))
     manufacturing = AsyncMock(spec=ManufacturingService)
     calculation = ProfileCalculationService(service, manufacturing)
-    await calculation.opportunities(None, None, 5)
-    assert manufacturing.opportunities.await_args is not None
-    query = manufacturing.opportunities.await_args.args[0]
+    await calculation.get_opportunities(None, None, 5)
+    assert manufacturing.get_opportunities.await_args is not None
+    query = manufacturing.get_opportunities.await_args.args[0]
     assert isinstance(query, ManufacturingQuery)
     assert query.hub_id == "hek"
     assert query.limit == 17
     assert query.offset == 5
     assert query.include_invention_cost
-    await calculation.opportunities(INITIAL_ID, 25, 0)
-    assert manufacturing.opportunities.await_args.args[0].limit == 25
+    await calculation.get_opportunities(INITIAL_ID, 25, 0)
+    assert manufacturing.get_opportunities.await_args.args[0].limit == 25
     assert repository.items[INITIAL_ID].settings.offset == 0
     assert repository.items[INITIAL_ID].settings.limit == 17
 
@@ -224,7 +224,7 @@ async def test_calculation_uses_saved_settings_with_ephemeral_pagination() -> No
 async def test_api_profile_lifecycle_and_errors() -> None:
     service = ProfileService(FakeRepository(), AsyncMock(spec=UnitOfWork), lambda: NOW)
     manufacturing = AsyncMock(spec=ManufacturingService)
-    manufacturing.opportunities.return_value = OpportunityPage(
+    manufacturing.get_opportunities.return_value = OpportunityPage(
         hub_id="jita",
         material_hub_id="jita",
         material_order_type="sell",

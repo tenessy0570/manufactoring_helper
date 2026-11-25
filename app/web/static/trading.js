@@ -10,7 +10,7 @@ document.addEventListener('alpine:init', () => {
     sequence: 0,
     now: Date.now(),
     timer: null,
-    defaults() {
+    getDefaultSettings() {
       return {
         filter_daily_turnover: false,
         price_spikes_only: false,
@@ -42,7 +42,7 @@ document.addEventListener('alpine:init', () => {
       };
     },
     async init() {
-      this.form = this.defaults();
+      this.form = this.getDefaultSettings();
       try {
         const saved = JSON.parse(localStorage.getItem('eve.interhub.settings.v2') || localStorage.getItem('eve.interhub.settings.v1'));
         if (saved && typeof saved === 'object' && !Array.isArray(saved))
@@ -62,8 +62,8 @@ document.addEventListener('alpine:init', () => {
       this.timer = setInterval(() => this.now = Date.now(), window.eveConfig.clockTickMs);
       await this.load();
     },
-    fullMoney(value) {
-      return this.money(value);
+    formatFullMoney(value) {
+      return this.formatMoney(value);
     },
     compactMoney(value) {
       if (value === null || value === undefined) return '--';
@@ -93,19 +93,19 @@ document.addEventListener('alpine:init', () => {
       this.form.source_hub = this.form.destination_hub;
       this.form.destination_hub = hub;
     },
-    money(value) {
+    formatMoney(value) {
       if (value === null || value === undefined) return '--';
       return new Intl.NumberFormat('en-US', {
         maximumFractionDigits: 2
       }).format(Number(value));
     },
-    pct(value) {
+    formatPercent(value) {
       return Number(value).toFixed(1) + '%';
     },
-    hubName(hub) {
+    getHubName(hub) {
       return hub ? hub.charAt(0).toUpperCase() + hub.slice(1) : 'All hubs';
     },
-    age(stamp) {
+    formatAge(stamp) {
       if (!stamp) return 'not loaded';
       const m = Math.floor(Math.max(0, this.now - Date.parse(stamp)) / 60000);
       return m < 1 ? '<1m' : (m >= 1440 ? Math.floor(m / 1440) + 'd ' : '') + Math.floor(m % 1440 / 60) + 'h ' + m % 60 + 'm';
@@ -147,5 +147,5 @@ document.addEventListener('alpine:init', () => {
         if (seq === this.sequence) this.loading = false;
       }
     }
-  }, [window.tradingProfiles, window.tradingHistory, window.tradingColumns]));
+  }, [window.createTradingProfiles, window.createTradingHistory, window.createTradingColumns]));
 });

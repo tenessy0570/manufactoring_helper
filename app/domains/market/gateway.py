@@ -23,7 +23,7 @@ class EsiMarketGateway(MarketGateway):
         clock: Callable[[], datetime] = lambda: datetime.now(UTC),
     ) -> None:
         self._esi = esi
-        self._ttl = fallback_ttl_seconds
+        self._cache_ttl_seconds = fallback_ttl_seconds
         self._clock = clock
 
     async def get_orders(self, region_id: int, page: int) -> OrderPage:
@@ -31,7 +31,7 @@ class EsiMarketGateway(MarketGateway):
             "GET", f"/markets/{region_id}/orders/", params={"order_type": "all", "page": page}
         )
         pages = int(response.headers["X-Pages"])
-        expires = self._clock() + timedelta(seconds=self._ttl)
+        expires = self._clock() + timedelta(seconds=self._cache_ttl_seconds)
         if value := response.headers.get("Expires"):
             try:
                 parsed = parsedate_to_datetime(value)

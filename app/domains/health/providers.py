@@ -12,15 +12,15 @@ class HealthProvider(Provider):
     scope = Scope.APP
 
     @provide
-    def health_service(self, engine: AsyncEngine, redis: Redis) -> HealthService:
+    def provide_health_service(self, engine: AsyncEngine, redis: Redis) -> HealthService:
         return HealthService([DatabaseHealthCheck(engine), RedisHealthCheck(redis)])
 
     @provide(scope=Scope.REQUEST)
-    def progress_repository(
+    def provide_progress_repository(
         self, session: AsyncSession, refresh_policy: RefreshPolicy
     ) -> ProgressRepository:
         return SQLProgressRepository(session, refresh_policy)
 
     @provide(scope=Scope.REQUEST)
-    def progress_service(self, repository: ProgressRepository) -> ProgressService:
+    def provide_progress_service(self, repository: ProgressRepository) -> ProgressService:
         return ProgressService(repository)

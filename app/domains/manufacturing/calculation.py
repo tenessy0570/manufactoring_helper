@@ -6,6 +6,7 @@ from app.domains.manufacturing.models import (
     MaterialCost,
     ProfitCalculation,
 )
+from app.domains.market.enums import OrderSide
 
 
 def calculate(data: CalculationInput, query: ManufacturingQuery) -> ProfitCalculation | None:
@@ -15,7 +16,11 @@ def calculate(data: CalculationInput, query: ManufacturingQuery) -> ProfitCalcul
         quote = data.quotes.get(material.type_id)
         if quote is None:
             return None
-        price = quote.buy_price if query.material_order_type == "buy" else quote.sell_price
+        price = (
+            quote.buy_price
+            if query.material_order_type == OrderSide.BUY.value
+            else quote.sell_price
+        )
         if price is None:
             return None
         quantity = material.quantity
@@ -26,13 +31,13 @@ def calculate(data: CalculationInput, query: ManufacturingQuery) -> ProfitCalcul
                 price=price,
                 cost=quantity * price,
                 volume_at_price=quote.buy_volume
-                if query.material_order_type == "buy"
+                if query.material_order_type == OrderSide.BUY.value
                 else quote.sell_volume,
             )
         )
     revenue = (
         data.product_quote.buy_price
-        if query.product_order_type == "buy"
+        if query.product_order_type == OrderSide.BUY.value
         else data.product_quote.sell_price
     )
     if revenue is None:
@@ -52,11 +57,13 @@ def calculate(data: CalculationInput, query: ManufacturingQuery) -> ProfitCalcul
     job_cost = base_job_cost + facility_tax + system_cost
     procurement_fee = (
         material_cost * query.buy_broker_fee / 100
-        if query.material_order_type == "buy"
+        if query.material_order_type == OrderSide.BUY.value
         else Decimal(0)
     )
     sales_fee = (
-        revenue * query.sell_broker_fee / 100 if query.product_order_type == "sell" else Decimal(0)
+        revenue * query.sell_broker_fee / 100
+        if query.product_order_type == OrderSide.SELL.value
+        else Decimal(0)
     )
     sales_tax = revenue * query.sales_tax / 100
     total_cost = material_cost + job_cost + procurement_fee + data.invention_cost_per_unit

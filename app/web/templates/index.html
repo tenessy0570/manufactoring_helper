@@ -57,7 +57,7 @@
           </section>
           <section class="stat-card">
             <div class="stat-label">TOP PROFIT / DAY <span>↗</span></div>
-            <div class="stat-value accent" x-text="money(topDaily)">—</div>
+            <div class="stat-value accent" x-text="formatMoney(topDaily)">—</div>
             <div
               class="stat-note"
               x-text="resultForm.product_order_type === 'buy' ? 'Visible page - capped by buy demand' : 'Visible page - theoretical slot throughput'"
@@ -67,7 +67,7 @@
             <div class="stat-label">MEDIAN MARGIN <span>◈</span></div>
             <div
               class="stat-value"
-              x-text="medianMargin === null ? '—' : percent(medianMargin)"
+              x-text="medianMargin === null ? '—' : formatPercent(medianMargin)"
             >
               —
             </div>
@@ -75,7 +75,7 @@
           </section>
           <section class="stat-card">
             <div class="stat-label">TRADE HUB <span>◎</span></div>
-            <div class="stat-value" x-text="hubName(resultForm.hub_id)">Jita</div>
+            <div class="stat-value" x-text="getHubName(resultForm.hub_id)">Jita</div>
             <div class="stat-note"><span
               class="tiny-tag"
               x-text="resultForm.product_order_type.toUpperCase()"
@@ -265,7 +265,7 @@
                     <label>
                       <input
                         type="checkbox"
-                        :checked="columnVisible(column.id)"
+                        :checked="isColumnVisible(column.id)"
                         @change="hiddenColumns = $event.target.checked ? hiddenColumns.filter(id => id !== column.id) : [...hiddenColumns, column.id]"
                       >
                       <span x-text="column.label"></span>

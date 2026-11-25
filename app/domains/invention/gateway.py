@@ -12,7 +12,7 @@ from app.domains.invention.models import (
     InventionPlan,
     InventionSettings,
 )
-from app.domains.manufacturing.gateway import IndustryClient, duration_seconds
+from app.domains.manufacturing.gateway import IndustryClient, parse_duration_seconds
 from app.infrastructure.http import HttpStatusError
 
 # Public IndustryCostInput skill parameters; all relevant science skills share the supplied level.
@@ -88,7 +88,7 @@ class EverefInventionGateway(InventionGateway):
         self._client = client
 
     async def fetch(self, settings: InventionSettings) -> list[InventionPlan]:
-        async def option(decryptor_id: int | None, name: str) -> InventionPlan | None:
+        async def parse_option(decryptor_id: int | None, name: str) -> InventionPlan | None:
             params: dict[str, int] = {skill: SCIENCE_LEVEL for skill in SCIENCE_SKILLS}
             params.update({skill: ENCRYPTION_LEVEL for skill in ENCRYPTION_SKILLS})
             params.update({"product_id": settings.type_id, "runs": 1, "me": 0, "te": 0})
@@ -129,10 +129,10 @@ class EverefInventionGateway(InventionGateway):
             if copying is not None and copying.product_id != entry.blueprint_id:
                 raise ValueError("Unexpected copying blueprint")
             return InventionPlan(
-                copying_seconds_per_run=duration_seconds(copying.time) / copying.runs
+                copying_seconds_per_run=parse_duration_seconds(copying.time) / copying.runs
                 if copying is not None
                 else None,
-                seconds_per_attempt=duration_seconds(entry.time) / entry.runs
+                seconds_per_attempt=parse_duration_seconds(entry.time) / entry.runs
                 if entry.time
                 else None,
                 decryptor_id=decryptor_id,
@@ -153,11 +153,11 @@ class EverefInventionGateway(InventionGateway):
                 ],
             )
 
-        baseline = await option(None, "None")
+        baseline = await parse_option(None, "None")
         if baseline is None:
             return []
         plans = await gather_all(
-            option(decryptor_id, name) for decryptor_id, name in DECRYPTORS[1:]
+            parse_option(decryptor_id, name) for decryptor_id, name in DECRYPTORS[1:]
         )
         if any(plan is None for plan in plans):
             raise ValueError("Incomplete invention options; previous plan preserved")

@@ -7,7 +7,7 @@
       Buy in<select aria-label="Purchase hub" x-model="form.source_hub">
       <option value="">All hubs</option>
       <template x-for="hub in hubs" :key="hub">
-        <option :value="hub" x-text="hubName(hub)"></option>
+        <option :value="hub" x-text="getHubName(hub)"></option>
       </template>
     </select></label><button
       class="button secondary"
@@ -19,7 +19,7 @@
     </button><label>Sell in<select aria-label="Sale hub" x-model="form.destination_hub">
       <option value="">All hubs</option>
       <template x-for="hub in hubs" :key="hub">
-        <option :value="hub" x-text="hubName(hub)"></option>
+        <option :value="hub" x-text="getHubName(hub)"></option>
       </template>
     </select></label><label>Profile<select x-model="profileId" @change="selectProfile()">
       <option value="">Custom settings</option>

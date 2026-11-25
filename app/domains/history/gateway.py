@@ -24,7 +24,7 @@ class EsiHistoryGateway(HistoryGateway):
         ttl_seconds: int = DEFAULT_REFRESH.history_seconds,
         clock: Callable[[], datetime] = lambda: datetime.now(UTC),
     ) -> None:
-        self._esi, self._ttl, self._clock = esi, ttl_seconds, clock
+        self._esi, self._cache_ttl_seconds, self._clock = esi, ttl_seconds, clock
 
     async def fetch(self, region_id: int, type_id: int) -> HistoryDownload:
         try:
@@ -42,10 +42,11 @@ class EsiHistoryGateway(HistoryGateway):
                     and payload == {"error": "Type not tradable on market!"}
                 ):
                     return HistoryDownload(
-                        days=[], expires_at=self._clock() + timedelta(seconds=self._ttl)
+                        days=[],
+                        expires_at=self._clock() + timedelta(seconds=self._cache_ttl_seconds),
                     )
             raise
-        expires_at = self._clock() + timedelta(seconds=self._ttl)
+        expires_at = self._clock() + timedelta(seconds=self._cache_ttl_seconds)
         if value := response.headers.get("Expires"):
             try:
                 parsed = parsedate_to_datetime(value)

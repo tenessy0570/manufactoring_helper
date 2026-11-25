@@ -29,11 +29,11 @@ window.manufacturingFeatures.push(() => ({
       return;
     }
     try {
-      const data = await this.api('/api/v1/opportunity-exclusions');
+      const data = await this.requestApi('/api/v1/opportunity-exclusions');
       this.excludedItems = data.items;
       if (legacy.length) {
         const merged = [...new Map([...data.items, ...legacy].map(v => [v.type_id, v])).values()].slice(0, 1000);
-        const saved = await this.api('/api/v1/opportunity-exclusions', {
+        const saved = await this.requestApi('/api/v1/opportunity-exclusions', {
           method: 'PUT',
           body: JSON.stringify({
             items: merged
@@ -63,7 +63,7 @@ window.manufacturingFeatures.push(() => ({
     this.excludedItems = next;
     this.exclusionsQueue = this.exclusionsQueue.catch(() => {}).then(async () => {
       try {
-        await this.api('/api/v1/opportunity-exclusions', {
+        await this.requestApi('/api/v1/opportunity-exclusions', {
           method: 'PUT',
           body: JSON.stringify({
             items: next

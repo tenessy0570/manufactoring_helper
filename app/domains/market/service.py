@@ -3,7 +3,7 @@ from collections.abc import Callable
 from datetime import UTC, datetime
 
 from app.core.config import DEFAULT_REFRESH, RefreshPolicy
-from app.core.freshness import refresh_deadline
+from app.core.freshness import get_refresh_deadline
 from app.core.repository import UnitOfWork
 from app.domains.market.aggregation import PriceAggregator
 from app.domains.market.gateway import MarketGateway
@@ -27,15 +27,16 @@ class MarketService:
         self, repository: MarketRepository, refresh_policy: RefreshPolicy = DEFAULT_REFRESH
     ) -> None:
         self._repository = repository
-        self._refresh = refresh_policy
+        self._refresh_policy = refresh_policy
 
     async def find(self, query: PriceQuery) -> PricePage:
         now = datetime.now(UTC)
-        state = await self._repository.state(query.hub_id)
+        state = await self._repository.get_state(query.hub_id)
         return PricePage(
             hub=get_hub(query.hub_id),
             state=state,
-            stale=state is None or refresh_deadline(state.synced_at, self._refresh.market) <= now,
+            stale=state is None
+            or get_refresh_deadline(state.synced_at, self._refresh_policy.market) <= now,
             items=await self._repository.find(query, now),
             total=await self._repository.count(query, now),
             limit=query.limit,
@@ -53,16 +54,18 @@ class MarketSyncService:
         refresh_policy: RefreshPolicy = DEFAULT_REFRESH,
     ) -> None:
         self._repository = repository
-        self._refresh = refresh_policy
+        self._refresh_policy = refresh_policy
         self._gateway = gateway
-        self._uow = unit_of_work
+        self._unit_of_work = unit_of_work
         self._clock = clock
 
     async def sync_if_stale(self, hub_id: HubId) -> MarketSyncReport:
-        state = await self._repository.state(hub_id)
+        state = await self._repository.get_state(hub_id)
         if (
             state is not None
-            and max(state.expires_at, refresh_deadline(state.synced_at, self._refresh.market))
+            and max(
+                state.expires_at, get_refresh_deadline(state.synced_at, self._refresh_policy.market)
+            )
             > self._clock()
         ):
             return MarketSyncReport(hub_id=hub_id, skipped=True, items=state.items)
@@ -112,8 +115,8 @@ class MarketSyncService:
         )
         try:
             await self._repository.replace(state, prices)
-            await self._uow.commit()
+            await self._unit_of_work.commit()
         except BaseException:
-            await self._uow.rollback()
+            await self._unit_of_work.rollback()
             raise
         return MarketSyncReport(hub_id=hub_id, items=len(prices), pages=pages)

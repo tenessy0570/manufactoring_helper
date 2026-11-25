@@ -2,7 +2,7 @@ from datetime import datetime
 from decimal import Decimal
 
 from app.core.config import DEFAULT_REFRESH, RefreshPolicy
-from app.core.freshness import refresh_deadline
+from app.core.freshness import get_refresh_deadline
 from app.domains.manufacturing.calculation import calculate
 from app.domains.manufacturing.demand import estimate_buy_demand
 from app.domains.manufacturing.filtering import matches_filters
@@ -14,6 +14,7 @@ from app.domains.manufacturing.models import (
     OpportunityInputs,
 )
 from app.domains.manufacturing.timing import calculate_timing
+from app.domains.market.enums import OrderSide
 
 
 def evaluate_opportunities(
@@ -111,12 +112,12 @@ def evaluate_opportunities(
             continue
         deadlines = {
             "recipe": state.expires_at,
-            "product_market": refresh_deadline(product.synced_at, refresh_policy.market),
+            "product_market": get_refresh_deadline(product.synced_at, refresh_policy.market),
             "material_market": min(
-                refresh_deadline(quotes[m.type_id].synced_at, refresh_policy.market)
-                for m in state.recipe.materials
+                get_refresh_deadline(quotes[material.type_id].synced_at, refresh_policy.market)
+                for material in state.recipe.materials
             ),
-            "history": refresh_deadline(candidate.synced_at, refresh_policy.history)
+            "history": get_refresh_deadline(candidate.synced_at, refresh_policy.history)
             if candidate.synced_at is not None
             else now,
         }
@@ -127,7 +128,7 @@ def evaluate_opportunities(
         stale = bool(stale_reasons)
         if query.fresh_only and stale:
             continue
-        is_buy = query.product_order_type == "buy"
+        is_buy = query.product_order_type == OrderSide.BUY.value
         demand = estimate_buy_demand(product, calculated, query) if is_buy else None
         order_count = demand.order_count if demand else product.sell_order_count
         orders_at_price = product.buy_orders_at_best if is_buy else product.sell_orders_at_best

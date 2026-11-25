@@ -262,7 +262,7 @@ return 'PASS: exclude, persist, restore and 25-item pagination';
             time.sleep(1)
             print(
                 evaluate("""(async()=>{const a=Alpine.$data(document.body);
-            a.api=async()=>{throw Error('Invalid username or password');};
+            a.requestApi=async()=>{throw Error('Invalid username or password');};
             a.username='example';a.password='bad';await a.submitLogin();
             if(!a.error||a.busy)throw Error('Login feedback');
             if(document.querySelector('input[type=password]').autocomplete!=='current-password')
@@ -273,7 +273,7 @@ return 'PASS: exclude, persist, restore and 25-item pagination';
             print(
                 evaluate("""(async()=>{const a=Alpine.$data(document.body);
             a.user={id:'admin',username:'admin',is_superuser:true};
-            let created=false;a.api=async(path,options={})=>{
+            let created=false;a.requestApi=async(path,options={})=>{
             if(path==='/users'&&options.method==='POST'){created=true;return {};}
             return [{id:'user',username:'example',is_active:true,is_superuser:false}];};
             a.newUsername='example';a.initialPassword='example-password';await a.createUser();
@@ -403,7 +403,8 @@ return 'PASS: exclude, persist, restore and 25-item pagination';
             time.sleep(1)
             print(
                 evaluate("""(()=>{const a=Alpine.$data(document.body);
-                if('hauling_per_m3' in a.form||a.form.sales_tax!=='2'||a.columnVisible('purchase'))
+                if('hauling_per_m3' in a.form||a.form.sales_tax!=='2'||
+                    a.isColumnVisible('purchase'))
                     throw Error('Trade settings lost on reload');
                 return 'PASS: trading page reload';})()""")
             )

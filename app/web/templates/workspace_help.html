@@ -28,7 +28,7 @@
       <dt>Market snapshots</dt>
       <dd
         :title="dataProgress.market_updated_at ? new Date(dataProgress.market_updated_at).toLocaleString() : ''"
-        x-text="dataProgress.market_items + ' items; last saved ' + timeAgo(dataProgress.market_updated_at)"
+        x-text="dataProgress.market_items + ' items; last saved ' + formatRelativeTime(dataProgress.market_updated_at)"
       >
       </dd>
       <dt>T2 invention</dt>

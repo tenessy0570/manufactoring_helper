@@ -42,7 +42,7 @@ async def test_configured_market_interval_agrees_across_worker_results_and_heade
             lambda: now,
             refresh_policy=policy,
         )
-        page = await service.opportunities(ManufacturingQuery(type_ids=[10]))
+        page = await service.get_opportunities(ManufacturingQuery(type_ids=[10]))
         assert page.items
         assert page.items[0].stale
         assert all(
@@ -50,16 +50,16 @@ async def test_configured_market_interval_agrees_across_worker_results_and_heade
             for key in ("product_market", "material_market")
         )
         assert not (
-            await service.opportunities(ManufacturingQuery(type_ids=[10], fresh_only=True))
+            await service.get_opportunities(ManufacturingQuery(type_ids=[10], fresh_only=True))
         ).items
-        header = await SQLProgressRepository(session, policy).freshness("jita", now)
+        header = await SQLProgressRepository(session, policy).get_freshness_report("jita", now)
         assert next(s for s in header.sources if s.source == "market").status == "stale"
 
         gateway = FakeGateway()
-        uow = SQLAlchemyUnitOfWork(session)
-        default_worker = MarketSyncService(market, gateway, uow, lambda: now)
+        unit_of_work = SQLAlchemyUnitOfWork(session)
+        default_worker = MarketSyncService(market, gateway, unit_of_work, lambda: now)
         assert (await default_worker.sync_if_stale("jita")).skipped
-        worker = MarketSyncService(market, gateway, uow, lambda: now, policy)
+        worker = MarketSyncService(market, gateway, unit_of_work, lambda: now, policy)
         assert not (await worker.sync_if_stale("jita")).skipped
         assert gateway.calls
     await engine.dispose()
@@ -86,13 +86,13 @@ async def test_history_interval_changes_due_selection_and_header_together() -> N
     async with AsyncSession(engine) as session:
         await seed(session)
         repository = SQLHistoryRepository(session, policy)
-        saved = await repository.state(10000002, 10)
+        saved = await repository.get_state(10000002, 10)
         assert saved is not None
         saved.expires_at = NOW
         await repository.replace(saved, [])
-        assert not await SQLHistoryRepository(session).due(10000002, [10], now)
-        assert await repository.due(10000002, [10], now) == {10}
-        header = await SQLProgressRepository(session, policy).freshness("jita", now)
+        assert not await SQLHistoryRepository(session).find_due_type_ids(10000002, [10], now)
+        assert await repository.find_due_type_ids(10000002, [10], now) == {10}
+        header = await SQLProgressRepository(session, policy).get_freshness_report("jita", now)
         assert next(s for s in header.sources if s.source == "history").status == "stale"
     await engine.dispose()
     assert DEFAULT_REFRESH.history_seconds == 86400

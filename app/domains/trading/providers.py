@@ -14,7 +14,7 @@ from app.domains.trading.service import TradingMetadataService, TradingService
 
 class TradingProvider(Provider):
     @provide(scope=Scope.REQUEST)
-    def repository(self, session: AsyncSession) -> TradingRepository:
+    def provide_repository(self, session: AsyncSession) -> TradingRepository:
         return SQLTradingRepository(session)
 
     cargo = provide(CargoService, scope=Scope.REQUEST)
@@ -24,7 +24,7 @@ class TradingProvider(Provider):
     route_gateway = provide(EsiRouteGateway, provides=RouteGateway, scope=Scope.APP)
 
     @provide(scope=Scope.APP)
-    def routes(
+    def provide_route_service(
         self, cache: Cache, loader: CacheService, gateway: RouteGateway, settings: Settings
     ) -> TradingRoutes:
         return TradingRoutes(
@@ -32,7 +32,7 @@ class TradingProvider(Provider):
         )
 
     @provide(scope=Scope.REQUEST)
-    def service(
+    def provide_service(
         self,
         repository: TradingRepository,
         names: ItemNameService,
@@ -42,7 +42,7 @@ class TradingProvider(Provider):
         return TradingService(repository, names, routes=routes, refresh_policy=refresh_policy)
 
     @provide(scope=Scope.REQUEST)
-    def metadata(
+    def provide_metadata_service(
         self,
         repository: TradingRepository,
         gateway: TradingGateway,

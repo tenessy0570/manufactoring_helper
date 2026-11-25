@@ -34,7 +34,7 @@ async function checkTradingWorkflow(){
     if(!requests.at(-1).includes('min_daily_isk_volume=2500000')||!requests.at(-1).includes('history_days=14'))throw Error('Daily turnover filter not sent');
     if(!requests.at(-1).includes('price_spikes_only=true')||!requests.at(-1).includes('price_spike_threshold=45'))throw Error('Spike filter not sent');
     if(!requests.at(-1).includes('route_mode=shortest')||!requests.at(-1).includes('max_jumps=25')||!requests.at(-1).includes('min_profit_per_jump=90')||!requests.at(-1).includes('rank_by=profit_per_jump'))throw Error('Route parameters lost');
-    if(document.querySelector('td[x-show="columnVisible(\'jumpProfit\')"]').textContent!=='94')throw Error('Batch profit per jump missing');
+    if(document.querySelector('td[x-show="isColumnVisible(\'jumpProfit\')"]').textContent!=='94')throw Error('Batch profit per jump missing');
     if(document.querySelector('[x-model="form.hauling_per_m3"]'))throw Error('Hauling tariff still present');
     if(document.querySelector('.trade-density').textContent!=='23.5')throw Error('Profit per cubic meter missing');
     if(!document.querySelector('.trade-route-cell').textContent.includes('Amarr'))throw Error('Trade route missing');
@@ -43,7 +43,7 @@ async function checkTradingWorkflow(){
     const columns=document.querySelector('.trade-columns');columns.querySelector('summary').click();await a.$nextTick();
     if(!columns.open||columns.querySelectorAll('input[type=checkbox]').length!==a.columnOptions.length)throw Error('Trading columns menu');
     const priceColumn=[...columns.querySelectorAll('label')].find(label=>label.textContent.includes('Buy / unit'));priceColumn.querySelector('input').click();await a.$nextTick();await new Promise(resolve=>setTimeout(resolve,50));
-    if(a.columnVisible('purchase')||document.querySelector('th[x-show="columnVisible(\'purchase\')"]').getBoundingClientRect().height!==0)throw Error('Price column did not hide');
+    if(a.isColumnVisible('purchase')||document.querySelector('th[x-show="isColumnVisible(\'purchase\')"]').getBoundingClientRect().height!==0)throw Error('Price column did not hide');
     if(a.changed)throw Error('Column selection changed calculation settings');
     a.saveColumns();if(!JSON.parse(localStorage.getItem('eve.interhub.columns.v1')).includes('purchase'))throw Error('Column visibility not persisted');
     columns.dispatchEvent(new KeyboardEvent('keydown',{key:'Escape',bubbles:true}));if(columns.open)throw Error('Column picker did not close');

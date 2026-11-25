@@ -7,7 +7,7 @@ from app.domains.production.service import ProductionEstimateService, Production
 
 class ProductionProvider(Provider):
     @provide(scope=Scope.REQUEST)
-    def repository(self, session: AsyncSession) -> ProductionRepository:
+    def provide_repository(self, session: AsyncSession) -> ProductionRepository:
         return SQLProductionRepository(session)
 
     service = provide(ProductionService, scope=Scope.REQUEST)

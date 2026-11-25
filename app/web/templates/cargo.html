@@ -56,10 +56,10 @@
       x-text="loading?'Optimizing...':'Plan cargo'"
     ></button></div></form><p role="alert" x-show="error" x-text="error"></p><p x-show="changed">Settings changed. Select Plan cargo to update.</p><template x-if="result"><div><p x-show="applied.sale_side==='sell'">Sell-price scenario: items must sell after listing. Sell stock is not demand; sale time and broker fees are not included.</p><p class="muted">Daily turnover is traded ISK across the destination region, averaged over the selected completed UTC days. When enabled with a minimum, items without saved history are excluded. Plans use saved orders and packaged volumes. Orders may change before arrival; transport costs, losses and minimum order quantities are not simulated. Empty cargo space may be more profitable than additional purchases.</p><p x-show="result.skipped_routes"><span x-text="result.skipped_routes"></span> destinations unavailable: route not verified.</p><p x-show="result.missing_volume"><span x-text="result.missing_volume"></span> items excluded: transport volume unknown.</p><p x-show="result.partial_depth">Some snapshots only contain best-price stock or demand. Estimates are conservative until the next market update.</p><p x-show="!result.plans.length">No verified destination routes available.</p><template x-for="(plan,index) in result.plans" :key="plan.destination_hub"><details class="market-panel cargo-plan"><summary><strong><span x-text="index===0?'Best plan: ':'Alternative: '"></span><span
       x-text="name(applied.source_hub)+' \u2192 '+name(plan.destination_hub)"
-    ></span></strong><strong class="positive" x-text="compact(plan.profit)+' ISK profit'"></strong><span class="margin-badge" x-text="money(plan.margin_pct)+'% margin'"></span><span
-      x-text="money(Number(plan.cargo_m3)/Number(applied.cargo_m3)*100)+'% cargo'"
+    ></span></strong><strong class="positive" x-text="compact(plan.profit)+' ISK profit'"></strong><span class="margin-badge" x-text="formatMoney(plan.margin_pct)+'% margin'"></span><span
+      x-text="formatMoney(Number(plan.cargo_m3)/Number(applied.cargo_m3)*100)+'% cargo'"
     ></span><span x-text="plan.jumps+' jumps'"></span><span x-show="!plan.highsec"> · Low/null-sec</span></summary><div class="cargo-plan-body"><p>Investment: <span x-text="compact(plan.investment)+' ISK'"></span> · Net revenue: <span x-text="compact(plan.revenue)+' ISK'"></span> · Cargo: <span
-      x-text="money(plan.cargo_m3)+' / '+money(applied.cargo_m3)+' m³ ('+money(Number(plan.cargo_m3)/Number(applied.cargo_m3)*100)+'%)'"
+      x-text="formatMoney(plan.cargo_m3)+' / '+formatMoney(applied.cargo_m3)+' m³ ('+formatMoney(Number(plan.cargo_m3)/Number(applied.cargo_m3)*100)+'%)'"
     ></span></p><p
       x-text="plan.optimal?'Optimized within solver tolerance.':'Approximate plan: optimization time limit or numerical adjustment.'"
     ></p><p x-show="plan.stale">Some inputs are due for refresh.</p><p x-show="!plan.items.length">No profitable load with these settings.</p><div class="table-wrap"><table><thead><tr><th>Item</th><th>Units</th><th>Cargo (m³)</th><th>Investment (ISK)</th><th>Net revenue (ISK)</th><th>Profit (ISK)</th></tr></thead><tbody><template x-for="item in plan.items" :key="item.type_id"><tr><td><button
@@ -71,7 +71,7 @@
       :src="'https://images.evetech.net/types/'+item.type_id+'/icon?size=32'"
       alt=""
       loading="lazy"
-    ><strong x-text="item.name"></strong></button></td><td x-text="money(item.quantity)"></td><td x-text="money(item.cargo_m3)"></td><td x-text="compact(item.investment)"></td><td x-text="compact(item.revenue)"></td><td class="positive" x-text="compact(item.profit)"></td></tr></template></tbody></table></div></div></details></template></div></template></div></main><dialog
+    ><strong x-text="item.name"></strong></button></td><td x-text="formatMoney(item.quantity)"></td><td x-text="formatMoney(item.cargo_m3)"></td><td x-text="compact(item.investment)"></td><td x-text="compact(item.revenue)"></td><td class="positive" x-text="compact(item.profit)"></td></tr></template></tbody></table></div></div></details></template></div></template></div></main><dialog
       class="trade-history-dialog"
       x-ref="historyDialog"
       aria-labelledby="cargo-history-title"

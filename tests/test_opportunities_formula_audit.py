@@ -3,7 +3,7 @@ from decimal import Decimal
 import pytest
 
 from app.domains.manufacturing.calculation import calculate
-from app.domains.manufacturing.demand import estimate_buy_demand, invention_daily_profit
+from app.domains.manufacturing.demand import calculate_invention_daily_profit, estimate_buy_demand
 from app.domains.manufacturing.models import ManufacturingQuery
 from app.domains.market.models import BuyPriceLevel
 from tests.domains.manufacturing.test_manufacturing import calculation_input
@@ -63,7 +63,7 @@ def test_audit_parallel_buy_capacity_and_actual_price_levels() -> None:
 
 def test_audit_single_slot_expectation_does_not_round_failures_twice() -> None:
     # One copy at 60% success needs 5/3 attempts on average, not two guaranteed attempts.
-    rate = invention_daily_profit(
+    rate = calculate_invention_daily_profit(
         Decimal(1000), 1, Decimal(3600), 1, Decimal("0.6"), Decimal(3600), 1, 1, cap_to_day=False
     )
     assert abs(rate - Decimal(9000)) < Decimal("1e-20")

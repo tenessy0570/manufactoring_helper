@@ -16,21 +16,23 @@ _RECIPES = TypeAdapter(list[RecipeState])
 
 class ManufacturingRepository(ABC):
     @abstractmethod
-    async def recipes(self, type_ids: Sequence[int]) -> dict[int, RecipeState]: ...
+    async def get_recipes(self, type_ids: Sequence[int]) -> dict[int, RecipeState]: ...
 
     @abstractmethod
     async def save(self, state: RecipeState) -> None: ...
 
     @abstractmethod
-    async def quotes(self, hub_id: HubId, type_ids: Sequence[int]) -> dict[int, MarketPrice]: ...
+    async def get_quotes(
+        self, hub_id: HubId, type_ids: Sequence[int]
+    ) -> dict[int, MarketPrice]: ...
 
 
 class SQLManufacturingRepository(ManufacturingRepository):
     def __init__(self, session: AsyncSession, quotes: MarketQuoteReader) -> None:
         self._session, self._quotes = session, quotes
 
-    async def recipes(self, type_ids: Sequence[int]) -> dict[int, RecipeState]:
-        results: dict[int, RecipeState] = {}
+    async def get_recipes(self, type_ids: Sequence[int]) -> dict[int, RecipeState]:
+        recipes_by_type_id: dict[int, RecipeState] = {}
         for start in range(0, len(type_ids), 500):
             rows = await self._session.execute(
                 select(RecipeTable.__table__).where(
@@ -48,8 +50,8 @@ class SQLManufacturingRepository(ManufacturingRepository):
                     if state.expires_at.tzinfo is None
                     else state.expires_at
                 )
-                results[state.type_id] = state
-        return results
+                recipes_by_type_id[state.type_id] = state
+        return recipes_by_type_id
 
     async def save(self, state: RecipeState) -> None:
         await self._session.merge(
@@ -62,5 +64,5 @@ class SQLManufacturingRepository(ManufacturingRepository):
         )
         await self._session.flush()
 
-    async def quotes(self, hub_id: HubId, type_ids: Sequence[int]) -> dict[int, MarketPrice]:
-        return await self._quotes.quotes(hub_id, type_ids, include_sell_levels=False)
+    async def get_quotes(self, hub_id: HubId, type_ids: Sequence[int]) -> dict[int, MarketPrice]:
+        return await self._quotes.get_quotes(hub_id, type_ids, include_sell_levels=False)

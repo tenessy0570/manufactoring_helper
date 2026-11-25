@@ -9,11 +9,11 @@ from app.domains.trading.service import TradingService
 router = APIRouter(prefix="/api/v1/trading", tags=["trading"], route_class=DishkaRoute)
 
 
-@router.get("/opportunities")
-async def opportunities(
+@router.get("/opportunities", name="opportunities")
+async def get_opportunities(
     service: FromDishka[TradingService], query: Annotated[TradingQuery, Query()]
 ) -> TradingPage:
-    return await service.opportunities(query)
+    return await service.get_opportunities(query)
 
 
 # Temporarily disabled pending Cargo planner redesign.

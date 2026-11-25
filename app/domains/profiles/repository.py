@@ -16,7 +16,7 @@ class ProfileRepository(ABC):
     async def get(self, profile_id: UUID) -> Profile | None: ...
 
     @abstractmethod
-    async def default_id(self, lock: bool = False) -> UUID: ...
+    async def get_default_profile_id(self, lock: bool = False) -> UUID: ...
 
     @abstractmethod
     async def save(self, profile: Profile) -> None: ...
@@ -42,7 +42,7 @@ class SQLProfileRepository(ProfileRepository):
         row = await self._session.get(ProfileTable, profile_id)
         return None if row is None else Profile.model_validate(row, from_attributes=True)
 
-    async def default_id(self, lock: bool = False) -> UUID:
+    async def get_default_profile_id(self, lock: bool = False) -> UUID:
         statement = select(ProfileDefaultTable.profile_id).where(ProfileDefaultTable.id == 1)
         if lock:
             statement = statement.with_for_update()

@@ -13,8 +13,8 @@ from tests.helpers import make_settings
 
 async def test_metadata_planner_only_due_ids_and_unique_batches() -> None:
     repository = AsyncMock(spec=TradingRepository)
-    repository.market_type_ids.return_value = list(range(21))
-    repository.due_metadata.return_value = list(range(21))
+    repository.get_market_type_ids.return_value = list(range(21))
+    repository.find_due_metadata_ids.return_value = list(range(21))
     provider = Provider(scope=Scope.REQUEST)
     provider.provide(lambda: repository, provides=TradingRepository)
     container = make_async_container(provider)
@@ -30,13 +30,13 @@ async def test_metadata_planner_only_due_ids_and_unique_batches() -> None:
     redis.enqueue_job.return_value = None
     assert await worker.enqueue_trade_metadata(ctx) == 0
     assert [call.kwargs["_job_id"] for call in redis.enqueue_job.await_args_list] == ids
-    repository.due_metadata.return_value = [20]
+    repository.find_due_metadata_ids.return_value = [20]
     redis.reset_mock()
     redis.enqueue_job.return_value = object()
     assert await worker.enqueue_trade_metadata(ctx) == 1
     assert redis.enqueue_job.await_args.args == ("sync_trade_metadata", [20])
     assert redis.enqueue_job.await_args.kwargs["_job_id"] == ids[1]
-    repository.due_metadata.return_value = []
+    repository.find_due_metadata_ids.return_value = []
     assert await worker.enqueue_trade_metadata(ctx) == 0
     await container.close()
 

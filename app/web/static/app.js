@@ -42,7 +42,7 @@ document.addEventListener('alpine:init', () => {
       const sources = Object.entries(item?.freshness_deadlines || {}).filter(([, date]) => Date.parse(date) <= this.progressNow).map(([key]) => labels[key] || key);
       return sources.length ? 'Due for refresh: ' + sources.join(', ') + '. Select ' + (this.calculator ? 'Calculate profit' : 'Show results') + ' after the background update.' : 'Saved inputs are due for refresh. Select ' + (this.calculator ? 'Calculate profit' : 'Show results') + ' after the background update.';
     },
-    timeAgo(value) {
+    formatRelativeTime(value) {
       if (!value) return 'not yet loaded';
       const stamp = new Date(value).getTime();
       if (!Number.isFinite(stamp)) return 'not available';
@@ -56,7 +56,7 @@ document.addEventListener('alpine:init', () => {
       if (this.demo) return;
       const seq = ++this.progressSequence;
       try {
-        const result = await this.api('/health/data-progress?hub=' + this.resultForm.hub_id);
+        const result = await this.requestApi('/health/data-progress?hub=' + this.resultForm.hub_id);
         if (seq !== this.progressSequence) return;
         this.dataProgress = result;
         this.progressError = false;
@@ -90,7 +90,7 @@ document.addEventListener('alpine:init', () => {
       id: 'data',
       label: 'Data freshness'
     }],
-    columnVisible(id) {
+    isColumnVisible(id) {
       return !this.hiddenColumns.includes(id);
     },
     form: {},
@@ -100,7 +100,7 @@ document.addEventListener('alpine:init', () => {
       offset: 0,
       limit: 25
     },
-    defaults() {
+    getDefaultSettings() {
       return {
         search: '',
         hub_id: 'jita',
@@ -133,7 +133,7 @@ document.addEventListener('alpine:init', () => {
       };
     },
     async init() {
-      this.form = this.defaults();
+      this.form = this.getDefaultSettings();
       if (!this.calculator) await this.readExclusions();
       this.profiles = this.readBrowserProfiles();
       const restored = this.restoreSettings();
@@ -145,7 +145,7 @@ document.addEventListener('alpine:init', () => {
       const initialForm = JSON.stringify(this.form);
       if (!this.demo) {
         try {
-          const result = await this.api('/api/v1/profiles');
+          const result = await this.requestApi('/api/v1/profiles');
           this.profiles = [...this.profiles, ...result.items];
           if (restored) {
             if (!this.profiles.some(p => p.id === this.profileId)) this.profileId = '';
@@ -180,7 +180,7 @@ document.addEventListener('alpine:init', () => {
       };
       return labels[field] || String(field).replaceAll('_', ' ').replace(/^./, v => v.toUpperCase());
     },
-    async api(url, options = {}) {
+    async requestApi(url, options = {}) {
       const response = await fetch(url, {
         credentials: 'same-origin',
         ...options,
@@ -249,7 +249,7 @@ document.addEventListener('alpine:init', () => {
     async resetFilters() {
       this.profileId = '';
       this.profileSettings = {};
-      this.form = this.defaults();
+      this.form = this.getDefaultSettings();
       await this.load(false, 0);
     },
     get resultForm() {
@@ -273,7 +273,7 @@ document.addEventListener('alpine:init', () => {
       try {
         let result;
         if (this.demo) result = this.demoPage(queryForm, offset);
-        else result = await this.api((this.calculator ? '/api/v1/manufacturing/calculator/' + typeId : '/api/v1/manufacturing/opportunities') + '?' + this.params(queryForm, querySettings, offset));
+        else result = await this.requestApi((this.calculator ? '/api/v1/manufacturing/calculator/' + typeId : '/api/v1/manufacturing/opportunities') + '?' + this.params(queryForm, querySettings, offset));
         if (seq !== this.requestSequence) return;
         this.closeItem();
         this.page = result;
@@ -314,10 +314,10 @@ document.addEventListener('alpine:init', () => {
     get rangeLabel() {
       return this.page.total ? `${this.page.offset+1}–${Math.min(this.page.offset+this.page.limit,this.page.total)} of ${this.page.total.toLocaleString('en-US')} opportunities` : 'No matching opportunities';
     },
-    hubName(id) {
+    getHubName(id) {
       return this.hubs.find(h => h.id === id)?.name || id;
     },
-    money(value) {
+    formatMoney(value) {
       if (value === null || value === undefined) return '—';
       const n = Number(value);
       if (!Number.isFinite(n)) return '—';
@@ -326,10 +326,10 @@ document.addEventListener('alpine:init', () => {
         maximumFractionDigits: Math.abs(n) >= 1000000 || Math.abs(n) < 100 ? 2 : 0
       }).format(n);
     },
-    percent(value) {
+    formatPercent(value) {
       return Number.isFinite(Number(value)) ? Number(value).toFixed(1) + '%' : '—';
     },
-    fullMoney(value) {
+    formatFullMoney(value) {
       if (value === null || value === undefined || !Number.isFinite(Number(value))) return 'Not available';
       return new Intl.NumberFormat('en-US', {
         maximumFractionDigits: 2
@@ -347,15 +347,15 @@ document.addEventListener('alpine:init', () => {
         insufficient_buy_volume_for_one_run: 'Buy orders within your selected price range cannot absorb one full production run.'
       } [code] || 'Check the available buy demand before building.';
     },
-    productionLines() {
+    getProductionLineCount() {
       return Number(this.resultForm.production_lines) || 1;
     },
-    demandDuration(item) {
+    formatDemandDuration(item) {
       if (item.demand_duration_seconds !== null && item.demand_duration_seconds !== undefined) return this.duration(item.demand_duration_seconds);
       const runs = item.full_runs_at_buy_price,
         seconds = Number(item.seconds);
       if (runs === null || runs === undefined || !Number.isFinite(seconds) || seconds <= 0) return 'Not available';
-      return this.duration(seconds * Math.ceil(runs / this.productionLines()));
+      return this.duration(seconds * Math.ceil(runs / this.getProductionLineCount()));
     },
     duration(seconds) {
       const n = Number(seconds);

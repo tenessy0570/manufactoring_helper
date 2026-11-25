@@ -22,7 +22,7 @@ from app.domains.accounts.repository import AccountRepository, DuplicateUsername
 COOKIE_NAME = "eve_session"
 
 
-def token_hash(token: str) -> str:
+def hash_session_token(token: str) -> str:
     return hashlib.sha256(token.encode()).hexdigest()
 
 
@@ -30,15 +30,15 @@ class AccountService:
     def __init__(
         self,
         repository: AccountRepository,
-        uow: UnitOfWork,
+        unit_of_work: UnitOfWork,
         limiter: LoginLimiter,
         session_seconds: int = 1209600,
     ) -> None:
-        self.repository, self.uow, self.limiter = repository, uow, limiter
+        self.repository, self.unit_of_work, self.limiter = repository, unit_of_work, limiter
         self.session_seconds = session_seconds
 
-    async def identity(self, token: str) -> User | None:
-        user = await self.repository.session_user(token_hash(token), datetime.now(UTC))
+    async def get_session_user(self, token: str) -> User | None:
+        user = await self.repository.get_session_user(hash_session_token(token), datetime.now(UTC))
         return None if user is None else User.model_validate(user.model_dump())
 
     async def login(self, data: Credentials, address: str, previous: str = "") -> tuple[User, str]:
@@ -47,7 +47,7 @@ class AccountService:
             raise AccountError(
                 ErrorKind.RATE_LIMITED, "Too many login attempts. Try again in 15 minutes."
             )
-        user = await self.repository.by_username(username)
+        user = await self.repository.get_by_username(username)
         encoded = user.password_hash if user else "scrypt$" + "00" * 16 + "$" + "00" * 64
         valid = await asyncio.to_thread(verify_password, data.password.get_secret_value(), encoded)
         if user is None or not valid or not user.is_active:
@@ -55,21 +55,21 @@ class AccountService:
         token = secrets.token_urlsafe(32)
         try:
             if previous:
-                await self.repository.revoke(token_hash(previous))
+                await self.repository.revoke(hash_session_token(previous))
             await self.repository.create_session(
-                token_hash(token),
+                hash_session_token(token),
                 user.id,
                 datetime.now(UTC) + timedelta(seconds=self.session_seconds),
             )
-            await self.uow.commit()
+            await self.unit_of_work.commit()
         except BaseException:
-            await self.uow.rollback()
+            await self.unit_of_work.rollback()
             raise
         return User.model_validate(user.model_dump()), token
 
     async def logout(self, token: str) -> None:
-        await self.repository.revoke(token_hash(token))
-        await self.uow.commit()
+        await self.repository.revoke(hash_session_token(token))
+        await self.unit_of_work.commit()
 
     async def create(self, data: UserCreate) -> User:
         user = StoredUser(
@@ -81,12 +81,12 @@ class AccountService:
         )
         try:
             await self.repository.save(user)
-            await self.uow.commit()
+            await self.unit_of_work.commit()
         except DuplicateUsernameError as error:
-            await self.uow.rollback()
+            await self.unit_of_work.rollback()
             raise AccountError(ErrorKind.CONFLICT, "Username already exists") from error
         except BaseException:
-            await self.uow.rollback()
+            await self.unit_of_work.rollback()
             raise
         return User.model_validate(user.model_dump())
 
@@ -115,9 +115,9 @@ class AccountService:
             await self.repository.save(user)
             if data.password is not None or data.is_active is False:
                 await self.repository.revoke_user(user.id)
-            await self.uow.commit()
+            await self.unit_of_work.commit()
         except BaseException:
-            await self.uow.rollback()
+            await self.unit_of_work.rollback()
             raise
         return User.model_validate(user.model_dump())
 

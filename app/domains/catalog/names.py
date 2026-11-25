@@ -21,7 +21,7 @@ class ItemNameService:
         self, gateway: CatalogGateway, cache: CacheService, ttl_seconds: int = 604800
     ) -> None:
         self._gateway, self._cache = gateway, cache
-        self._ttl = ttl_seconds
+        self._cache_ttl_seconds = ttl_seconds
 
     async def resolve(self, type_ids: list[int]) -> ItemNamesResult:
         ids = sorted(set(type_ids))
@@ -38,7 +38,9 @@ class ItemNameService:
             return {str(key): name for key, name in names.items()}
 
         try:
-            values = await self._cache.get_or_load(f"item-names:v1:{digest}", load, self._ttl)
+            values = await self._cache.get_or_load(
+                f"item-names:v1:{digest}", load, self._cache_ttl_seconds
+            )
             names = ItemNamesResult.model_validate({"names": values, "missing_type_ids": []}).names
         except _IncompleteItemNamesError as error:
             names = error.names

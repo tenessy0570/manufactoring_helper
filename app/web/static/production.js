@@ -18,12 +18,12 @@ document.addEventListener('alpine:init', () => {
       for (const field of ['selected?.id', 'entry.kind', 'estimateUnits', 'hub']) this.$watch(field, () => this.resetEstimate());
       await this.load();
     },
-    money(value) {
+    formatMoney(value) {
       return value === null || value === undefined ? 'Not recorded' : Number(value).toLocaleString('en-US', {
         maximumFractionDigits: 2
       });
     },
-    label(kind) {
+    getEntryLabel(kind) {
       return {
         invention: 'Invention',
         materials: 'Materials',
@@ -31,7 +31,7 @@ document.addEventListener('alpine:init', () => {
         income: 'Income'
       } [kind];
     },
-    async api(path = '', method = 'GET', data) {
+    async requestApi(path = '', method = 'GET', data) {
       const r = await fetch('/api/v1/productions' + path, {
         method,
         credentials: 'same-origin',
@@ -67,7 +67,7 @@ document.addEventListener('alpine:init', () => {
     },
     async load(offset = 0) {
       await this.action(async () => {
-        const rows = await this.api('?' + new URLSearchParams({
+        const rows = await this.requestApi('?' + new URLSearchParams({
           offset,
           limit: 50
         }));
@@ -92,7 +92,7 @@ document.addEventListener('alpine:init', () => {
     },
     async open(item) {
       await this.action(async () => {
-        this.select(await this.api('/' + item.id));
+        this.select(await this.requestApi('/' + item.id));
       });
     },
     select(item) {
@@ -111,7 +111,7 @@ document.addEventListener('alpine:init', () => {
       this.purchaseNote = '';
       this.resetEntry();
     },
-    detailsPayload() {
+    buildDetailsPayload() {
       return {
         ...this.details,
         units: this.details.units === '' ? null : Number(this.details.units),
@@ -125,8 +125,8 @@ document.addEventListener('alpine:init', () => {
         return;
       }
       await this.action(async () => {
-        const item = await this.api('', 'POST', {
-          ...this.detailsPayload(),
+        const item = await this.requestApi('', 'POST', {
+          ...this.buildDetailsPayload(),
           type_id: this.typeId
         });
         this.select(item);
@@ -134,7 +134,7 @@ document.addEventListener('alpine:init', () => {
         this.offset = 0;
         this.message = 'Production created. Add expenses whenever you are ready.';
         try {
-          this.items = await this.api('?offset=0&limit=50');
+          this.items = await this.requestApi('?offset=0&limit=50');
         } catch (_) {
           this.message = 'Production created. Refresh the history list to load the remaining batches.';
         }
@@ -146,7 +146,7 @@ document.addEventListener('alpine:init', () => {
     },
     async saveDetails() {
       await this.action(async () => {
-        this.replace(await this.api('/' + this.selected.id, 'PUT', this.detailsPayload()));
+        this.replace(await this.requestApi('/' + this.selected.id, 'PUT', this.buildDetailsPayload()));
         this.message = 'Production updated. Existing expenses are unchanged.';
       });
     },
@@ -154,11 +154,11 @@ document.addEventListener('alpine:init', () => {
       if (!confirm('Delete production: ' + this.selected.name + '? All recorded expenses and income will be permanently deleted.')) return;
       await this.action(async () => {
         const id = this.selected.id;
-        await this.api('/' + id, 'DELETE');
+        await this.requestApi('/' + id, 'DELETE');
         this.items = this.items.filter(item => item.id !== id);
         this.selected = null;
         this.message = 'Production deleted.';
       });
     },
-  }, [window.productionBlueprint, window.productionEstimates, window.productionEntries, window.productionPurchases]));
+  }, [window.createProductionBlueprint, window.createProductionEstimates, window.createProductionEntries, window.createProductionPurchases]));
 });

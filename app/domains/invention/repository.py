@@ -16,13 +16,13 @@ _REQUESTS = TypeAdapter(list[InventionRequest])
 
 class InventionRepository(ABC):
     @abstractmethod
-    async def plan(self, key: str) -> PlanState | None: ...
+    async def get_cached_plan(self, key: str) -> PlanState | None: ...
 
     @abstractmethod
     async def save_plan(self, state: PlanState) -> None: ...
 
     @abstractmethod
-    async def requests(self, keys: Sequence[str]) -> dict[str, InventionRequest]: ...
+    async def get_requests(self, keys: Sequence[str]) -> dict[str, InventionRequest]: ...
 
     @abstractmethod
     async def ensure_request(self, request: InventionRequest) -> None: ...
@@ -31,14 +31,14 @@ class InventionRepository(ABC):
     async def save_request(self, request: InventionRequest) -> None: ...
 
     @abstractmethod
-    async def active_settings(self) -> list[InventionSettings]: ...
+    async def get_active_settings(self) -> list[InventionSettings]: ...
 
 
 class SQLInventionRepository(InventionRepository):
     def __init__(self, session: AsyncSession) -> None:
         self._session = session
 
-    async def plan(self, key: str) -> PlanState | None:
+    async def get_cached_plan(self, key: str) -> PlanState | None:
         row = await self._session.get(InventionPlanTable, key)
         if row is None:
             return None
@@ -66,8 +66,8 @@ class SQLInventionRepository(InventionRepository):
         )
         await self._session.flush()
 
-    async def requests(self, keys: Sequence[str]) -> dict[str, InventionRequest]:
-        results: dict[str, InventionRequest] = {}
+    async def get_requests(self, keys: Sequence[str]) -> dict[str, InventionRequest]:
+        requests_by_key: dict[str, InventionRequest] = {}
         for start in range(0, len(keys), 500):
             rows = await self._session.execute(
                 select(InventionRequestTable.__table__).where(
@@ -85,8 +85,8 @@ class SQLInventionRepository(InventionRepository):
                     if request.expires_at.tzinfo is None
                     else request.expires_at
                 )
-                results[request.key] = request
-        return results
+                requests_by_key[request.key] = request
+        return requests_by_key
 
     async def ensure_request(self, request: InventionRequest) -> None:
         values = request.model_dump(mode="json")
@@ -106,6 +106,6 @@ class SQLInventionRepository(InventionRepository):
         await self._session.merge(InventionRequestTable(**values))
         await self._session.flush()
 
-    async def active_settings(self) -> list[InventionSettings]:
+    async def get_active_settings(self) -> list[InventionSettings]:
         rows = await self._session.scalars(select(InventionRequestTable.settings))
         return [InventionSettings.model_validate(row) for row in rows]

@@ -65,20 +65,20 @@ class ResilientHttpClient:
             except httpx.TransportError:
                 if is_last_attempt:
                     raise
-                await self._sleep(self._backoff(attempt))
+                await self._sleep(self._calculate_backoff(attempt))
                 continue
             if response.is_success:
                 return response
             if response.status_code in self.RETRY_STATUSES and not is_last_attempt:
-                await self._sleep(self._retry_delay(response, attempt))
+                await self._sleep(self._get_retry_delay(response, attempt))
                 continue
             raise HttpStatusError(response.status_code, str(response.url), response)
         raise AssertionError("unreachable: the last attempt always returns or raises")
 
-    def _extra_headers(self) -> Mapping[str, str]:
+    def _build_extra_headers(self) -> Mapping[str, str]:
         return {}
 
-    async def _on_response(self, response: httpx.Response) -> None:
+    async def _handle_response(self, response: httpx.Response) -> None:
         return None
 
     async def _send(
@@ -86,17 +86,17 @@ class ResilientHttpClient:
     ) -> httpx.Response:
         async with self._semaphore:
             response = await self._http.request(
-                method, path, params=params, json=json, headers=self._extra_headers()
+                method, path, params=params, json=json, headers=self._build_extra_headers()
             )
             # Runs while holding a concurrency slot, so a back-pressure sleep slows every caller.
-            await self._on_response(response)
+            await self._handle_response(response)
             return response
 
-    def _retry_delay(self, response: httpx.Response, attempt: int) -> float:
+    def _get_retry_delay(self, response: httpx.Response, attempt: int) -> float:
         retry_after = response.headers.get("Retry-After", "")
         if retry_after.isdigit():
             return float(retry_after)
-        return self._backoff(attempt)
+        return self._calculate_backoff(attempt)
 
-    def _backoff(self, attempt: int) -> float:
+    def _calculate_backoff(self, attempt: int) -> float:
         return min(2.0**attempt, self.MAX_BACKOFF_SECONDS)

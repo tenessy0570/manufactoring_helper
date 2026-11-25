@@ -37,7 +37,7 @@ from app.domains.production.service import (
 from app.main import create_app
 from tests.domains.accounts.test_accounts import Limiter, make_user
 from tests.domains.catalog.test_catalog import item
-from tests.domains.invention.test_invention import plan, settings
+from tests.domains.invention.test_invention import get_plan, settings
 from tests.domains.manufacturing.test_manufacturing import recipe, recipe_state
 from tests.domains.market.test_market import price
 from tests.helpers import make_settings
@@ -88,7 +88,7 @@ async def test_empty_progressive_expenses_partial_sales_and_corrections() -> Non
         ("income", "50"),
         ("income", "90"),
     ]:
-        row = await svc.entry(
+        row = await svc.save_entry(
             user, row.id, EntryInput.model_validate({"kind": kind, "amount": amount})
         )
     assert row.totals["invention"] == 0
@@ -100,7 +100,7 @@ async def test_empty_progressive_expenses_partial_sales_and_corrections() -> Non
     assert saved.entries == row.entries
     assert saved.units == 1000
     assert saved.status == "completed"
-    saved = await svc.entry(
+    saved = await svc.save_entry(
         user, row.id, EntryInput(kind="income", amount=Decimal("80.01")), row.entries[-1].id
     )
     assert saved.totals["income"] == Decimal("130.01")
@@ -112,10 +112,10 @@ async def test_empty_progressive_expenses_partial_sales_and_corrections() -> Non
     for operation in [
         svc.get(uuid4(), row.id),
         svc.update(uuid4(), row.id, ProductionDetails()),
-        svc.entry(uuid4(), row.id, EntryInput(kind="income", amount=Decimal(1))),
+        svc.save_entry(uuid4(), row.id, EntryInput(kind="income", amount=Decimal(1))),
         svc.delete(uuid4(), row.id),
         svc.delete_entry(user, row.id, uuid4()),
-        svc.entry(user, row.id, EntryInput(kind="income", amount=Decimal(1)), uuid4()),
+        svc.save_entry(user, row.id, EntryInput(kind="income", amount=Decimal(1)), uuid4()),
     ]:
         with pytest.raises(ProductionError) as error:
             await operation
@@ -131,17 +131,17 @@ async def test_invalid_catalog_and_transaction_failures() -> None:
     with pytest.raises(ProductionError):
         await svc.create(uuid4(), ProductionCreate(type_id=10))
     svc.catalog.find.return_value = [item(10)]
-    assert isinstance(svc.uow, AsyncMock)
-    svc.uow.commit.side_effect = RuntimeError("commit failed")
+    assert isinstance(svc.unit_of_work, AsyncMock)
+    svc.unit_of_work.commit.side_effect = RuntimeError("commit failed")
     with pytest.raises(RuntimeError):
         await svc.create(uuid4(), ProductionCreate(type_id=10))
-    svc.uow.rollback.assert_awaited_once()
-    svc.uow.commit.side_effect = None
+    svc.unit_of_work.rollback.assert_awaited_once()
+    svc.unit_of_work.commit.side_effect = None
     row = await svc.create(uuid4(), ProductionCreate(type_id=10))
-    svc.uow.commit.side_effect = RuntimeError("commit failed")
+    svc.unit_of_work.commit.side_effect = RuntimeError("commit failed")
     with pytest.raises(RuntimeError):
         await svc.delete(row.user_id, row.id)
-    assert svc.uow.rollback.await_count == 2
+    assert svc.unit_of_work.rollback.await_count == 2
 
 
 @pytest.mark.parametrize("amount", ["-1", "0.001", "NaN", "Infinity", "1000000000000000001"])
@@ -154,49 +154,49 @@ async def test_estimates_whole_runs_fees_missing_data_and_invention() -> None:
     svc = service()
     row = await svc.create(uuid4(), ProductionCreate(type_id=10))
     market = AsyncMock(spec=ManufacturingRepository)
-    market.recipes.return_value = {10: recipe_state(recipe=recipe(units=5000))}
-    market.quotes.return_value = {34: price(34, buy_price="2", sell_price="3")}
+    market.get_recipes.return_value = {10: recipe_state(recipe=recipe(units=5000))}
+    market.get_quotes.return_value = {34: price(34, buy_price="2", sell_price="3")}
     invention = AsyncMock(spec=InventionRepository)
-    invention.plan.return_value = None
+    invention.get_cached_plan.return_value = None
     estimator = ProductionEstimateService(svc, market, ShoppingService(invention, market))
 
-    async def estimate(**values: object) -> Estimate:
-        return await estimator.estimate(
+    async def estimate_cost(**values: object) -> Estimate:
+        return await estimator.estimate_cost(
             row.user_id, row.id, EstimateInput.model_validate({"units": 5001, **values})
         )
 
-    result = await estimate(kind="materials")
+    result = await estimate_cost(kind="materials")
     assert result.amount == 60
     assert "2 runs" in result.description
     assert (
-        await estimate(kind="materials", material_order_type="buy", buy_broker_fee="10")
+        await estimate_cost(kind="materials", material_order_type="buy", buy_broker_fee="10")
     ).amount == 44
     assert (
-        await estimate(kind="manufacturing", facility_tax="1", system_cost_index="2")
+        await estimate_cost(kind="manufacturing", facility_tax="1", system_cost_index="2")
     ).amount == 14
-    market.recipes.return_value = {
+    market.get_recipes.return_value = {
         10: recipe_state(recipe=recipe(units=5000, estimated_item_value=None))
     }
-    assert (await estimate(kind="manufacturing")).amount == 8
+    assert (await estimate_cost(kind="manufacturing")).amount == 8
     with pytest.raises(ProductionError):
-        await estimate(kind="manufacturing", facility_tax="1")
-    market.quotes.return_value = {}
+        await estimate_cost(kind="manufacturing", facility_tax="1")
+    market.get_quotes.return_value = {}
     with pytest.raises(ProductionError):
-        await estimate(kind="materials")
-    market.recipes.return_value = {}
+        await estimate_cost(kind="materials")
+    market.get_recipes.return_value = {}
     with pytest.raises(ProductionError):
-        await estimate(kind="manufacturing")
+        await estimate_cost(kind="manufacturing")
     with pytest.raises(ProductionError):
-        await estimate(kind="invention")
+        await estimate_cost(kind="invention")
     now = datetime.now(UTC)
-    invention.plan.return_value = PlanState(
+    invention.get_cached_plan.return_value = PlanState(
         key=settings().plan_key,
-        plans=[plan(units_per_run=5000)],
+        plans=[get_plan(units_per_run=5000)],
         synced_at=now,
         expires_at=now - timedelta(days=1),
     )
-    market.quotes.return_value = {34: price(34, sell_price="100")}
-    result = await estimate(kind="invention")
+    market.get_quotes.return_value = {34: price(34, sell_price="100")}
+    result = await estimate_cost(kind="invention")
     assert result.amount == 600
     assert result.stale
     assert "3 expected attempts" in result.description
@@ -212,8 +212,8 @@ async def sql_services() -> AsyncIterator[tuple[ProductionService, AccountServic
         await connection.run_sync(Base.metadata.create_all)
     async with AsyncSession(engine, expire_on_commit=False) as session:
         svc = service(SQLProductionRepository(session))
-        svc.uow = SQLAlchemyUnitOfWork(session)
-        yield svc, AccountService(SQLAccountRepository(session), svc.uow, Limiter())
+        svc.unit_of_work = SQLAlchemyUnitOfWork(session)
+        yield svc, AccountService(SQLAccountRepository(session), svc.unit_of_work, Limiter())
     await engine.dispose()
 
 
@@ -227,7 +227,7 @@ async def test_authenticated_api_ownership_and_sql_roundtrip(
     provider.provide(lambda: svc, provides=ProductionService)
     provider.provide(lambda: accounts, provides=AccountService)
     market = AsyncMock(spec=ManufacturingRepository)
-    market.recipes.return_value = {10: recipe_state()}
+    market.get_recipes.return_value = {10: recipe_state()}
     estimator = ProductionEstimateService(svc, market, AsyncMock(spec=ShoppingService))
     provider.provide(lambda: estimator, provides=ProductionEstimateService)
     container = make_async_container(provider)
@@ -325,19 +325,19 @@ async def test_invention_decryptor_override_and_best_batch_budget() -> None:
     svc = service()
     row = await svc.create(uuid4(), ProductionCreate(type_id=10))
     market = AsyncMock(spec=ManufacturingRepository)
-    market.quotes.return_value = {
+    market.get_quotes.return_value = {
         34: price(34, sell_price="100"),
         34201: price(34201, sell_price="1"),
     }
     invention = AsyncMock(spec=InventionRepository)
     now = datetime.now(UTC)
-    invention.plan.return_value = PlanState(
+    invention.get_cached_plan.return_value = PlanState(
         key=settings().plan_key,
         synced_at=now,
         expires_at=now + timedelta(days=1),
         plans=[
-            plan(units_per_run=5000),
-            plan(
+            get_plan(units_per_run=5000),
+            get_plan(
                 units_per_run=5000,
                 decryptor_id=34201,
                 decryptor_name="Accelerant",
@@ -345,7 +345,7 @@ async def test_invention_decryptor_override_and_best_batch_budget() -> None:
                 runs_per_copy=20,
                 materials=[{"type_id": 34, "quantity": 2}, {"type_id": 34201, "quantity": 1}],
             ),
-            plan(
+            get_plan(
                 units_per_run=5000,
                 decryptor_id=34202,
                 decryptor_name="Symmetry",
@@ -357,30 +357,30 @@ async def test_invention_decryptor_override_and_best_batch_budget() -> None:
     )
     estimator = ProductionEstimateService(svc, market, ShoppingService(invention, market))
     data = EstimateInput(kind="invention", units=50001)
-    best = await estimator.estimate(row.user_id, row.id, data)
+    best = await estimator.estimate_cost(row.user_id, row.id, data)
     assert best.amount == 603
     assert best.selected_decryptor_id == 34201
     assert not best.complete_comparison
     assert len(best.decryptor_options) == 3
     assert [option.decryptor_id for option in best.decryptor_options if option.is_best] == [34201]
     assert best.decryptor_options[-1].estimated_cost is None
-    manual = await estimator.estimate(
+    manual = await estimator.estimate_cost(
         row.user_id, row.id, data.model_copy(update={"decryptor_id": None})
     )
     assert manual.amount == 1000
     assert manual.selected_decryptor_id is None
     assert "5 expected attempts" in manual.description
     assert "10 runs / T2 BPC" in manual.description
-    small = await estimator.estimate(row.user_id, row.id, data.model_copy(update={"units": 1}))
+    small = await estimator.estimate_cost(row.user_id, row.id, data.model_copy(update={"units": 1}))
     assert small.selected_decryptor_id is None
     assert small.amount == 600
-    forced = await estimator.estimate(
+    forced = await estimator.estimate_cost(
         row.user_id, row.id, data.model_copy(update={"units": 1, "decryptor_id": 34201})
     )
     assert forced.amount == 603
     for chosen, status in [(1, 422), (34202, 409)]:
         with pytest.raises(ProductionError) as error:
-            await estimator.estimate(
+            await estimator.estimate_cost(
                 row.user_id, row.id, data.model_copy(update={"decryptor_id": chosen})
             )
         assert (
@@ -402,22 +402,22 @@ async def test_purchase_lists_round_runs_exclude_bpcs_and_keep_entries_unchanged
     svc = service()
     row = await svc.create(uuid4(), ProductionCreate(type_id=10, units=50001))
     market = AsyncMock(spec=ManufacturingRepository)
-    market.recipes.return_value = {10: recipe_state(recipe=recipe(units=5000))}
-    market.quotes.return_value = {34: price(34, sell_price="100")}
+    market.get_recipes.return_value = {10: recipe_state(recipe=recipe(units=5000))}
+    market.get_quotes.return_value = {34: price(34, sell_price="100")}
     invention = AsyncMock(spec=InventionRepository)
     now = datetime.now(UTC)
-    invention.plan.return_value = PlanState(
+    invention.get_cached_plan.return_value = PlanState(
         key=settings().plan_key,
-        plans=[plan(units_per_run=5000)],
+        plans=[get_plan(units_per_run=5000)],
         synced_at=now,
         expires_at=now + timedelta(days=1),
     )
     estimator = ProductionEstimateService(svc, market, ShoppingService(invention, market))
-    materials = await estimator.purchase_list(
+    materials = await estimator.get_purchase_list(
         row.user_id, row.id, PurchaseListInput(kind="materials", units=5001)
     )
     assert [(m.type_id, m.quantity) for m in materials.materials] == [(34, 20)]
-    copied = await estimator.purchase_list(
+    copied = await estimator.get_purchase_list(
         row.user_id, row.id, PurchaseListInput(kind="invention", units=50001)
     )
     assert [(m.type_id, m.quantity) for m in copied.materials] == [(34, 10)]
@@ -429,10 +429,12 @@ async def test_purchase_lists_round_runs_exclude_bpcs_and_keep_entries_unchanged
     assert updated.actual_units == 45000
     assert updated.entries == []
     with pytest.raises(ProductionError):
-        await estimator.purchase_list(uuid4(), row.id, PurchaseListInput(kind="materials", units=1))
-    market.recipes.return_value = {}
+        await estimator.get_purchase_list(
+            uuid4(), row.id, PurchaseListInput(kind="materials", units=1)
+        )
+    market.get_recipes.return_value = {}
     with pytest.raises(ProductionError):
-        await estimator.purchase_list(
+        await estimator.get_purchase_list(
             row.user_id, row.id, PurchaseListInput(kind="materials", units=1)
         )
 
@@ -441,19 +443,19 @@ async def test_actual_bpc_runs_drive_materials_and_installation_instead_of_plann
     svc = service()
     row = await svc.create(uuid4(), ProductionCreate(type_id=10, units=999999, actual_runs=3))
     market = AsyncMock(spec=ManufacturingRepository)
-    market.recipes.return_value = {10: recipe_state(recipe=recipe(units=5000))}
-    market.quotes.return_value = {34: price(34, sell_price="3")}
+    market.get_recipes.return_value = {10: recipe_state(recipe=recipe(units=5000))}
+    market.get_quotes.return_value = {34: price(34, sell_price="3")}
     estimator = ProductionEstimateService(svc, market, AsyncMock(spec=ShoppingService))
-    result = await estimator.purchase_list(
+    result = await estimator.get_purchase_list(
         row.user_id, row.id, PurchaseListInput(kind="materials", manufacturing_runs=3)
     )
     assert result.materials[0].quantity == 30
     assert "15,000 units" in result.description
-    cost = await estimator.estimate(
+    cost = await estimator.estimate_cost(
         row.user_id, row.id, EstimateInput(kind="manufacturing", manufacturing_runs=3)
     )
     assert cost.amount == 12
-    materials = await estimator.estimate(
+    materials = await estimator.estimate_cost(
         row.user_id, row.id, EstimateInput(kind="materials", manufacturing_runs=3)
     )
     assert materials.amount == 90

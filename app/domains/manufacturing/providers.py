@@ -16,7 +16,7 @@ from app.domains.market.quotes import MarketQuoteReader
 
 class ManufacturingProvider(Provider):
     @provide(scope=Scope.APP)
-    async def client(self, settings: Settings) -> AsyncIterator[IndustryClient]:
+    async def provide_industry_client(self, settings: Settings) -> AsyncIterator[IndustryClient]:
         async with httpx.AsyncClient(
             base_url=settings.industry_base_url,
             timeout=settings.http_timeout_seconds,
@@ -25,17 +25,17 @@ class ManufacturingProvider(Provider):
             yield IndustryClient(http, settings.industry_max_concurrency, settings.http_max_retries)
 
     @provide(scope=Scope.APP)
-    def gateway(self, client: IndustryClient) -> IndustryGateway:
+    def provide_gateway(self, client: IndustryClient) -> IndustryGateway:
         return EverefIndustryGateway(client)
 
     @provide(scope=Scope.REQUEST)
-    def repository(
+    def provide_repository(
         self, session: AsyncSession, quotes: MarketQuoteReader
     ) -> ManufacturingRepository:
         return SQLManufacturingRepository(session, quotes)
 
     @provide(scope=Scope.REQUEST)
-    def service(
+    def provide_service(
         self,
         repository: ManufacturingRepository,
         history: HistoryRepository,
@@ -48,7 +48,7 @@ class ManufacturingProvider(Provider):
         )
 
     @provide(scope=Scope.REQUEST)
-    def sync_service(
+    def provide_sync_service(
         self,
         repository: ManufacturingRepository,
         gateway: IndustryGateway,

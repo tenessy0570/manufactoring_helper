@@ -4,10 +4,10 @@
   aria-labelledby="trade-history-title"
   @cancel.prevent="closeHistory()"
   @click="historyOutside($event)"
-><template x-if="historyItem"><div><div class="trade-history-heading"><div><div class="eyebrow">SALE PRICE HISTORY · <span x-text="hubName(historyItem.destination_hub)"></span></div><h2 id="trade-history-title" x-text="historyItem.name"></h2></div><button
+><template x-if="historyItem"><div><div class="trade-history-heading"><div><div class="eyebrow">SALE PRICE HISTORY · <span x-text="getHubName(historyItem.destination_hub)"></span></div><h2 id="trade-history-title" x-text="historyItem.name"></h2></div><button
   type="button"
   class="icon-button"
   x-ref="historyClose"
   @click="closeHistory()"
   aria-label="Close price history"
->×</button></div><p class="muted"><span x-text="hubName(historyItem.source_hub)"></span> → <strong x-text="hubName(historyItem.destination_hub)"></strong>. Saved <span x-text="historySaleSide"></span> quote: <strong x-text="money(historyItem.sale_price)+' ISK / unit'"></strong>.</p><section class="history-section"><p class="muted">Average traded price and volume for the entire sale hub region, over <span x-text="historyPeriod"></span> completed UTC days. Station-specific historical buy/sell quotes are unavailable. Gaps remain unconnected.</p>{% include "market_history_chart.html" %}</section></div></template></dialog>
+>×</button></div><p class="muted"><span x-text="getHubName(historyItem.source_hub)"></span> → <strong x-text="getHubName(historyItem.destination_hub)"></strong>. Saved <span x-text="historySaleSide"></span> quote: <strong x-text="formatMoney(historyItem.sale_price)+' ISK / unit'"></strong>.</p><section class="history-section"><p class="muted">Average traded price and volume for the entire sale hub region, over <span x-text="historyPeriod"></span> completed UTC days. Station-specific historical buy/sell quotes are unavailable. Gaps remain unconnected.</p>{% include "market_history_chart.html" %}</section></div></template></dialog>

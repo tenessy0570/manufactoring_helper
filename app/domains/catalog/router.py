@@ -17,8 +17,8 @@ from app.domains.catalog.service import CatalogService
 router = APIRouter(prefix="/api/v1/catalog", tags=["catalog"], route_class=DishkaRoute)
 
 
-@router.get("/items")
-async def items(
+@router.get("/items", name="items")
+async def get_items(
     service: FromDishka[CatalogService],
     filters: Annotated[CatalogQuery, Query()],
 ) -> CatalogPage:
@@ -26,8 +26,8 @@ async def items(
     return await service.find(clause, Page(limit=filters.limit, offset=filters.offset))
 
 
-@router.get("/names")
-async def names(
+@router.get("/names", name="names")
+async def get_item_names(
     service: FromDishka[ItemNameService], filters: Annotated[ItemNamesQuery, Query()]
 ) -> ItemNamesResult:
     try:

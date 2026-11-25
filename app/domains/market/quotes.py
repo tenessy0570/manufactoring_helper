@@ -14,7 +14,7 @@ _PRICES = TypeAdapter(list[MarketPrice])
 
 class MarketQuoteReader(ABC):
     @abstractmethod
-    async def quotes(
+    async def get_quotes(
         self, hub_id: HubId, type_ids: Sequence[int], *, include_sell_levels: bool = True
     ) -> dict[int, MarketPrice]: ...
 
@@ -23,10 +23,10 @@ class SQLMarketQuoteReader(MarketQuoteReader):
     def __init__(self, session: AsyncSession) -> None:
         self._session = session
 
-    async def quotes(
+    async def get_quotes(
         self, hub_id: HubId, type_ids: Sequence[int], *, include_sell_levels: bool = True
     ) -> dict[int, MarketPrice]:
-        results: dict[int, MarketPrice] = {}
+        quotes_by_type_id: dict[int, MarketPrice] = {}
         columns = [
             column
             for column in MarketPriceTable.__table__.c
@@ -45,5 +45,5 @@ class SQLMarketQuoteReader(MarketQuoteReader):
                     if quote.expires_at.tzinfo is None
                     else quote.expires_at
                 )
-                results[quote.type_id] = quote
-        return results
+                quotes_by_type_id[quote.type_id] = quote
+        return quotes_by_type_id

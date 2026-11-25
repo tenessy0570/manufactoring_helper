@@ -7,6 +7,7 @@ from pydantic import BaseModel, Field
 from app.contracts.opportunities import OpportunitySettings
 from app.domains.history.models import LiquidityItem
 from app.domains.invention.models import InventionRequest, InventionSettings
+from app.domains.market.enums import OrderType
 from app.domains.market.models import HubId, MarketPrice
 
 
@@ -75,7 +76,18 @@ class Opportunity(ProfitCalculation):
     meta_group_id: int | None
     invention_included: bool = False
     invention_required: bool | None
-    invention_status: str = "not_requested"
+    invention_status: Literal[
+        "stale",
+        "not_requested",
+        "not_required",
+        "time_pending",
+        "unknown_meta_group",
+        "pending",
+        "ready",
+        "missing_prices",
+        "unsupported",
+        "error",
+    ] = "not_requested"
     invention_decryptor: str | None = None
     invention_pricing_complete: bool | None = None
     recipe_synced_at: datetime
@@ -102,8 +114,8 @@ class Opportunity(ProfitCalculation):
 class OpportunityPage(BaseModel):
     hub_id: HubId
     material_hub_id: HubId
-    material_order_type: Literal["buy", "sell"]
-    product_order_type: Literal["buy", "sell"]
+    material_order_type: OrderType
+    product_order_type: OrderType
     efficiency_basis: str = "base materials and production time; no ME/TE bonuses"
     sales_tax: Decimal
     broker_fee: Decimal
