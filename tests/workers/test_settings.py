@@ -139,13 +139,13 @@ async def test_market_worker_isolates_hubs_and_continues_on_failure(fail_jita: b
 
 def test_owner_refresh_schedule() -> None:
     jobs = worker.WorkerSettings.cron_jobs
-    assert len(jobs) == 5
+    assert len(jobs) == 6
     for job in jobs:
         assert job.hour is None
         assert job.minute == set(range(60))
         assert job.run_at_startup
         assert job.keep_result_s == 0
-    assert len({job.job_id for job in jobs}) == 5
+    assert len({job.job_id for job in jobs}) == 6
 
 
 async def test_hub_retry_delay_does_not_block_other_markets() -> None:

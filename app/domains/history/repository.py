@@ -3,8 +3,9 @@ from collections.abc import Sequence
 from datetime import UTC, date, datetime, timedelta
 from decimal import Decimal
 from typing import Any
+from typing import cast as typing_cast
 
-from sqlalchemy import Numeric, Select, cast, delete, func, select
+from sqlalchemy import ColumnElement, CursorResult, Numeric, Select, cast, delete, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import DEFAULT_REFRESH, RefreshPolicy
@@ -33,6 +34,14 @@ class HistoryRepository(ABC):
     async def liquidity(
         self, query: LiquidityQuery, now: datetime
     ) -> tuple[list[LiquidityItem], int]: ...
+
+    @abstractmethod
+    async def candidates(self, query: LiquidityQuery, now: datetime) -> list[LiquidityItem]:
+        """All matching items for evaluation, without a page limit or a separate count."""
+        ...
+
+    @abstractmethod
+    async def prune_before(self, cutoff: date) -> int: ...
 
 
 class SQLHistoryRepository(HistoryRepository):
@@ -100,13 +109,36 @@ class SQLHistoryRepository(HistoryRepository):
         )
         return [HistoryDay.model_validate(row, from_attributes=True) for row in rows]
 
+    def _catalog_conditions(self, query: LiquidityQuery) -> list[ColumnElement[bool]]:
+        items = ItemTypeTable
+        conditions: list[ColumnElement[bool]] = [items.is_active.is_(True)]
+        if query.type_ids is not None:
+            conditions.append(items.type_id.in_(query.type_ids))
+        if query.exclude_type_ids is not None:
+            conditions.append(items.type_id.not_in(query.exclude_type_ids))
+        if query.search is not None:
+            conditions.append(items.name.icontains(query.search, autoescape=True))
+        for column, values in (
+            (items.category, query.categories),
+            (items.meta_group_id, query.meta_group_ids),
+        ):
+            if values is not None:
+                conditions.append(column.in_(values))
+        if query.is_rig is not None:
+            conditions.append(items.is_rig == query.is_rig)
+        return conditions
+
     def _liquidity_statement(self, query: LiquidityQuery, now: datetime) -> Select[Any]:
         history, states, items = HistoryDayTable, HistoryStateTable, ItemTypeTable
         region = get_hub(query.hub_id).region_id
         start, end = now.date() - timedelta(days=query.days), now.date() - timedelta(days=1)
-        conditions = [history.region_id == region, history.date >= start, history.date <= end]
-        if query.type_ids is not None:
-            conditions.append(history.type_id.in_(query.type_ids))
+        item_conditions = self._catalog_conditions(query)
+        conditions = [
+            history.region_id == region,
+            history.date >= start,
+            history.date <= end,
+            history.type_id.in_(select(items.type_id).where(*item_conditions)),
+        ]
         totals = (
             select(
                 history.type_id.label("type_id"),
@@ -140,22 +172,8 @@ class SQLHistoryRepository(HistoryRepository):
                 states,
                 (states.type_id == items.type_id) & (states.region_id == region),
             )
-            .where(items.is_active.is_(True))
+            .where(*item_conditions)
         )
-        if query.type_ids is not None:
-            statement = statement.where(items.type_id.in_(query.type_ids))
-        if query.exclude_type_ids is not None:
-            statement = statement.where(items.type_id.not_in(query.exclude_type_ids))
-        if query.search is not None:
-            statement = statement.where(items.name.icontains(query.search, autoescape=True))
-        for column, values in (
-            (items.category, query.categories),
-            (items.meta_group_id, query.meta_group_ids),
-        ):
-            if values is not None:
-                statement = statement.where(column.in_(values))
-        if query.is_rig is not None:
-            statement = statement.where(items.is_rig == query.is_rig)
         for metric, low, high in (
             (totals.c.daily_isk_volume, query.min_daily_isk_volume, query.max_daily_isk_volume),
             (totals.c.daily_units, query.min_daily_units, query.max_daily_units),
@@ -185,3 +203,17 @@ class SQLHistoryRepository(HistoryRepository):
             )
         ).mappings()
         return [LiquidityItem.model_validate(dict(row)) for row in rows], total
+
+    async def candidates(self, query: LiquidityQuery, now: datetime) -> list[LiquidityItem]:
+        rows = (
+            await self._session.execute(
+                self._liquidity_statement(query, now).order_by(ItemTypeTable.type_id)
+            )
+        ).mappings()
+        return [LiquidityItem.model_validate(dict(row)) for row in rows]
+
+    async def prune_before(self, cutoff: date) -> int:
+        result = await self._session.execute(
+            delete(HistoryDayTable).where(HistoryDayTable.date < cutoff)
+        )
+        return typing_cast(CursorResult[Any], result).rowcount

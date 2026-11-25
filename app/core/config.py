@@ -12,6 +12,7 @@ class RefreshPolicy(BaseModel):
 
     model_config = ConfigDict(frozen=True)
     market_seconds: int = Field(default=1200, ge=1)
+    history_retention_months: int = Field(default=12, ge=1, le=120)
     history_seconds: int = Field(default=86400, ge=3600, le=86400)
     recipe_seconds: int = Field(default=86400, ge=3600, le=604800)
     invention_price_seconds: int = Field(default=86400, ge=1)
@@ -67,6 +68,9 @@ class Settings(BaseSettings):
     catalog_max_age_hours: int = 20
     market_refresh_seconds: int = Field(default=DEFAULT_REFRESH.market_seconds, ge=1)
     market_cache_seconds: int = Field(default=300, ge=1, le=3600)
+    history_retention_months: int = Field(
+        default=DEFAULT_REFRESH.history_retention_months, ge=1, le=120
+    )
     history_cache_seconds: int = Field(default=DEFAULT_REFRESH.history_seconds, ge=3600, le=86400)
     industry_base_url: str = "https://api.everef.net"
     industry_max_concurrency: int = Field(default=3, ge=1, le=20)
@@ -94,6 +98,7 @@ class Settings(BaseSettings):
         return RefreshPolicy(
             market_seconds=self.market_refresh_seconds,
             history_seconds=self.history_cache_seconds,
+            history_retention_months=self.history_retention_months,
             recipe_seconds=self.manufacturing_cache_seconds,
             invention_price_seconds=self.invention_price_ttl_seconds,
             invention_plan_seconds=self.invention_plan_ttl_seconds,

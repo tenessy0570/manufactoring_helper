@@ -1,5 +1,5 @@
 from collections.abc import Callable
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, date, datetime, timedelta
 
 from app.core.config import DEFAULT_REFRESH, RefreshPolicy
 from app.core.freshness import refresh_deadline
@@ -7,6 +7,7 @@ from app.core.repository import UnitOfWork
 from app.domains.history.gateway import HistoryGateway
 from app.domains.history.models import HistorySeries, HistoryState, LiquidityPage, LiquidityQuery
 from app.domains.history.repository import HistoryRepository
+from app.domains.history.retention import retention_cutoff
 from app.domains.market.models import HubId, get_hub
 
 
@@ -79,7 +80,8 @@ class HistorySyncService:
             return False
         downloaded = await self._gateway.fetch(region_id, type_id)
         # Ignore incomplete current-day data; averages always use completed UTC days.
-        days = [day for day in downloaded.days if day.date < now.date()]
+        cutoff = retention_cutoff(now, self._refresh.history_retention_months)
+        days = [day for day in downloaded.days if cutoff <= day.date < now.date()]
         state = HistoryState(
             region_id=region_id,
             type_id=type_id,
@@ -93,3 +95,12 @@ class HistorySyncService:
             await self._uow.rollback()
             raise
         return True
+
+    async def prune_before(self, cutoff: date) -> int:
+        try:
+            deleted = await self._repository.prune_before(cutoff)
+            await self._uow.commit()
+            return deleted
+        except BaseException:
+            await self._uow.rollback()
+            raise

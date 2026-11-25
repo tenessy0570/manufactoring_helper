@@ -14,7 +14,13 @@ from app.core.orm import Base
 from app.core.repository import SQLAlchemyUnitOfWork
 from app.domains.catalog.repository import SQLItemTypeRepository
 from app.domains.history.gateway import EsiHistoryGateway, HistoryGateway
-from app.domains.history.models import HistoryDay, HistoryDownload, HistoryState, LiquidityQuery
+from app.domains.history.models import (
+    HistoryDay,
+    HistoryDownload,
+    HistoryState,
+    LiquidityItem,
+    LiquidityQuery,
+)
 from app.domains.history.repository import HistoryRepository, SQLHistoryRepository
 from app.domains.history.service import HistoryService, HistorySyncService
 from app.infrastructure.esi import EsiClient
@@ -162,6 +168,14 @@ class FakeRepository(HistoryRepository):
         self, region_id: int, type_id: int, start: date, end: date
     ) -> list[HistoryDay]:
         return [value for value in self.days if start <= value.date <= end]
+
+    async def prune_before(self, cutoff: date) -> int:
+        before = len(self.days)
+        self.days = [day for day in self.days if day.date >= cutoff]
+        return before - len(self.days)
+
+    async def candidates(self, query: LiquidityQuery, now: datetime) -> list[LiquidityItem]:
+        return []
 
     async def liquidity(self, query: LiquidityQuery, now: Any) -> tuple[list[Any], int]:
         return [], 0

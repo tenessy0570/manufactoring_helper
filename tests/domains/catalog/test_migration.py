@@ -87,3 +87,26 @@ def test_actual_units_migration_preserves_existing_plans_and_transactions() -> N
             "saved-transactions",
         )
     engine.dispose()
+
+
+def test_history_period_index_migration_preserves_trade_data() -> None:
+    history = runpy.run_path("alembic/versions/0003_history.py")
+    index = runpy.run_path("alembic/versions/0019_history_period_index.py")
+    engine = create_engine("sqlite:///:memory:")
+    with engine.begin() as connection, Operations.context(MigrationContext.configure(connection)):
+        history["upgrade"]()
+        columns_before = {row["name"] for row in inspect(connection).get_columns("market_history")}
+        connection.exec_driver_sql(
+            "INSERT INTO market_history VALUES (10000002, 34, '2026-11-01', 10, 12, 8, 100, 1)"
+        )
+        saved = connection.exec_driver_sql("SELECT * FROM market_history").all()
+        index["upgrade"]()
+        indexes = inspect(connection).get_indexes("market_history")
+        assert any(row["name"] == "ix_history_region_date_type" for row in indexes)
+        assert connection.exec_driver_sql("SELECT * FROM market_history").all() == saved
+        index["downgrade"]()
+        assert {
+            row["name"] for row in inspect(connection).get_columns("market_history")
+        } == columns_before
+        assert connection.exec_driver_sql("SELECT * FROM market_history").all() == saved
+    engine.dispose()

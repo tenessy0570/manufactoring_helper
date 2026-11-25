@@ -2,7 +2,7 @@ from datetime import date as calendar_date
 from datetime import datetime
 from decimal import Decimal
 
-from sqlalchemy import BigInteger, DateTime, Numeric
+from sqlalchemy import BigInteger, DateTime, Index, Numeric
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.core.orm import Base
@@ -10,6 +10,15 @@ from app.core.orm import Base
 
 class HistoryDayTable(Base):
     __tablename__ = "market_history"
+    __table_args__ = (
+        Index(
+            "ix_history_region_date_type",
+            "region_id",
+            "date",
+            "type_id",
+            postgresql_include=["average", "volume"],
+        ),
+    )
 
     region_id: Mapped[int] = mapped_column(primary_key=True)
     type_id: Mapped[int] = mapped_column(primary_key=True)

@@ -1,7 +1,7 @@
 from datetime import datetime
 
 from app.domains.catalog.models import MASS_PRODUCTION_META_GROUP_IDS
-from app.domains.history.models import LiquidityItem, LiquidityQuery
+from app.domains.history.models import LiquidityQuery
 from app.domains.history.repository import HistoryRepository
 from app.domains.invention.models import InventionSettings
 from app.domains.invention.repository import InventionRepository
@@ -31,14 +31,7 @@ class OpportunityDataLoader:
                 if query.meta_group_ids is None or value in query.meta_group_ids
             ]
         filters.fresh_only = False
-        filters.limit, filters.offset = 500, 0
-        candidates: list[LiquidityItem] = []
-        while True:
-            batch, total = await self._history.liquidity(filters, now)
-            candidates.extend(batch)
-            filters.offset += filters.limit
-            if filters.offset >= total:
-                break
+        candidates = await self._history.candidates(filters, now)
         recipes = await self._repository.recipes([candidate.type_id for candidate in candidates])
         material_ids = sorted(
             {
@@ -49,10 +42,16 @@ class OpportunityDataLoader:
             }
         )
         material_hub = query.material_hub_id or query.hub_id
-        quotes = await self._repository.quotes(material_hub, material_ids)
-        products = await self._repository.quotes(
-            query.hub_id, [candidate.type_id for candidate in candidates]
-        )
+        product_ids = [candidate.type_id for candidate in candidates]
+        if material_hub == query.hub_id:
+            all_quotes = await self._repository.quotes(
+                material_hub, sorted(set(material_ids + product_ids))
+            )
+            quotes = {key: all_quotes[key] for key in material_ids if key in all_quotes}
+            products = {key: all_quotes[key] for key in product_ids if key in all_quotes}
+        else:
+            quotes = await self._repository.quotes(material_hub, material_ids)
+            products = await self._repository.quotes(query.hub_id, product_ids)
         invention_settings = {
             candidate.type_id: InventionSettings(
                 type_id=candidate.type_id,

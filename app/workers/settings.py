@@ -1,5 +1,5 @@
 import logging
-from datetime import UTC, timedelta
+from datetime import UTC, datetime, timedelta
 from functools import partial
 from typing import Any
 
@@ -8,10 +8,12 @@ from arq.connections import RedisSettings
 from arq.worker import run_worker
 from dishka import AsyncContainer
 
-from app.core.config import get_settings
+from app.core.config import RefreshPolicy, get_settings
 from app.core.di import create_container
 from app.core.logging import configure_logging
 from app.domains.catalog.service import CatalogSyncService
+from app.domains.history.retention import retention_cutoff
+from app.domains.history.service import HistorySyncService
 from app.domains.market.models import HUBS
 from app.domains.market.service import MarketSyncService
 from app.workers.history import enqueue_history
@@ -77,6 +79,27 @@ async def sync_markets(ctx: dict[str, Any]) -> list[dict[str, Any]]:
     return reports
 
 
+async def prune_history(ctx: dict[str, Any]) -> dict[str, Any]:
+    container: AsyncContainer = ctx["container"]
+    policy = await container.get(RefreshPolicy)
+    cutoff = retention_cutoff(datetime.now(UTC), policy.history_retention_months)
+    stamp = cutoff.isoformat()
+    redis = ctx["redis"]
+    key = "history:retention:last_cutoff"
+    if await redis.get(key) in (stamp, stamp.encode()):
+        return {"skipped": True, "cutoff": stamp}
+    async with container() as scope:
+        service = await scope.get(HistorySyncService)
+        deleted = await with_retry_delay(
+            ctx, "history_retention", partial(service.prune_before, cutoff)
+        )
+    if deleted is None:
+        return {"skipped": True, "retry_delayed": True}
+    await redis.set(key, stamp)
+    logger.info("History retention: deleted=%d cutoff=%s", deleted, stamp)
+    return {"deleted": deleted, "cutoff": stamp}
+
+
 class WorkerSettings:
     functions = (
         sync_catalog,
@@ -84,6 +107,7 @@ class WorkerSettings:
         enqueue_history,
         enqueue_manufacturing,
         enqueue_inventions,
+        prune_history,
     )
     cron_jobs = tuple(
         cron(

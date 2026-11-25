@@ -2,6 +2,7 @@ from abc import ABC, abstractmethod
 from collections.abc import Sequence
 from datetime import UTC
 
+from pydantic import TypeAdapter
 from sqlalchemy import select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.dialects.sqlite import insert as sqlite_insert
@@ -9,6 +10,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.domains.invention.models import InventionRequest, InventionSettings, PlanState
 from app.domains.invention.tables import InventionPlanTable, InventionRequestTable
+
+_REQUESTS = TypeAdapter(list[InventionRequest])
 
 
 class InventionRepository(ABC):
@@ -66,13 +69,12 @@ class SQLInventionRepository(InventionRepository):
     async def requests(self, keys: Sequence[str]) -> dict[str, InventionRequest]:
         results: dict[str, InventionRequest] = {}
         for start in range(0, len(keys), 500):
-            rows = await self._session.scalars(
-                select(InventionRequestTable).where(
+            rows = await self._session.execute(
+                select(InventionRequestTable.__table__).where(
                     InventionRequestTable.key.in_(keys[start : start + 500])
                 )
             )
-            for row in rows:
-                request = InventionRequest.model_validate(row, from_attributes=True)
+            for request in _REQUESTS.validate_python(rows.mappings().all()):
                 request.updated_at = (
                     request.updated_at.replace(tzinfo=UTC)
                     if request.updated_at.tzinfo is None

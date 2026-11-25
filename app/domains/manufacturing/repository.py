@@ -2,6 +2,7 @@ from abc import ABC, abstractmethod
 from collections.abc import Sequence
 from datetime import UTC
 
+from pydantic import TypeAdapter
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -9,6 +10,8 @@ from app.domains.manufacturing.models import RecipeState
 from app.domains.manufacturing.tables import RecipeTable
 from app.domains.market.models import HubId, MarketPrice
 from app.domains.market.quotes import MarketQuoteReader
+
+_RECIPES = TypeAdapter(list[RecipeState])
 
 
 class ManufacturingRepository(ABC):
@@ -29,11 +32,12 @@ class SQLManufacturingRepository(ManufacturingRepository):
     async def recipes(self, type_ids: Sequence[int]) -> dict[int, RecipeState]:
         results: dict[int, RecipeState] = {}
         for start in range(0, len(type_ids), 500):
-            rows = await self._session.scalars(
-                select(RecipeTable).where(RecipeTable.type_id.in_(type_ids[start : start + 500]))
+            rows = await self._session.execute(
+                select(RecipeTable.__table__).where(
+                    RecipeTable.type_id.in_(type_ids[start : start + 500])
+                )
             )
-            for row in rows:
-                state = RecipeState.model_validate(row, from_attributes=True)
+            for state in _RECIPES.validate_python(rows.mappings().all()):
                 state.synced_at = (
                     state.synced_at.replace(tzinfo=UTC)
                     if state.synced_at.tzinfo is None
@@ -59,4 +63,4 @@ class SQLManufacturingRepository(ManufacturingRepository):
         await self._session.flush()
 
     async def quotes(self, hub_id: HubId, type_ids: Sequence[int]) -> dict[int, MarketPrice]:
-        return await self._quotes.quotes(hub_id, type_ids)
+        return await self._quotes.quotes(hub_id, type_ids, include_sell_levels=False)
