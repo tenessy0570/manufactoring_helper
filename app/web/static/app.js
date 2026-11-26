@@ -81,6 +81,9 @@ document.addEventListener('alpine:init', () => {
       id: 'daily',
       label: 'Profit / day'
     }, {
+      id: 'bpcTime',
+      label: 'Production time / T2 BPC'
+    }, {
       id: 'volumeShare',
       label: 'Daily volume share'
     }, {
@@ -349,6 +352,22 @@ document.addEventListener('alpine:init', () => {
     },
     getProductionLineCount() {
       return Number(this.resultForm.production_lines) || 1;
+    },
+    formatBpcDuration(seconds) {
+      if (seconds == null || !Number.isFinite(Number(seconds)) || Number(seconds) <= 0) return 'N/A';
+      const minutes = Math.ceil(Number(seconds) / 60);
+      return Math.floor(minutes / 60) + 'h ' + (minutes % 60) + 'm';
+    },
+    getBpcDurationColor(seconds) {
+      if (seconds == null || !Number.isFinite(Number(seconds)) || Number(seconds) <= 0) return '';
+      const minimumSeconds = 30 * 60;
+      const yellowSeconds = 6 * 60 * 60;
+      const maximumSeconds = 24 * 60 * 60;
+      const durationSeconds = Math.max(minimumSeconds, Math.min(maximumSeconds, Number(seconds)));
+      const hue = durationSeconds <= yellowSeconds
+        ? 60 * (durationSeconds - minimumSeconds) / (yellowSeconds - minimumSeconds)
+        : 60 + 60 * (durationSeconds - yellowSeconds) / (maximumSeconds - yellowSeconds);
+      return 'hsl(' + hue + ', 70%, 65%)';
     },
     formatDemandDuration(item) {
       if (item.demand_duration_seconds !== null && item.demand_duration_seconds !== undefined) return this.duration(item.demand_duration_seconds);

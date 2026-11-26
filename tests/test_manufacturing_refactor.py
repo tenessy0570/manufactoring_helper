@@ -51,11 +51,24 @@ async def test_all_opportunity_fields_match_pre_refactor_responses() -> None:
         cases = CASES
         for case in cases:
             page = await service.get_opportunities(ManufacturingQuery.model_validate(case["query"]))
+            for opportunity in page.items:
+                if opportunity.meta_group_id == 2:
+                    assert opportunity.bpc_manufacturing_runs == 10
+                    assert opportunity.bpc_manufacturing_seconds == opportunity.seconds * 10
+                else:
+                    assert opportunity.bpc_manufacturing_seconds is None
             assert (
                 page.model_dump(
                     mode="json",
                     exclude={
-                        "items": {"__all__": {"daily_production_units", "daily_volume_share_pct"}}
+                        "items": {
+                            "__all__": {
+                                "daily_production_units",
+                                "daily_volume_share_pct",
+                                "bpc_manufacturing_seconds",
+                                "bpc_manufacturing_runs",
+                            }
+                        }
                     },
                 )
                 == case["expected"]

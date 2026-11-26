@@ -65,11 +65,7 @@ class OpportunityDataLoader:
         }
         invention_results = (
             await self._invention.get_requests([value.key for value in invention_settings.values()])
-            if (
-                query.include_invention_cost
-                or (query.include_invention_time or query.include_copying_time)
-            )
-            and self._invention is not None
+            if self._invention is not None
             else {}
         )
         return OpportunityInputs(

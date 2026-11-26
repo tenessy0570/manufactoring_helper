@@ -31,6 +31,18 @@ async function checkFrontendWorkflow() {
   check(!app.isColumnVisible('cost')&&!app.isColumnVisible('margin'),'Column choices persist');
   app.hiddenColumns=[];
 
+  check(app.formatBpcDuration(1800)==='0h 30m'&&app.formatBpcDuration(90000)==='25h 0m','BPC duration stays in hours and minutes');
+  check(app.formatBpcDuration(null)==='N/A'&&app.getBpcDurationColor(null)==='','Missing BPC duration is neutral');
+  check(app.getBpcDurationColor(600)===app.getBpcDurationColor(1800)&&app.getBpcDurationColor(1800)==='hsl(0, 70%, 65%)','BPC duration red threshold');
+  check(app.getBpcDurationColor(86400)==='hsl(120, 70%, 65%)'&&app.getBpcDurationColor(90000)===app.getBpcDurationColor(86400),'BPC duration green threshold');
+  check(app.getBpcDurationColor(21600)==='hsl(60, 70%, 65%)','BPC duration is yellow at six hours');
+  check(app.getBpcDurationColor(54000)==='hsl(90, 70%, 65%)','BPC durations above six hours trend green');
+  check(app.columnOptions.some(c=>c.id==='bpcTime'),'T2 BPC time is selectable');
+  app.page.items[0].bpc_manufacturing_seconds='7200';
+  app.page.items[0].bpc_manufacturing_runs=10;
+  await app.$nextTick();
+  const bpcTime=document.querySelector('td[x-show="isColumnVisible(\'bpcTime\')"]');
+  check(bpcTime.textContent.includes('2h')&&bpcTime.textContent.includes('10 runs on 1 line'),'BPC duration and runs are displayed');
   check(app.columnOptions.some(c=>c.id==='volumeShare'),'Daily volume share is selectable');
   app.page.items[0].daily_production_units='1000';
   app.page.items[0].daily_units='100';

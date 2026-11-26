@@ -67,6 +67,8 @@ class ProfitCalculation(BaseModel):
 
 
 class Opportunity(ProfitCalculation):
+    bpc_manufacturing_seconds: Decimal | None = None
+    bpc_manufacturing_runs: int | None = None
     demand_duration_seconds: Decimal | None = None
     daily_production_units: Decimal | None = None
     daily_volume_share_pct: Decimal | None = None

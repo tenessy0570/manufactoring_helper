@@ -33,6 +33,8 @@
       >
         DAILY VOLUME SHARE
       </th>
+      <th x-show="isColumnVisible('bpcTime')"
+        title="Manufacturing all runs of one invented T2 BPC on one line, using the best-value cached invention option. Base production time, without ME/TE bonuses or copying/invention time.">TIME / T2 BPC</th>
       <th x-show="isColumnVisible('turnover')">REGIONAL TURNOVER / DAY</th>
       <th x-show="isColumnVisible('data')">DATA</th>
       <th></th>
@@ -128,6 +130,12 @@
             class="muted"
             x-show="item.daily_volume_share_pct == null"
           >No traded volume available</div>
+        </td>
+        <td x-show="isColumnVisible('bpcTime')">
+          <strong x-text="formatBpcDuration(item.bpc_manufacturing_seconds)"
+            :style="{color:getBpcDurationColor(item.bpc_manufacturing_seconds)}"></strong>
+          <div class="muted" x-show="item.bpc_manufacturing_runs != null"
+            x-text="item.bpc_manufacturing_runs+' runs on 1 line'"></div>
         </td>
         <td
           x-show="isColumnVisible('turnover')"

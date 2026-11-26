@@ -155,7 +155,16 @@ def evaluate_opportunities(
                 warnings.append("single_buy_order_at_best")
             if runs_at_price == 0:
                 warnings.append("insufficient_buy_volume_for_one_run")
+        bpc_plan = invention_plan
+        if bpc_plan is None and candidate.meta_group_id == 2:
+            cached = invention_results.get(invention_settings[candidate.type_id].key)
+            if cached is not None and cached.result is not None and cached.result.best is not None:
+                bpc_plan = cached.result.best.plan
         opportunity = Opportunity(
+            bpc_manufacturing_seconds=calculated.seconds * bpc_plan.runs_per_copy
+            if bpc_plan is not None
+            else None,
+            bpc_manufacturing_runs=bpc_plan.runs_per_copy if bpc_plan is not None else None,
             demand_duration_seconds=duration,
             daily_production_units=timing.daily_production_units,
             daily_volume_share_pct=(
