@@ -9,7 +9,7 @@ async function checkProductionWorkflow(){
     if(method==='GET'&&String(url).includes('?'))return new Response(JSON.stringify(rows),{status:200});
     let result;
     if(method==='POST'&&url==='/api/v1/productions'){result=recalc({...body,id:'batch',name:'Example Rig II',entries:[]});rows=[result];}
-    else if(String(url).endsWith('/purchase-list')){if(body.kind==='materials'&&(body.manufacturing_runs!==125||'units' in body))throw Error('Must send actual BPC runs, not planned units');return new Response(JSON.stringify({materials:[{type_id:34,quantity:body.kind==='invention'?10:20}],description:'Purchase materials',stale:false}),{status:200});}
+    else if(String(url).endsWith('/purchase-list')){if(body.kind==='materials'&&(body.manufacturing_runs!==125||'units' in body))throw Error('Must send entered manufacturing runs, not planned units');return new Response(JSON.stringify({materials:[{type_id:34,quantity:body.kind==='invention'?10:20}],description:'Purchase materials',stale:false}),{status:200});}
     else if(String(url).endsWith('/estimate'))result={amount:body.decryptor_id===null?'200':'123.45',description:'Market estimate',stale:false,complete_comparison:true,decryptor_options:[{decryptor_id:null,name:'No decryptor',estimated_cost:'200',is_best:false},{decryptor_id:34201,name:'Accelerant',estimated_cost:'123.45',is_best:true}]};
     else if(String(url).endsWith('/entries')){rows[0].entries.push({...body,id:'e'+(++sequence),created_at:new Date().toISOString()});result=recalc(rows[0]);}
     else if(String(url).includes('/entries/')){const id=String(url).split('/').pop();if(method==='DELETE')rows[0].entries=rows[0].entries.filter(e=>e.id!==id);else Object.assign(rows[0].entries.find(e=>e.id===id),body);result=recalc(rows[0]);}
@@ -30,8 +30,14 @@ async function checkProductionWorkflow(){
     if(saveBounds.top<0||saveBounds.bottom>innerHeight||saveBar.querySelector('button').form?.id!=='production-details-form')throw Error('Save details must remain visible while scrolling and submit its form');
     window.scrollTo(0,0);
 
-    if(document.querySelectorAll('input[x-model="details.actual_runs"]').length!==1)throw Error('Available T2 BPC runs must have one input');
-    a.details.units='150';a.details.actual_runs='125';
+    if(document.querySelector('input[x-model="details.actual_runs"]'))throw Error('Stored BPC runs field must be removed');
+    if(document.querySelectorAll('input[x-model="purchaseRuns"]').length!==1)throw Error('Manufacturing runs input must appear once');
+    a.selected.actual_runs=999;
+    await a.copyMaterials('materials');
+    if(!a.error.includes('manufacturing runs'))throw Error('Empty runs must be rejected despite legacy saved runs');
+    a.error='';
+    a.details.units='150';a.purchaseRuns='125';
+    if('actual_runs' in a.buildDetailsPayload())throw Error('Legacy runs must not be submitted with details');
     const originalWrite=Object.getOwnPropertyDescriptor(navigator,'clipboard');
     let copied='';Object.defineProperty(navigator,'clipboard',{configurable:true,value:{writeText:async text=>{copied=text;}}});
     try {

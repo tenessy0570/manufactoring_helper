@@ -1,10 +1,11 @@
 window.createProductionPurchases = () => ({
+  purchaseRuns: '',
   purchaseText: '',
   purchaseNote: '',
   async prepareExpense(kind) {
-    const units = Number(kind === 'invention' ? this.details.units : this.details.actual_runs);
+    const units = Number(kind === 'invention' ? this.details.units : this.purchaseRuns);
     if (!Number.isInteger(units) || units < 1 || units > 1000000000) {
-      this.error = 'Enter the finished unit quantity for this step.';
+      this.error = kind === 'invention' ? 'Enter planned finished units in batch details.' : 'Enter manufacturing runs for this batch (1-1,000,000,000).';
       return;
     }
     this.resetEntry(kind);
@@ -15,9 +16,9 @@ window.createProductionPurchases = () => ({
     if (!this.error) this.$refs.amount.focus();
   },
   async copyMaterials(kind) {
-    const units = Number(kind === 'invention' ? this.details.units : this.details.actual_runs);
+    const units = Number(kind === 'invention' ? this.details.units : this.purchaseRuns);
     if (!Number.isInteger(units) || units < 1 || units > 1000000000) {
-      this.error = 'Enter the finished unit quantity for this purchase (1-1,000,000,000).';
+      this.error = kind === 'invention' ? 'Enter planned finished units in batch details.' : 'Enter manufacturing runs for this batch (1-1,000,000,000).';
       return;
     }
     await this.action(async () => {

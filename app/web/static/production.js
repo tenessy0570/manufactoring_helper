@@ -10,7 +10,6 @@ document.addEventListener('alpine:init', () => {
     details: {
       units: '',
       actual_units: '',
-      actual_runs: '',
       comment: '',
       status: 'in_progress'
     },
@@ -84,7 +83,6 @@ document.addEventListener('alpine:init', () => {
       this.details = {
         units: '',
         actual_units: '',
-        actual_runs: '',
         comment: '',
         status: 'in_progress'
       };
@@ -101,12 +99,12 @@ document.addEventListener('alpine:init', () => {
       this.details = {
         units: item.units ?? '',
         actual_units: item.actual_units ?? '',
-        actual_runs: item.actual_runs ?? '',
         comment: item.comment,
         status: item.status
       };
       this.estimateUnits = item.units ?? '';
       this.estimateRuns = '';
+      this.purchaseRuns = '';
       this.purchaseText = '';
       this.purchaseNote = '';
       this.resetEntry();
@@ -115,8 +113,7 @@ document.addEventListener('alpine:init', () => {
       return {
         ...this.details,
         units: this.details.units === '' ? null : Number(this.details.units),
-        actual_units: this.details.actual_units === '' ? null : Number(this.details.actual_units),
-        actual_runs: this.details.actual_runs === '' ? null : Number(this.details.actual_runs)
+        actual_units: this.details.actual_units === '' ? null : Number(this.details.actual_units)
       };
     },
     async create() {

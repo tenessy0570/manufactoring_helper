@@ -12,6 +12,11 @@
           <option value="hek">Hek</option>
         </select>
       </label>
+      <label>
+        Manufacturing runs for this batch
+        <input type="number" x-model="purchaseRuns" min="1" max="1000000000" step="1"
+          placeholder="Enter runs for expenses and shopping">
+      </label>
     </div>
     <section class="production-action-group" aria-label="Fill expenses">
       <h4>Fill expenses</h4>
@@ -28,7 +33,7 @@
           type="button"
           class="button materials-action"
           @click="prepareExpense('materials')"
-          :disabled="busy||!details.actual_runs"
+          :disabled="busy||!purchaseRuns"
         >
           Fill materials expense
         </button>
@@ -36,7 +41,7 @@
           type="button"
           class="button manufacturing-action"
           @click="prepareExpense('manufacturing')"
-          :disabled="busy||!details.actual_runs"
+          :disabled="busy||!purchaseRuns"
         >
           Fill production expense
         </button>
@@ -57,7 +62,7 @@
           type="button"
           class="button materials-action"
           @click="copyMaterials('materials')"
-          :disabled="busy||!details.actual_runs"
+          :disabled="busy||!purchaseRuns"
         >
           Copy manufacturing materials
         </button>
