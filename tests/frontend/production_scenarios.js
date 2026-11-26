@@ -30,11 +30,11 @@ async function checkProductionWorkflow(){
     if(saveBounds.top<0||saveBounds.bottom>innerHeight||saveBar.querySelector('button').form?.id!=='production-details-form')throw Error('Save details must remain visible while scrolling and submit its form');
     window.scrollTo(0,0);
 
+    if([...document.querySelectorAll('.production-list-heading+* th, .market-panel th')].some(th=>th.textContent.trim()==='BPC runs'))throw Error('Unused BPC runs column must be removed');
     if(document.querySelector('input[x-model="details.actual_runs"]'))throw Error('Stored BPC runs field must be removed');
     if(document.querySelectorAll('input[x-model="purchaseRuns"]').length!==1)throw Error('Manufacturing runs input must appear once');
-    a.selected.actual_runs=999;
     await a.copyMaterials('materials');
-    if(!a.error.includes('manufacturing runs'))throw Error('Empty runs must be rejected despite legacy saved runs');
+    if(!a.error.includes('manufacturing runs'))throw Error('Empty runs must be rejected without entered runs');
     a.error='';
     a.details.units='150';a.purchaseRuns='125';
     if('actual_runs' in a.buildDetailsPayload())throw Error('Legacy runs must not be submitted with details');

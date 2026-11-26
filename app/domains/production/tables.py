@@ -17,7 +17,6 @@ class ProductionTable(Base):
     name: Mapped[str]
     units: Mapped[int | None]
     actual_units: Mapped[int | None]
-    actual_runs: Mapped[int | None]
     comment: Mapped[str]
     status: Mapped[str]
     entries: Mapped[list[dict[str, Any]]] = mapped_column(JSON)

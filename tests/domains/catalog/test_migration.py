@@ -80,6 +80,17 @@ def test_actual_units_migration_preserves_existing_plans_and_transactions() -> N
         assert connection.exec_driver_sql(
             "SELECT actual_units, actual_runs FROM productions"
         ).one() == (80, None)
+        connection.exec_driver_sql("UPDATE productions SET actual_runs=3")
+        remove_runs = runpy.run_path("alembic/versions/0020_remove_production_actual_runs.py")
+        remove_runs["upgrade"]()
+        assert "actual_runs" not in {
+            column["name"] for column in inspect(connection).get_columns("productions")
+        }
+        assert connection.exec_driver_sql(
+            "SELECT units, actual_units, entries FROM productions"
+        ).one() == (100, 80, "saved-transactions")
+        remove_runs["downgrade"]()
+        assert connection.exec_driver_sql("SELECT actual_runs FROM productions").scalar() is None
         actual_runs["downgrade"]()
         migration["downgrade"]()
         assert connection.exec_driver_sql("SELECT units, entries FROM productions").one() == (

@@ -16,7 +16,6 @@ class ProductionDetails(BaseModel):
     model_config = ConfigDict(extra="forbid")
     units: int | None = Field(default=None, ge=1, le=10**9)
     actual_units: int | None = Field(default=None, ge=0, le=10**9)
-    actual_runs: int | None = Field(default=None, ge=0, le=10**9)
     comment: str = Field(default="", max_length=2000)
     status: Literal["in_progress", "completed"] = "in_progress"
 

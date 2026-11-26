@@ -84,7 +84,6 @@ class ProductionService:
             data.status,
         )
         production.actual_units = data.actual_units
-        production.actual_runs = data.actual_runs
         return await self.persist(production)
 
     async def save_entry(

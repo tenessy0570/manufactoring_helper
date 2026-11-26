@@ -261,14 +261,14 @@ async def test_authenticated_api_ownership_and_sql_roundtrip(
         assert (
             await client.put(
                 path,
-                json={"units": 200, "actual_units": 175, "actual_runs": 3, "comment": "batch"},
+                json={"units": 200, "actual_units": 175, "comment": "batch"},
                 headers=headers,
             )
         ).status_code == 200
         persisted = (await client.get(path)).json()
         assert persisted["units"] == 200
         assert persisted["actual_units"] == 175
-        assert persisted["actual_runs"] == 3
+        assert "actual_runs" not in persisted
         purchases = await client.post(
             path + "/purchase-list", json={"kind": "materials", "units": 3}, headers=headers
         )
@@ -441,7 +441,7 @@ async def test_purchase_lists_round_runs_exclude_bpcs_and_keep_entries_unchanged
 
 async def test_actual_bpc_runs_drive_materials_and_installation_instead_of_planned_units() -> None:
     svc = service()
-    row = await svc.create(uuid4(), ProductionCreate(type_id=10, units=999999, actual_runs=3))
+    row = await svc.create(uuid4(), ProductionCreate(type_id=10, units=999999))
     market = AsyncMock(spec=ManufacturingRepository)
     market.get_recipes.return_value = {10: recipe_state(recipe=recipe(units=5000))}
     market.get_quotes.return_value = {34: price(34, sell_price="3")}
