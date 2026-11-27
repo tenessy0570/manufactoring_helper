@@ -7,6 +7,8 @@ async function checkFreshnessHeader(){
     return new Response(JSON.stringify({sources:[{source:'market',cached:1,fresh:1,status:'fresh',oldest_at:new Date(Date.now()-600000).toISOString(),newest_at:new Date().toISOString()},{source:'history',cached:2,fresh:1,status:'partial',oldest_at:new Date(Date.now()-90000000).toISOString(),newest_at:new Date().toISOString()},{source:'recipes',cached:0,fresh:0,status:'missing',oldest_at:null,newest_at:null},{source:'invention',cached:2,fresh:0,status:'stale',oldest_at:new Date(Date.now()-90000000).toISOString(),newest_at:new Date(Date.now()-90000000).toISOString()}]}));
   };
   try{
+    const updating={source:'market',cached:19000,fresh:0,status:'stale',completed_pages:240,total_pages:600};
+    if(a.percentage(updating)!=='40%'||!a.text(updating).includes('updating')||!a.detail(updating).includes('240 of 600'))throw Error('Market page download progress');
     await a.refresh();await a.$nextTick();
     if(a.formatAge(new Date(a.now-(3*1440+20*60+13)*60000).toISOString())!=='3d 20h 13m')throw Error('Day/hour/minute formatting');
     if(a.error||header.querySelectorAll('.freshness-source').length!==4)throw Error('Freshness sources missing');

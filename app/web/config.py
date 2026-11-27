@@ -4,7 +4,7 @@ from app.core.config import DEFAULT_REFRESH, RefreshPolicy
 
 BROWSER_CONFIG = {
     "marketFreshnessMs": DEFAULT_REFRESH.market_seconds * 1000,
-    "freshnessPollMs": 60000,
+    "freshnessPollMs": 10000,
     "clockTickMs": 30000,
     "searchDebounceMs": 250,
 }

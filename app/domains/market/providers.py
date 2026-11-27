@@ -1,9 +1,12 @@
 from dishka import Provider, Scope, provide
+from redis.asyncio import Redis
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.cache import RedisCache
 from app.core.config import RefreshPolicy, Settings
 from app.core.repository import UnitOfWork
 from app.domains.market.gateway import EsiMarketGateway, MarketGateway
+from app.domains.market.progress import MarketSyncProgress
 from app.domains.market.quotes import MarketQuoteReader, SQLMarketQuoteReader
 from app.domains.market.repository import MarketRepository, SQLMarketRepository
 from app.domains.market.service import MarketService, MarketSyncService
@@ -11,6 +14,10 @@ from app.infrastructure.esi import EsiClient
 
 
 class MarketProvider(Provider):
+    @provide(scope=Scope.APP)
+    def provide_sync_progress(self, redis: Redis) -> MarketSyncProgress:
+        return MarketSyncProgress(RedisCache(redis))
+
     quotes = provide(SQLMarketQuoteReader, provides=MarketQuoteReader, scope=Scope.REQUEST)
 
     @provide(scope=Scope.APP)
@@ -32,5 +39,8 @@ class MarketProvider(Provider):
         gateway: MarketGateway,
         unit_of_work: UnitOfWork,
         refresh_policy: RefreshPolicy,
+        progress: MarketSyncProgress,
     ) -> MarketSyncService:
-        return MarketSyncService(repository, gateway, unit_of_work, refresh_policy=refresh_policy)
+        return MarketSyncService(
+            repository, gateway, unit_of_work, refresh_policy=refresh_policy, progress=progress
+        )

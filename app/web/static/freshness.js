@@ -58,14 +58,17 @@ document.addEventListener('alpine:init', () => {
       return minutes < 1 ? '<1m' : (minutes >= 1440 ? Math.floor(minutes / 1440) + 'd ' : '') + Math.floor(minutes % 1440 / 60) + 'h ' + minutes % 60 + 'm';
     },
     percentage(source) {
+      if (source.total_pages > 0) return Math.floor(source.completed_pages * 100 / source.total_pages) + '%';
       return source.cached > 0 ? new Intl.NumberFormat('en-US', {
         maximumFractionDigits: 1
       }).format(Math.floor(source.fresh * 1000 / source.cached) / 10) + '%' : '--';
     },
     text(source) {
+      if (source.total_pages > 0) return this.labels[source.source] + ': updating';
       return this.labels[source.source] + ': ' + (source.status === 'missing' ? 'no data' : this.formatAge(source.oldest_at)) + (source.status === 'partial' ? ' (partial)' : source.status === 'stale' ? ' (due)' : '');
     },
     detail(source) {
+      if (source.total_pages > 0) return 'Market update: ' + source.completed_pages + ' of ' + source.total_pages + ' regional order pages downloaded. The saved hub snapshot is replaced after all pages are processed.';
       return this.labels[source.source] + ': ' + source.fresh + ' of ' + source.cached + ' saved entries fresh. Oldest: ' + this.formatAge(source.oldest_at) + ', latest: ' + this.formatAge(source.newest_at) + '. Cached entries only; this is not full catalogue coverage.';
     }
   }));

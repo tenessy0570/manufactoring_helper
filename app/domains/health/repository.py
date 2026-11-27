@@ -136,10 +136,14 @@ class SQLProgressRepository(ProgressRepository):
             row = (
                 await self._session.execute(
                     select(
-                        func.count(),
+                        func.coalesce(func.sum(table.items), 0)
+                        if name == "market"
+                        else func.count(),
                         func.min(stamp),
                         func.max(stamp),
-                        func.sum(case((fresh_condition, 1), else_=0)),
+                        func.sum(
+                            case((fresh_condition, table.items if name == "market" else 1), else_=0)
+                        ),
                     )
                     .select_from(table)
                     .where(*conditions)

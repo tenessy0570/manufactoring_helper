@@ -15,6 +15,7 @@ from app.domains.market.models import (
     PriceQuery,
     get_hub,
 )
+from app.domains.market.progress import MarketSyncProgress
 from app.domains.market.repository import MarketRepository
 
 
@@ -52,9 +53,11 @@ class MarketSyncService:
         unit_of_work: UnitOfWork,
         clock: Callable[[], datetime] = lambda: datetime.now(UTC),
         refresh_policy: RefreshPolicy = DEFAULT_REFRESH,
+        progress: MarketSyncProgress | None = None,
     ) -> None:
         self._repository = repository
         self._refresh_policy = refresh_policy
+        self._progress = progress
         self._gateway = gateway
         self._unit_of_work = unit_of_work
         self._clock = clock
@@ -72,6 +75,13 @@ class MarketSyncService:
         return await self.sync(hub_id)
 
     async def sync(self, hub_id: HubId) -> MarketSyncReport:
+        try:
+            return await self._sync_with_retries(hub_id)
+        finally:
+            if self._progress is not None:
+                await self._progress.clear(hub_id)
+
+    async def _sync_with_retries(self, hub_id: HubId) -> MarketSyncReport:
         for attempt in range(3):
             try:
                 return await self._sync_snapshot(hub_id)
@@ -90,6 +100,8 @@ class MarketSyncService:
         for order in first.orders:
             aggregator.add(order)
         del first
+        if self._progress is not None:
+            await self._progress.update(hub_id, 1, pages)
         for start in range(2, pages + 1, 5):
             page_numbers = range(start, min(start + 5, pages + 1))
             results = await asyncio.gather(
@@ -106,6 +118,8 @@ class MarketSyncService:
                 expires_at = min(expires_at, batch.expires_at)
                 for order in batch.orders:
                     aggregator.add(order)
+            if self._progress is not None:
+                await self._progress.update(hub_id, min(start + 4, pages), pages)
         synced_at = self._clock()
         prices = aggregator.finish(expires_at)
         for price in prices:

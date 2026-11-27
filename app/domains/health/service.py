@@ -12,6 +12,7 @@ from app.domains.health.models import (
 )
 from app.domains.health.repository import ProgressRepository
 from app.domains.market.models import HubId
+from app.domains.market.progress import MarketSyncProgress
 
 
 class HealthService:
@@ -39,11 +40,21 @@ class HealthService:
 
 
 class ProgressService:
-    def __init__(self, repository: ProgressRepository) -> None:
+    def __init__(
+        self, repository: ProgressRepository, progress: MarketSyncProgress | None = None
+    ) -> None:
         self._repository = repository
+        self._progress = progress
 
     async def get_data_progress(self, hub: HubId) -> DataProgress:
         return await self._repository.get_data_progress(hub)
 
     async def get_freshness_report(self, hub: HubId) -> FreshnessReport:
-        return await self._repository.get_freshness_report(hub, datetime.now(UTC))
+        report = await self._repository.get_freshness_report(hub, datetime.now(UTC))
+        if self._progress is not None:
+            progress = await self._progress.get(hub)
+            if progress is not None:
+                for source in report.sources:
+                    if source.source == "market":
+                        source.completed_pages, source.total_pages = progress
+        return report

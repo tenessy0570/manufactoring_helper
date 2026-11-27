@@ -23,7 +23,7 @@ async def test_browser_config_exposes_only_public_values() -> None:
     payload = response.text.removeprefix("window.eveConfig = Object.freeze(").removesuffix(");")
     assert json.loads(payload) == {
         "marketFreshnessMs": 1200000,
-        "freshnessPollMs": 60000,
+        "freshnessPollMs": 10000,
         "clockTickMs": 30000,
         "searchDebounceMs": 250,
     }

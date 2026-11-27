@@ -36,6 +36,8 @@ class DataProgress(BaseModel):
 
 
 class SourceFreshness(BaseModel):
+    completed_pages: int | None = None
+    total_pages: int | None = None
     source: str
     oldest_at: datetime | None
     newest_at: datetime | None

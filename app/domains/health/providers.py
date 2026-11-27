@@ -6,6 +6,7 @@ from app.core.config import RefreshPolicy
 from app.domains.health.checks import DatabaseHealthCheck, RedisHealthCheck
 from app.domains.health.repository import ProgressRepository, SQLProgressRepository
 from app.domains.health.service import HealthService, ProgressService
+from app.domains.market.progress import MarketSyncProgress
 
 
 class HealthProvider(Provider):
@@ -22,5 +23,7 @@ class HealthProvider(Provider):
         return SQLProgressRepository(session, refresh_policy)
 
     @provide(scope=Scope.REQUEST)
-    def provide_progress_service(self, repository: ProgressRepository) -> ProgressService:
-        return ProgressService(repository)
+    def provide_progress_service(
+        self, repository: ProgressRepository, progress: MarketSyncProgress
+    ) -> ProgressService:
+        return ProgressService(repository, progress)
