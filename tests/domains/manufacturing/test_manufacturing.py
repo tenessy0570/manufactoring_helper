@@ -1,6 +1,5 @@
 import asyncio
 import json
-import runpy
 from collections.abc import AsyncIterator
 from datetime import timedelta
 from decimal import Decimal
@@ -158,21 +157,13 @@ def test_invalid_duration(value: str) -> None:
 
 def test_duration_and_legacy_profit_parity() -> None:
     assert parse_duration_seconds("P1DT2H3M4.5S") == Decimal("93784.5")
-    legacy = runpy.run_path("reference/eve_manufacturing_scan.py")
-    old = legacy["Opportunity"](
-        type_id=10,
-        name="test",
-        cost=15.0,
-        job_cost=2.0,
-        revenue=30.0,
-        sales_tax=10.0,
-        units_per_day=48.0,
-    )
     result = calculate(calculation_input(), ManufacturingQuery(sales_tax=Decimal(10)))
     assert result is not None
-    assert float(result.profit_per_unit) == old.profit()
-    assert float(result.profit_per_day) == old.profit_per_day(old.profit())
-    assert float(result.margin_pct) == pytest.approx(old.profit() / old.cost * 100)
+    # Legacy baseline: 30 revenue - 3 sales tax - 15 materials - 2 installation;
+    # 48 finished units per day, margin relative to material cost.
+    assert result.profit_per_unit == Decimal(10)
+    assert result.profit_per_day == Decimal(480)
+    assert result.margin_pct == Decimal("66.66666666666666666666666667")
 
 
 def test_saved_snapshot_material_totals_match_original_script() -> None:
