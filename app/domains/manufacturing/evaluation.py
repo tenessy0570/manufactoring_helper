@@ -160,7 +160,12 @@ def evaluate_opportunities(
             cached = invention_results.get(invention_settings[candidate.type_id].key)
             if cached is not None and cached.result is not None and cached.result.best is not None:
                 bpc_plan = cached.result.best.plan
+        median_price = inputs.median_prices.get(candidate.type_id)
         opportunity = Opportunity(
+            historical_median_price=median_price,
+            price_change_pct=(calculated.revenue_per_unit / median_price - 1) * 100
+            if median_price is not None and median_price > 0
+            else None,
             bpc_manufacturing_seconds=calculated.seconds * bpc_plan.runs_per_copy
             if bpc_plan is not None
             else None,

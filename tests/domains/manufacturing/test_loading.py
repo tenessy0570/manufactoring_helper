@@ -48,6 +48,7 @@ async def test_large_candidate_set_uses_one_history_query_without_count_or_pagin
 @pytest.mark.parametrize("hub", ["jita", "amarr"])
 async def test_quote_batches_keep_product_and_material_hubs_separate(hub: str) -> None:
     history = AsyncMock(spec=HistoryRepository)
+    history.get_median_prices.return_value = {}
     history.find_candidates.return_value = [
         LiquidityItem(
             type_id=10,

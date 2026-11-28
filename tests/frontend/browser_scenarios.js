@@ -37,6 +37,12 @@ async function checkFrontendWorkflow() {
   check(app.getBpcDurationColor(86400)==='hsl(120, 70%, 65%)'&&app.getBpcDurationColor(90000)===app.getBpcDurationColor(86400),'BPC duration green threshold');
   check(app.getBpcDurationColor(21600)==='hsl(60, 70%, 65%)','BPC duration is yellow at six hours');
   check(app.getBpcDurationColor(54000)==='hsl(90, 70%, 65%)','BPC durations above six hours trend green');
+  check(app.getPriceChangeColor(10)==='hsl(120, 70%, 65%)'&&app.getPriceChangeColor(50)==='hsl(0, 70%, 65%)','Price change color thresholds');
+  check(app.getPriceChangeColor(30)==='hsl(60, 70%, 65%)'&&app.getPriceChangeColor(null)==='','Price change midpoint and missing value');
+  check(app.columnOptions.some(c=>c.id==='priceChange'),'Price change column selectable');
+  check(app.getDefaultSettings().max_daily_volume_share_pct==='','Daily volume share filter disabled by default');
+  check(app.columnOptions.find(c=>c.id==='priceChange').label==='Price vs history (%)','Historical price column name');
+  check(app.getDefaultSettings().max_price_increase_pct==='','Price increase filter disabled by default');
   check(app.columnOptions.some(c=>c.id==='bpcTime'),'T2 BPC time is selectable');
   app.page.items[0].bpc_manufacturing_seconds='7200';
   app.page.items[0].bpc_manufacturing_runs=10;
@@ -50,7 +56,12 @@ async function checkFrontendWorkflow() {
   await app.$nextTick();
   const share=document.querySelector('td[x-show="isColumnVisible(\'volumeShare\')"]');
   check(share.textContent.includes('1000.0%')&&share.textContent.includes('built /'),'Volume share shows output and traded quantities');
-  check(share.querySelector('strong').classList.contains('negative'),'Output above regional daily volume is highlighted');
+  check(share.querySelector('strong').style.color==='rgb(228, 103, 103)','Output above regional daily volume is red');
+  check(app.getDailyVolumeShareColor(0)===app.getDailyVolumeShareColor(10)&&app.getDailyVolumeShareColor(10)==='hsl(120, 70%, 65%)','Shares up to ten percent are green');
+  check(app.getDailyVolumeShareColor(10.1)==='hsl(60, 70%, 65%)'&&app.getDailyVolumeShareColor(15)==='hsl(60, 70%, 65%)','Shares above ten through fifteen percent are yellow');
+  check(app.getDailyVolumeShareColor(15.1)==='hsl(30, 70%, 65%)'&&app.getDailyVolumeShareColor(20)==='hsl(30, 70%, 65%)','Shares above fifteen through twenty percent are orange');
+  check(app.getDailyVolumeShareColor(20.1)==='hsl(0, 70%, 65%)','Shares above twenty percent are red');
+  check(app.getDailyVolumeShareColor(null)==='','Unknown share has no risk color');
   const originalHub = app.resultForm.hub_id;
   app.form.hub_id = originalHub === 'amarr' ? 'hek' : 'amarr';
   check(app.hasChanges && app.resultForm.hub_id === originalHub, 'Drafts do not relabel results');

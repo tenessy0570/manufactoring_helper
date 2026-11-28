@@ -35,6 +35,7 @@
       </th>
       <th x-show="isColumnVisible('bpcTime')"
         title="Manufacturing all runs of one invented T2 BPC on one line, using the best-value cached invention option. Base production time, without ME/TE bonuses or copying/invention time.">TIME / T2 BPC</th>
+      <th x-show="isColumnVisible('priceChange')" title="Selected sale quote versus median daily average trade price over completed days in the selected history period. Not a measured change today.">PRICE VS HISTORY (%)</th>
       <th x-show="isColumnVisible('turnover')">REGIONAL TURNOVER / DAY</th>
       <th x-show="isColumnVisible('data')">DATA</th>
       <th></th>
@@ -118,7 +119,7 @@
         ></td>
         <td x-show="isColumnVisible('volumeShare')">
           <strong
-            :class="Number(item.daily_volume_share_pct)>100?'negative':''"
+            :style="{color:getDailyVolumeShareColor(item.daily_volume_share_pct)}"
             x-text="item.daily_volume_share_pct == null ? 'N/A' : formatPercent(item.daily_volume_share_pct)"
           ></strong>
           <div
@@ -136,6 +137,11 @@
             :style="{color:getBpcDurationColor(item.bpc_manufacturing_seconds)}"></strong>
           <div class="muted" x-show="item.bpc_manufacturing_runs != null"
             x-text="item.bpc_manufacturing_runs+' runs on 1 line'"></div>
+        </td>
+        <td x-show="isColumnVisible('priceChange')"
+          :title="item.historical_median_price == null ? 'No traded history available' : 'Historical median: '+formatFullMoney(item.historical_median_price)+' ISK'">
+          <strong :style="{color:getPriceChangeColor(item.price_change_pct)}"
+            x-text="item.price_change_pct == null ? 'N/A' : (Number(item.price_change_pct)>0?'+':'')+formatPercent(item.price_change_pct)"></strong>
         </td>
         <td
           x-show="isColumnVisible('turnover')"

@@ -86,6 +86,8 @@ class OpportunitySettings(LiquidityFilters):
     job_cost_per_run: Decimal | None = Field(default=None, ge=0, allow_inf_nan=False)
     min_profit: Decimal | None = Field(default=None, allow_inf_nan=False)
     max_profit: Decimal | None = Field(default=None, allow_inf_nan=False)
+    max_daily_volume_share_pct: Decimal | None = Field(default=None, ge=0, allow_inf_nan=False)
+    max_price_increase_pct: Decimal | None = Field(default=None, ge=0, allow_inf_nan=False)
     min_margin: Decimal | None = Field(default=None, allow_inf_nan=False)
     max_margin: Decimal | None = Field(default=None, allow_inf_nan=False)
     min_profit_per_day: Decimal | None = Field(default=None, allow_inf_nan=False)

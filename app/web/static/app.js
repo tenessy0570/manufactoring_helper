@@ -84,6 +84,9 @@ document.addEventListener('alpine:init', () => {
       id: 'bpcTime',
       label: 'Production time / T2 BPC'
     }, {
+      id: 'priceChange',
+      label: 'Price vs history (%)'
+    }, {
       id: 'volumeShare',
       label: 'Daily volume share'
     }, {
@@ -115,6 +118,8 @@ document.addEventListener('alpine:init', () => {
         buy_demand_tolerance_pct: '5',
         min_profit: '',
         min_margin: '',
+        max_price_increase_pct: '',
+        max_daily_volume_share_pct: '',
         min_daily_isk_volume: '',
         include_copying_time: false,
         include_invention_time: false,
@@ -169,6 +174,8 @@ document.addEventListener('alpine:init', () => {
       const labels = {
         min_profit: 'Minimum profit per unit',
         min_margin: 'Minimum margin',
+        max_price_increase_pct: 'Maximum price increase',
+        max_daily_volume_share_pct: 'Maximum daily volume share',
         min_daily_isk_volume: 'Minimum regional turnover',
         min_product_volume: 'Minimum volume at the selected price',
         days: 'History period',
@@ -312,7 +319,7 @@ document.addEventListener('alpine:init', () => {
       return values.length % 2 ? values[i] : (values[i - 1] + values[i]) / 2;
     },
     get activeFilters() {
-      return ['search', 'tech', 'category', 'min_profit', 'min_margin', 'min_daily_isk_volume', 'min_product_volume'].filter(k => this.form[k] !== '' && this.form[k] !== undefined).length + Number(this.form.include_invention_cost) + Number(this.form.fresh_only) + Number(this.form.require_full_run_demand);
+      return ['search', 'tech', 'category', 'min_profit', 'min_margin', 'max_price_increase_pct', 'max_daily_volume_share_pct', 'min_daily_isk_volume', 'min_product_volume'].filter(k => this.form[k] !== '' && this.form[k] !== undefined).length + Number(this.form.include_invention_cost) + Number(this.form.fresh_only) + Number(this.form.require_full_run_demand);
     },
     get rangeLabel() {
       return this.page.total ? `${this.page.offset+1}–${Math.min(this.page.offset+this.page.limit,this.page.total)} of ${this.page.total.toLocaleString('en-US')} opportunities` : 'No matching opportunities';
@@ -352,6 +359,17 @@ document.addEventListener('alpine:init', () => {
     },
     getProductionLineCount() {
       return Number(this.resultForm.production_lines) || 1;
+    },
+    getDailyVolumeShareColor(value) {
+      if (value == null || !Number.isFinite(Number(value))) return '';
+      const share = Number(value);
+      const hue = share <= 10 ? 120 : share <= 15 ? 60 : share <= 20 ? 30 : 0;
+      return 'hsl(' + hue + ', 70%, 65%)';
+    },
+    getPriceChangeColor(value) {
+      if (value == null) return '';
+      const progress = Math.max(0, Math.min(1, (Number(value) - 10) / 40));
+      return 'hsl(' + (120 * (1 - progress)) + ', 70%, 65%)';
     },
     formatBpcDuration(seconds) {
       if (seconds == null || !Number.isFinite(Number(seconds)) || Number(seconds) <= 0) return 'N/A';
@@ -412,6 +430,8 @@ document.addEventListener('alpine:init', () => {
         units: 1,
         seconds: '7200',
         revenue_per_unit: String(s[3] + s[4]),
+        historical_median_price: String((s[3] + s[4]) / 1.2),
+        price_change_pct: '20',
         invention_required: s[2] === 2,
         invention_included: false,
         invention_cost_per_unit: '0',
@@ -436,7 +456,7 @@ document.addEventListener('alpine:init', () => {
         i.production_limit_units = null;
         i.full_runs_at_buy_price = null;
       });
-      items = items.filter(i => (!form.category || form.category === '__profile__' || i._category === form.category) && (!form.min_daily_isk_volume || Number(i.daily_isk_volume) >= Number(form.min_daily_isk_volume)) && (!form.min_product_volume || i.product_volume_at_price >= Number(form.min_product_volume)) && (!form.search || i.name.toLowerCase().includes(form.search.toLowerCase())) && (!form.tech || i.meta_group_id === Number(form.tech)) && (!form.min_profit || Number(i.profit_per_unit) >= Number(form.min_profit)) && (!form.min_margin || Number(i.margin_pct) >= Number(form.min_margin)) && (!form.fresh_only || !i.stale));
+      items = items.filter(i => (form.max_daily_volume_share_pct === '' || (i.daily_volume_share_pct != null && Number(i.daily_volume_share_pct) <= Number(form.max_daily_volume_share_pct))) && (form.max_price_increase_pct === '' || Number(i.price_change_pct) <= Number(form.max_price_increase_pct)) && (!form.category || form.category === '__profile__' || i._category === form.category) && (!form.min_daily_isk_volume || Number(i.daily_isk_volume) >= Number(form.min_daily_isk_volume)) && (!form.min_product_volume || i.product_volume_at_price >= Number(form.min_product_volume)) && (!form.search || i.name.toLowerCase().includes(form.search.toLowerCase())) && (!form.tech || i.meta_group_id === Number(form.tech)) && (!form.min_profit || Number(i.profit_per_unit) >= Number(form.min_profit)) && (!form.min_margin || Number(i.margin_pct) >= Number(form.min_margin)) && (!form.fresh_only || !i.stale));
       if (!this.calculator) items = items.filter(item => !this.excludedItems.some(v => v.type_id === item.type_id));
       if (this.calculator) items = items.filter(item => item.type_id === Number(this.blueprint.type_id));
       const rank = {

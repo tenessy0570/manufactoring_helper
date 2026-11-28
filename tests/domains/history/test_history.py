@@ -151,6 +151,9 @@ def test_invalid_ranges(kwargs: dict[str, Any]) -> None:
 
 
 class FakeRepository(HistoryRepository):
+    async def get_median_prices(self, query: LiquidityQuery, now: datetime) -> dict[int, Decimal]:
+        return {}
+
     def __init__(self) -> None:
         self.current: HistoryState | None = None
         self.days: list[HistoryDay] = []

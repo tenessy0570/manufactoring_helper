@@ -68,7 +68,11 @@ class OpportunityDataLoader:
             if self._invention is not None
             else {}
         )
+        baselines = await self._history.get_median_prices(
+            filters.model_copy(update={"type_ids": product_ids}), now
+        )
         return OpportunityInputs(
+            median_prices=baselines,
             candidates=candidates,
             recipes=recipes,
             quotes=quotes,

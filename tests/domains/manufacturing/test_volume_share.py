@@ -67,3 +67,24 @@ def test_ammo_output_quantity_and_buy_demand_do_not_cap_capacity() -> None:
     assert demand.full_runs == 0
     timing = calculate_timing(data.product_quote, result, demand, query, None, Decimal(0))
     assert timing.daily_production_units == 1200000
+
+
+async def test_optional_daily_volume_share_limit_keeps_boundary_and_excludes_unknown(
+    session: AsyncSession,
+) -> None:
+    repository = await seed(session)
+    service = ManufacturingService(repository, SQLHistoryRepository(session), lambda: NOW)
+    query = ManufacturingQuery(type_ids=[10, 20])
+    page = await service.get_opportunities(query)
+    assert len(page.items) == 2
+    share = next(item.daily_volume_share_pct for item in page.items if item.type_id == 10)
+    assert share is not None
+    boundary = await service.get_opportunities(
+        query.model_copy(update={"max_daily_volume_share_pct": share})
+    )
+    assert [item.type_id for item in boundary.items] == [10]
+    hidden = await service.get_opportunities(
+        query.model_copy(update={"max_daily_volume_share_pct": share - 1})
+    )
+    assert hidden.total == 0
+    assert ManufacturingQuery().max_daily_volume_share_pct is None

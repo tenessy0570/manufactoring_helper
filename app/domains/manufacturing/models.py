@@ -67,6 +67,8 @@ class ProfitCalculation(BaseModel):
 
 
 class Opportunity(ProfitCalculation):
+    price_change_pct: Decimal | None = None
+    historical_median_price: Decimal | None = None
     bpc_manufacturing_seconds: Decimal | None = None
     bpc_manufacturing_runs: int | None = None
     demand_duration_seconds: Decimal | None = None
@@ -189,6 +191,7 @@ class CalculatorPage(OpportunityPage):
 
 
 class OpportunityInputs(BaseModel):
+    median_prices: dict[int, Decimal] = Field(default_factory=dict)
     candidates: list[LiquidityItem]
     recipes: dict[int, RecipeState]
     quotes: dict[int, MarketPrice]

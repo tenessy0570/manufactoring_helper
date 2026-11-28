@@ -67,6 +67,8 @@ async def test_all_opportunity_fields_match_pre_refactor_responses() -> None:
                                 "daily_volume_share_pct",
                                 "bpc_manufacturing_seconds",
                                 "bpc_manufacturing_runs",
+                                "price_change_pct",
+                                "historical_median_price",
                             }
                         }
                     },

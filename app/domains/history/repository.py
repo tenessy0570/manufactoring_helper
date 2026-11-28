@@ -43,6 +43,11 @@ class HistoryRepository(ABC):
         ...
 
     @abstractmethod
+    async def get_median_prices(
+        self, query: LiquidityQuery, now: datetime
+    ) -> dict[int, Decimal]: ...
+
+    @abstractmethod
     async def prune_before(self, cutoff: date) -> int: ...
 
 
@@ -52,6 +57,36 @@ class SQLHistoryRepository(HistoryRepository):
     ) -> None:
         self._session = session
         self._refresh_policy = refresh_policy
+
+    async def get_median_prices(self, query: LiquidityQuery, now: datetime) -> dict[int, Decimal]:
+        history = HistoryDayTable
+        ranked = (
+            select(
+                history.type_id,
+                history.average,
+                func.row_number()
+                .over(partition_by=history.type_id, order_by=history.average)
+                .label("position"),
+                func.count().over(partition_by=history.type_id).label("days"),
+            )
+            .where(
+                history.region_id == get_hub(query.hub_id).region_id,
+                history.date >= now.date() - timedelta(days=query.days),
+                history.date < now.date(),
+                history.average > 0,
+                history.volume > 0,
+                history.type_id.in_(query.type_ids or []),
+            )
+            .subquery()
+        )
+        rows = await self._session.execute(
+            select(ranked.c.type_id, cast(func.avg(ranked.c.average), Numeric(30, 10)))
+            .where(
+                ranked.c.position >= ranked.c.days / 2, ranked.c.position <= ranked.c.days / 2 + 1
+            )
+            .group_by(ranked.c.type_id)
+        )
+        return dict(rows.all())
 
     async def get_state(self, region_id: int, type_id: int) -> HistoryState | None:
         row = await self._session.get(HistoryStateTable, (region_id, type_id))

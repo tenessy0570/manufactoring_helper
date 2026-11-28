@@ -3,6 +3,15 @@ from app.domains.market.enums import OrderSide
 
 
 def matches_filters(item: Opportunity, query: ManufacturingQuery) -> bool:
+    if query.max_price_increase_pct is not None and (
+        item.price_change_pct is None or item.price_change_pct > query.max_price_increase_pct
+    ):
+        return False
+    if query.max_daily_volume_share_pct is not None and (
+        item.daily_volume_share_pct is None
+        or item.daily_volume_share_pct > query.max_daily_volume_share_pct
+    ):
+        return False
     is_buy = query.product_order_type == OrderSide.BUY.value
     if any(
         minimum is not None and (value is None or value < minimum)

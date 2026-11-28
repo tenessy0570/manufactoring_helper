@@ -110,6 +110,12 @@
             x-model="form.min_margin"
             placeholder="Any"
           >
+        </label><label title="Exclude quotes above this increase relative to the historical median. Blank disables filtering. With a limit, items without traded history are excluded.">
+            Max. price increase (%)<input type="number" min="0" step="any" x-model="form.max_price_increase_pct" placeholder="Any">
+          </label>
+        <label title="Maximum daily production as a percentage of average regional daily traded units. Blank disables filtering; with a limit, unknown shares are excluded.">
+          Max. daily volume share (%)<input type="number" min="0" step="any"
+            x-model="form.max_daily_volume_share_pct" placeholder="Any">
         </label>
         <label>
           Min. regional turnover / day (ISK)<input
